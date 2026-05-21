@@ -1,12 +1,12 @@
 name: Term
-description: A named element of the project's domain vocabulary.
+description: A named element of the @Project's domain vocabulary.
 guidelines:
   - When a @Term declares `extends`, resolve the parent @Term first (recursively). The child inherits all parent @Property, @Recipe, and contains slots. Any child member with the same name as a parent member fully replaces it. Members not redefined in the child are inherited as-is.
 contains:
   - name: extends
     description: parent @Term to inherit from
   - name: contains
-    description: list of named slots this term introduces for its extenders
+    description: list of named slots this @Term introduces for its extenders
   - name: properties
     description: list of @Property the @Term holds
   - name: recipes
