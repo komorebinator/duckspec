@@ -1,13 +1,13 @@
 name: Settings
-description: Configuration for an aikata-powered project.
+description: Configuration for an aikata-powered @Project.
 properties:
   - name: specs_dir
     description: Path to the project specs directory, relative to the project root
     type: string
-    default: specs
+    default: projects
     required: true
   - name: user_settings
     description: Path to the user settings file, relative to the project root
     type: string
-    default: specs/userSettings.yaml
+    default: projects/settings.yaml
     required: false

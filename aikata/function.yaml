@@ -1,0 +1,12 @@
+name: Function
+description: A description of an algorithm that can be directly converted to code.
+properties:
+  - name: name
+    required: true
+    description: function identifier, no spaces (code-style)
+  - name: description
+    required: true
+    description: what the function does and how; include algorithm logic, edge cases, and expected behavior
+  - name: arguments
+    required: false
+    description: list of argument names the function accepts

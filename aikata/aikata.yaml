@@ -1,0 +1,12 @@
+name: Aikata
+description: Defines the rules for writing and organizing terms across projects.
+extends: @Project
+goals:
+  - Standardize how requirements and terms are written across projects
+  - Reduce the noise models introduce into the development process
+  - Provide tools for describing and navigating project structure
+  - Simplify repetitive development tasks
+guidelines:
+  - All documentation must be written in English.
+  - Each `.yaml` file defines exactly one term following the @Term format.
+  - To reference a term, use `@TermName` anywhere in any field.
