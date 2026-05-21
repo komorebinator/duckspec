@@ -7,3 +7,5 @@ contains:
     description: list of @Guideline the project defines
   - name: settings
     description: project configuration; see @Settings
+  - name: applications
+    description: list of @Application the project contains
