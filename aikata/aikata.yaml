@@ -21,11 +21,10 @@ recipes:
       - Ask the user which installation method they prefer — git submodule (default) or copy — and set `method` accordingly
       - If method is "submodule", run `git submodule add git@github.com:komorebinator/aikata.git aikata` in the target project root
       - If method is "copy", copy the aikata/ folder into the target project root
-      - Scan the root directory for a description file (e.g. README.md); if it exists and already contains a link to an @Project term file, stop — the project is already set up; otherwise Invoke @Aikata#create_project()
+      - Scan the root directory for a description file (e.g. README.md); if it exists and already contains a link to an @Project term file, stop — the @Project is already set up; otherwise Invoke @Aikata#create_project(), then Invoke @Project#update_readme()
   - name: create_project
     description: Creates an @Project term file
     instructions:
       - Ask the user in which folder the @Project term file should be stored
       - Ask the user whether to analyze existing project files to generate a richer @Project definition; if yes, explore the repository structure and use findings to inform the generated content
       - Generate an @Project term file in the specified folder
-      - Invoke @Project#update_readme()
