@@ -1,0 +1,64 @@
+name: Project
+description: Core entity providing project management recipes.
+recipes:
+  - name: build_map
+    description: Builds a diagram of all project entities and their relationships
+    arguments:
+      - entity (optional) — entity to focus on
+      - format (optional, default: mermaid) — output format requested by the user
+    instructions:
+      - Read all .yaml files in the aikata/ folder recursively
+      - Extract entity names and any [[spec:...]] references found in their properties
+      - Focus on the specified entity and its direct connections if the entity argument is provided
+      - Build a diagram where each node is an entity and each edge is a [[spec:...]] reference
+      - Render the diagram in the requested format
+  - name: add_recipe
+    description: Adds a new recipe to an entity spec, clarifying missing details with the user if needed
+    arguments:
+      - target — path to the target .yaml file (relative to aikata/)
+      - recipe_spec — any details about the new recipe the user has already provided
+    instructions:
+      - Determine which Recipe Properties the user has already provided, using recipe_spec and context
+      - Ask the user for each required property that is still missing
+      - Append the new recipe to the recipes list in the target .yaml file
+  - name: describe
+    description: Modifies an entity spec based on user intent, validates the result, and applies changes or asks clarifying questions
+    arguments:
+      - target — path to the target .yaml or .md file to modify (relative to aikata/)
+    instructions:
+      - Infer the intended changes from context; ask the user for any information that cannot be inferred
+      - Plan the modified version of the file
+      - Invoke [[spec:project.yaml]]#validate(target=target) on the planned result; if validation fails, revise the plan or ask the user to resolve the issue
+      - Apply the changes to the file
+  - name: validate
+    description: Validates a spec or entity against the rules defined in aikata.md
+    arguments:
+      - target — path to the .yaml or .md file to validate (relative to aikata/)
+    instructions:
+      - Read the target file specified by target
+      - Verify all required properties are present and non-empty
+      - Verify all [[spec:...]] references in the file point to existing files
+      - Report a pass/fail result with a list of violations, or confirm the spec is valid
+  - name: refactor
+    description: Finds opportunities to unify or shorten content across specs and proposes concrete changes
+    arguments:
+      - target (optional, default: entire aikata/ folder) — file or folder to scan (relative to aikata/)
+    instructions:
+      - Read all .yaml and .md files within the target scope recursively
+      - Identify unification candidates: similar recipe names or descriptions, near-identical instruction sequences, repeated argument definitions, or concepts described multiple times in different words
+      - Identify shortening candidates: instructions that restate their argument definitions, steps that are implied by global rules in aikata.md, or verbose phrasing that can be said in fewer words without loss of meaning
+      - For each candidate, assess whether the change would genuinely simplify the project — skip cases where the similarity is superficial or the context differs meaningfully
+      - For each worthwhile candidate, propose a concrete change and show what would be different and in which files
+      - If no meaningful changes are found, say so explicitly
+  - name: analyze
+    description: Analyzes all specs for consistency, clarity, and completeness; produces a structured report with an overall grade
+    instructions:
+      - Read all .yaml and .md files in the aikata/ folder recursively
+      - Check Completeness: for each .yaml, verify all required entity and recipe properties are present; note missing fields
+      - Check Reference validity: find every [[spec:...]] reference across all files; flag any that point to a non-existent file
+      - Check Ambiguity density: scan instruction lists for vague language (words like "maybe", "some", "could", "etc.", "might", "various"); flag instructions that lack a clear action or subject
+      - Check Instruction actionability: each instruction should start with an imperative verb and have an unambiguous outcome; flag those that do not
+      - Check Terminology consistency: identify if the same concept is referred to by different names across specs; flag divergences
+      - Check Orphan detection: list entities that no other spec references via [[spec:...]]
+      - Based on all findings, give a subjective clarity score from 0 to 10
+      - Output a structured report: clarity score with a one-sentence explanation first, then per-dimension findings, then a prioritized list of issues to fix
