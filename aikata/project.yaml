@@ -5,3 +5,5 @@ contains:
     description: list of @Goal the project pursues
   - name: guidelines
     description: list of @Guideline the project defines
+  - name: settings
+    description: project configuration; see @Settings

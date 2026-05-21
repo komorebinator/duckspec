@@ -10,3 +10,4 @@ guidelines:
   - All documentation must be written in English.
   - Each `.yaml` file defines exactly one term following the @Term format.
   - To reference a term, use `@TermName` anywhere in any field.
+  - Commit messages must be short and free of unnecessary detail.
