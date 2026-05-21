@@ -9,3 +9,11 @@ contains:
     description: project configuration; see @Settings
   - name: applications
     description: list of @Application the project contains
+recipes:
+  - name: update_readme
+    description: Updates the root README.md to reflect the current project definition
+    instructions:
+      - Read the term file that extends @Project to get the project's name, description, and goals
+      - Read the existing README.md if it exists
+      - Write README.md with the project name as the H1 heading, description as the opening line, and goals as a bullet list under a "Goals" heading
+      - Append to the end of README.md: "This project uses the aikata framework. See [aikata/aikata.yaml](aikata/aikata.yaml)."

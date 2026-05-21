@@ -1,5 +1,5 @@
 name: Aikata
-description: Defines the rules for writing and organizing terms across projects.
+description: A spec-driven development framework for building complex projects with AI.
 extends: @Project
 goals:
   - Standardize how requirements and terms are written across projects
