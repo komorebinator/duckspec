@@ -8,8 +8,8 @@ contains:
   - name: contains
     description: list of named slots this term introduces for its extenders
   - name: properties
-    description: list of @Property the term holds
+    description: list of @Property the @Term holds
   - name: recipes
-    description: list of @Recipe the term exposes
+    description: list of @Recipe the @Term exposes
   - name: guidelines
-    description: list of @Guideline the term defines
+    description: list of @Guideline the @Term defines

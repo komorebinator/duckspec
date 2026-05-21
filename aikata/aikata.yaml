@@ -9,11 +9,11 @@ goals:
 guidelines:
   - All documentation must be written in English.
   - Each `.yaml` file defines exactly one term following the @Term format.
-  - To reference a term, use `@TermName` anywhere in any field.
+  - Use `@TermName` to reference terms wherever it makes sense.
   - Commit messages must be short and free of unnecessary detail.
 recipes:
   - name: install
-    description: Installs aikata into a project
+    description: Installs @Aikata into a @Project
     arguments:
       - name: method
         description: installation method; "submodule" (default) or "copy"
@@ -21,3 +21,11 @@ recipes:
       - Ask the user which installation method they prefer — git submodule (default) or copy — and set `method` accordingly
       - If method is "submodule", run `git submodule add git@github.com:komorebinator/aikata.git aikata` in the target project root
       - If method is "copy", copy the aikata/ folder into the target project root
+      - Scan the root directory for a description file (e.g. README.md); if it exists and already contains a link to an @Project term file, stop — the project is already set up; otherwise Invoke @Aikata#create_project()
+  - name: create_project
+    description: Creates an @Project term file
+    instructions:
+      - Ask the user in which folder the @Project term file should be stored
+      - Ask the user whether to analyze existing project files to generate a richer @Project definition; if yes, explore the repository structure and use findings to inform the generated content
+      - Generate an @Project term file in the specified folder
+      - Invoke @Project#update_readme()

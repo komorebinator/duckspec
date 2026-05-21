@@ -1,13 +1,8 @@
 name: Settings
 description: Configuration for an aikata-powered @Project.
 properties:
-  - name: specs_dir
-    description: Path to the project specs directory, relative to the project root
-    type: string
-    default: projects
-    required: true
-  - name: user_settings
-    description: Path to the user settings file, relative to the project root
-    type: string
-    default: projects/settings.yaml
-    required: false
+  - name: readme
+    description: path to the root description file of the @Project (e.g. README.md)
+  - name: readme_footer
+    description: footer text appended to the root description file
+    default: "This [project](<path to the term file that extends @Project>) uses the [aikata framework](aikata/aikata.yaml), see [@Term](aikata/term.yaml)."
