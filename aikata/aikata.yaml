@@ -11,3 +11,13 @@ guidelines:
   - Each `.yaml` file defines exactly one term following the @Term format.
   - To reference a term, use `@TermName` anywhere in any field.
   - Commit messages must be short and free of unnecessary detail.
+recipes:
+  - name: install
+    description: Installs aikata into a project
+    arguments:
+      - name: method
+        description: installation method; "submodule" (default) or "copy"
+    instructions:
+      - Ask the user which installation method they prefer — git submodule (default) or copy — and set `method` accordingly
+      - If method is "submodule", run `git submodule add git@github.com:komorebinator/aikata.git aikata` in the target project root
+      - If method is "copy", copy the aikata/ folder into the target project root

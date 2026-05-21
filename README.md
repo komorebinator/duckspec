@@ -9,4 +9,4 @@ A spec-driven development framework for building complex projects with AI.
 - Provide tools for describing and navigating project structure
 - Simplify repetitive development tasks
 
-This project uses the aikata framework. See [aikata/aikata.yaml](aikata/aikata.yaml).
+This [project](aikata/aikata.yaml) uses the [aikata framework](aikata/aikata.yaml), see [@Term](aikata/term.yaml).
