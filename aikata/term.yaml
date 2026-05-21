@@ -1,14 +1,15 @@
 name: Term
-description: |
-  A named element of the project's domain vocabulary.
-
-  Inheritance — when a @Term declares `extends`, the model resolves the parent @Term first (recursively, if the parent also extends). The child inherits all parent @Property, @Recipe, and contains slots. Any child member with the same name as a parent member fully replaces it. Members not redefined in the child are inherited as-is.
+description: A named element of the project's domain vocabulary.
+guidelines:
+  - When a @Term declares `extends`, resolve the parent @Term first (recursively). The child inherits all parent @Property, @Recipe, and contains slots. Any child member with the same name as a parent member fully replaces it. Members not redefined in the child are inherited as-is.
 contains:
   - name: extends
-    description: reference to a parent @Term using @TermName; all parent @Property, @Recipe, and contains slots are inherited and can be overridden by name
+    description: parent @Term to inherit from
   - name: contains
     description: list of named slots this term introduces for its extenders
   - name: properties
     description: list of @Property the term holds
   - name: recipes
     description: list of @Recipe the term exposes
+  - name: guidelines
+    description: list of @Guideline the term defines
