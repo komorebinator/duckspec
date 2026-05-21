@@ -14,6 +14,6 @@ recipes:
     description: Updates the root README.md to reflect the current project definition
     instructions:
       - Read the term file that extends @Project to get the project's name, description, and goals
-      - Read the existing README.md if it exists
-      - Write README.md with the project name as the H1 heading, description as the opening line, and goals as a bullet list under a "Goals" heading
-      - Append to the end of README.md: "This project uses the aikata framework. See [aikata/aikata.yaml](aikata/aikata.yaml)."
+      - If README.md does not exist, create it with the project name as the H1 heading, description as the opening line, and goals as a bullet list under a "Goals" heading
+      - If README.md exists, apply only the necessary edits to bring its name, description, and goals in sync with the project definition; leave all other content untouched
+      - If README.md does not already contain a link to `aikata/aikata.yaml`, append: "This project uses the aikata framework. See [aikata/aikata.yaml](aikata/aikata.yaml)."
