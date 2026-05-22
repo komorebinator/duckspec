@@ -26,5 +26,6 @@ recipes:
     description: Creates an @Project term file
     instructions:
       - Ask the user in which folder the @Project term file should be stored
-      - Ask the user whether to analyze existing project files to generate a richer @Project definition; if yes, explore the repository structure and use findings to inform the generated content
-      - Generate an @Project term file in the specified folder
+      - Analyze the repository structure, source files, and comments to understand the project's domain; ask the user clarifying questions as needed
+      - Generate an @Project term file in the specified folder based on the analysis
+      - Identify the key domain concepts from the analysis and generate a @Term file for each in the same folder
