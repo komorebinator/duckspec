@@ -1,0 +1,10 @@
+name: Software
+description: Any kind of software — an application, service, library, or tool.
+contains:
+  - name: user_interfaces
+    description: list of @UserInterface the @Software contains
+properties:
+  - name: src
+    description: path to the source folder
+  - name: target_platform
+    description: language or platform the software is built for (e.g. Python, iOS, web)

@@ -1,7 +1,7 @@
 name: Project
 description: Base term for project definitions. Extend this term to describe a specific project — an application, service, or any other endeavor that uses aikata for documentation.
 guidelines:
-  - Main description file (e.g. README.md, index.md, or OVERVIEW.md) must contain a footer with three links — to the @Project term file, the @Aikata framework (`aikata/aikata.yaml`), and the @Term definition (`aikata/term.yaml`). Use `settings.readme_footer` as the footer text.
+  - Main description file (e.g. README.md, index.md, or OVERVIEW.md) must contain a footer with three links — to the @Project term file, the @Aikata framework (`aikata/Aikata.yaml`), and the @Term definition (`aikata/Term.yaml`). Use `settings.readme_footer` as the footer text.
 contains:
   - name: goals
     description: list of @Goal the @Project pursues
@@ -9,8 +9,10 @@ contains:
     description: list of @Guideline the @Project defines
   - name: settings
     description: @Project configuration; see @Settings
-  - name: applications
-    description: list of @Application the @Project contains
+  - name: software
+    description: list of @Software the @Project contains
+  - name: projects
+    description: list of @Project the @Project contains
 recipes:
   - name: create_readme
     description: Creates the root description file for the @Project and registers it in @Settings

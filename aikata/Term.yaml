@@ -2,6 +2,15 @@ name: Term
 description: A named element of the @Project's domain vocabulary.
 guidelines:
   - When a @Term declares `extends`, resolve the parent @Term first (recursively). The child inherits all parent @Property, @Recipe, and contains slots. Any child member with the same name as a parent member fully replaces it. Members not redefined in the child are inherited as-is.
+recipes:
+  - name: validate
+    description: Checks a @Term for consistency with all applicable specifications
+    instructions:
+      - Read the @Term file; if it declares `extends`, resolve the full inheritance chain recursively and merge inherited members
+      - Read all guidelines defined in @Aikata and @Term
+      - Derive validation rules from those guidelines and the @Term specification (e.g. the filename must match the `name:` field, all `@TermName` references must point to existing terms, inherited members must not contradict parent definitions)
+      - Apply each derived rule to the @Term; report any violations
+      - Fix violations where possible; ask the user for guidance where the correct resolution is ambiguous
 contains:
   - name: extends
     description: parent @Term to inherit from

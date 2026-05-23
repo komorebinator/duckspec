@@ -1,0 +1,5 @@
+name: UserInterface
+description: The visual interface through which a user interacts with a @Software.
+contains:
+  - name: windows
+    description: list of @Window the @UserInterface contains
