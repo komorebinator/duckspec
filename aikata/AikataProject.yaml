@@ -7,8 +7,6 @@ guidelines:
 contains:
   - name: settings
     description: @AikataProject configuration; see @AikataProjectSettings
-  - name: applications
-    description: list of @Application the @AikataProject contains
 recipes:
   - name: load_terms
     description: Loads all @Term files in the @AikataProject and in @Aikata into context

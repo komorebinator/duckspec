@@ -8,6 +8,7 @@ goals:
   - Simplify repetitive development tasks
 settings:
   terms_folder: .
+  readme: ../README.md
   readme_footer: "This [project](aikata/Aikata.yaml) uses the [aikata framework](aikata/Aikata.yaml), see [@Term](aikata/Term.yaml)."
 guidelines:
   - All documentation must be written in English.
@@ -32,7 +33,8 @@ recipes:
       - Ask the user in which folder the @AikataProject term file should be stored
       - Infer the project name and description from context (repository name, README, etc.); ask the user to confirm or correct them
       - Set `settings.terms_folder` to a subfolder named after the project, located next to the @AikataProject term file (e.g. if the file is `myapp/MyApp.yaml`, set `settings.terms_folder` to `MyApp/`)
-      - If a README or other description file exists, set `settings.readme` to its path
+      - If a README or other description file exists, set `settings.readme` to its path (relative to the @AikataProject term file)
+      - Set `settings.readme_footer` to the default template from @AikataProjectSettings with `<path to the @AikataProject term file>` replaced by the actual relative path to the term file being created
       - Create the @AikataProject term file with only the fields that are known — name, description, and settings; leave all optional slots empty
       - Create the terms folder on disk at the path set in `settings.terms_folder`
       - Invoke @AikataProject#update_readme()
