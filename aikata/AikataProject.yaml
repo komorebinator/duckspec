@@ -1,0 +1,42 @@
+name: AikataProject
+description: A @Project managed with @Aikata.
+extends: @Project
+guidelines:
+  - Main description file (e.g. README.md, index.md, or OVERVIEW.md) must contain a footer with three links — to the @AikataProject term file, the @Aikata framework (`aikata/Aikata.yaml`), and the @Term definition (`aikata/Term.yaml`). Use `settings.readme_footer` as the footer text.
+contains:
+  - name: settings
+    description: @AikataProject configuration; see @AikataProjectSettings
+recipes:
+  - name: validate
+    description: Validates all @Term files in the @AikataProject
+    instructions:
+      - Read `settings.terms_folder` from @AikataProjectSettings
+      - Read all `.yaml` files in that folder; cache each file by name so it is not re-read during inheritance resolution
+      - Collect all guidelines from @Aikata and @Term
+      - For each term file: resolve its full inheritance chain using the cache, then check compliance with each guideline; record any violations
+      - Report a summary of all violations; fix them where possible, ask the user where the correct resolution is ambiguous
+  - name: create_term
+    description: Creates a new @Term file in the @AikataProject's terms folder
+    arguments:
+      - name: name
+        description: CamelCase name for the new @Term
+    instructions:
+      - Ask the user for `name` if not provided
+      - Ask the user which parent @Term it extends; read that @Term to understand what properties and slots are available
+      - Ask the user which of the inherited characteristics are relevant and what values or descriptions to set
+      - Create the file `<settings.terms_folder>/<name>.yaml` with the provided content
+      - Invoke @AikataProject#validate()
+  - name: create_readme
+    description: Creates the root description file for the @AikataProject and registers it in @AikataProjectSettings
+    instructions:
+      - Read the @AikataProject term file to get the @AikataProject's name, description, and goals
+      - Ask the user where to create the file (default: README.md)
+      - Create the file with the @AikataProject name as the H1 heading, description as the opening line, and goals as a bullet list under a "Goals" heading
+      - Save the file path to `settings.readme`
+  - name: update_readme
+    description: Updates the root description file to reflect the current @AikataProject definition
+    instructions:
+      - Read the @AikataProject term file to get the @AikataProject's name, description, and goals
+      - Read `settings.readme` from @AikataProjectSettings; if it is not set, ask the user whether to set an existing path or Invoke @AikataProject#create_readme()
+      - If the file at `settings.readme` does not exist, Invoke @AikataProject#create_readme()
+      - If the file exists, apply only the necessary edits to bring its name, description, and goals in sync with the @AikataProject definition; leave all other content untouched

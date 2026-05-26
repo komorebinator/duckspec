@@ -1,8 +1,2 @@
 name: Settings
-description: Configuration for an aikata-powered @Project.
-properties:
-  - name: readme
-    description: path to the root description file of the @Project (e.g. README.md)
-  - name: readme_footer
-    description: footer text appended to the root description file
-    default: "This [project](<path to the term file that extends @Project>) uses the [aikata framework](aikata/Aikata.yaml), see [@Term](aikata/Term.yaml)."
+description: A named set of configuration values

@@ -12,13 +12,13 @@ description: |
 properties:
   - name: name
     required: true
-    description: recipe identifier, no spaces (code-style)
+    description: @Recipe identifier, no spaces (code-style)
   - name: description
     required: false
     description: human-readable description
   - name: arguments
     required: false
-    description: list of argument names the @Recipe accepts
+    description: list of arguments the @Recipe accepts; each argument has a name and a description
   - name: instructions
     required: true
     description: ordered list of instructions for the model to execute

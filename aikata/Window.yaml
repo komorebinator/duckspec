@@ -1,3 +1,6 @@
 name: Window
-description: An application window.
+description: An @Application window.
 extends: @UserInterfaceElement
+contains:
+  - name: elements
+    description: list of @UserInterfaceElement the @Window contains

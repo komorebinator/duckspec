@@ -1,11 +1,14 @@
 name: Aikata
 description: A spec-driven development framework for building complex projects with AI.
-extends: @Project
+extends: @AikataProject
 goals:
   - Standardize how requirements and @Term definitions are written across projects
   - Reduce the noise models introduce into the development process
   - Provide tools for describing and navigating project structure
   - Simplify repetitive development tasks
+settings:
+  terms_folder: .
+  readme_footer: "This [project](aikata/Aikata.yaml) uses the [aikata framework](aikata/Aikata.yaml), see [@Term](aikata/Term.yaml)."
 guidelines:
   - All documentation must be written in English.
   - Each `.yaml` file defines exactly one term following the @Term format.
@@ -22,11 +25,12 @@ recipes:
       - Ask the user which installation method they prefer — git submodule (default) or copy — and set `method` accordingly
       - If method is "submodule", run `git submodule add git@github.com:komorebinator/aikata.git aikata` in the target project root
       - If method is "copy", copy the aikata/ folder into the target project root
-      - Scan the root directory for a description file (e.g. README.md); if it exists and already contains a link to an @Project term file, stop — the @Project is already set up; otherwise Invoke @Aikata#create_project(), then Invoke @Project#update_readme()
+      - Scan the root directory for a description file (e.g. README.md); if it exists and already contains a link to an @AikataProject term file, stop — the @AikataProject is already set up; otherwise Invoke @Aikata#create_project(), then Invoke @AikataProject#update_readme()
   - name: create_project
-    description: Creates an @Project term file
+    description: Creates an @AikataProject term file
     instructions:
-      - Ask the user in which folder the @Project term file should be stored
+      - Ask the user in which folder the @AikataProject term file should be stored
       - Analyze the repository structure, source files, and comments to understand the project's domain; ask the user clarifying questions as needed
-      - Generate an @Project term file in the specified folder based on the analysis
+      - Generate an @AikataProject term file in the specified folder based on the analysis
       - Identify the key domain concepts from the analysis and generate a @Term file for each in the same folder
+      - Invoke @AikataProject#validate()

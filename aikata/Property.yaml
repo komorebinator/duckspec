@@ -3,10 +3,10 @@ description: A named field on a @Term that holds a value.
 properties:
   - name: name
     required: true
-    description: property identifier, no spaces (code-style)
+    description: @Property identifier, no spaces (code-style)
   - name: description
     required: false
-    description: what the property represents
+    description: what the @Property represents
   - name: type
     required: false
     description: free-form description of the value type
@@ -15,4 +15,4 @@ properties:
     description: default value if not explicitly set
   - name: required
     required: false
-    description: whether the property must be set; defaults to false
+    description: whether the @Property must be set; defaults to false

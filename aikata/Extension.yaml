@@ -1,0 +1,6 @@
+name: Extension
+description: A software extension that adds functionality to a target @Application.
+extends: @Software
+properties:
+  - name: target
+    description: the @Application or platform this @Extension extends (e.g. a link to the app's term file or a URL to its documentation)
