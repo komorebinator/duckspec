@@ -25,12 +25,29 @@ recipes:
       - Ask the user which installation method they prefer — git submodule (default) or copy — and set `method` accordingly
       - If method is "submodule", run `git submodule add git@github.com:komorebinator/aikata.git aikata` in the target project root
       - If method is "copy", copy the aikata/ folder into the target project root
-      - Scan the root directory for a description file (e.g. README.md); if it exists and already contains a link to an @AikataProject term file, stop — the @AikataProject is already set up; otherwise Invoke @Aikata#create_project(), then Invoke @AikataProject#update_readme()
+      - Scan the root directory for a description file (e.g. README.md); if it exists and already contains a link to an @AikataProject term file, stop — the @AikataProject is already set up; otherwise Invoke @Aikata#create_project()
   - name: create_project
-    description: Creates an @AikataProject term file
+    description: Creates a minimal @AikataProject term file, then optionally imports term definitions from the project source
     instructions:
       - Ask the user in which folder the @AikataProject term file should be stored
-      - Analyze the repository structure, source files, and comments to understand the project's domain; ask the user clarifying questions as needed
-      - Generate an @AikataProject term file in the specified folder based on the analysis
-      - Identify the key domain concepts from the analysis and generate a @Term file for each in the same folder
+      - Infer the project name and description from context (repository name, README, etc.); ask the user to confirm or correct them
+      - Set `settings.terms_folder` to a subfolder named after the project, located next to the @AikataProject term file (e.g. if the file is `myapp/MyApp.yaml`, set `settings.terms_folder` to `MyApp/`)
+      - If a README or other description file exists, set `settings.readme` to its path
+      - Create the @AikataProject term file with only the fields that are known — name, description, and settings; leave all optional slots empty
+      - Create the terms folder on disk at the path set in `settings.terms_folder`
+      - Invoke @AikataProject#update_readme()
+      - Ask the user if they want to import term definitions from the project source; if yes, Invoke @Aikata#import_project(project=<path to the created @AikataProject term file>)
+  - name: import_project
+    description: Scans a project source folder and generates @Term definitions from it
+    arguments:
+      - name: project
+        description: path to the @AikataProject term file
+      - name: src
+        description: path to the folder to scan
+    instructions:
+      - Ask the user for `project` if not provided; ask the user for `src` if not provided
+      - Invoke @AikataProject#load_terms()
+      - Scan all files in `src` recursively; read enough of each file to identify domain concepts, data structures, and key abstractions
+      - Determine which concepts are meaningful to document as @Term definitions; skip implementation details that do not belong in domain vocabulary
+      - For each identified concept, generate a @Term file in `settings.terms_folder`; reuse or extend existing @Term definitions where appropriate
       - Invoke @AikataProject#validate()
