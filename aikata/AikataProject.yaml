@@ -18,6 +18,7 @@ recipes:
       - Read @Aikata.yaml and all `.yaml` files from its `settings.terms_folder`; cache each file by name
       - Read `settings.terms_folder` from @AikataProjectSettings
       - Read all `.yaml` files in that folder; add to the cache, skipping files already cached
+      - For each project listed in `projects`, invoke @AikataProject#load_terms() for that project
   - name: validate
     description: Validates all @Term files in the @AikataProject
     instructions:

@@ -8,6 +8,8 @@ goals:
   - Simplify repetitive development tasks
 startup:
   - load_terms
+projects:
+  - aikata/AikataUI.yaml
 settings:
   terms_folder: aikata
   readme: README.md
