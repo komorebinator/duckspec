@@ -6,6 +6,8 @@ goals:
   - Reduce the noise models introduce into the development process
   - Provide tools for describing and navigating project structure
   - Simplify repetitive development tasks
+startup:
+  - load_terms
 settings:
   terms_folder: aikata
   readme: README.md
@@ -13,7 +15,7 @@ settings:
 guidelines:
   - All documentation must be written in English.
   - Each `.yaml` file defines exactly one term following the @Term format.
-  - @Term names must be written in CamelCase with no spaces. The filename must match the @Term name (e.g. `UserInterface.yaml` for `name: UserInterface`).
+  - "@Term names must be written in CamelCase with no spaces. The filename must match the @Term name (e.g. `UserInterface.yaml` for `name: UserInterface`)."
   - Use `@TermName` to reference terms wherever it makes sense.
   - Commit messages must be short and free of unnecessary detail.
 recipes:

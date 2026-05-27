@@ -4,10 +4,13 @@ extends: @Project
 guidelines:
   - All file paths in @AikataProject files are relative to the file in which they appear.
   - Main description file (e.g. README.md, index.md, or OVERVIEW.md) must contain a footer linking to the @AikataProject term file, the @Aikata framework, and the @Term definition. Use `settings.readme_footer` as the footer text.
-  - Whenever working with an @AikataProject, if @Term files have not yet been loaded into context, invoke @AikataProject#load_terms() first.
+ai_instructions:
+  - When first opening an @AikataProject, invoke all recipes listed in `startup` before doing anything else.
 contains:
   - name: settings
     description: @AikataProject configuration; see @AikataProjectSettings
+  - name: startup
+    description: list of @Recipe names to invoke automatically before any other work when first opening the @AikataProject
 recipes:
   - name: load_terms
     description: Loads all @Term files in the @AikataProject and in @Aikata into context
