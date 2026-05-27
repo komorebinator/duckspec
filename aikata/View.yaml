@@ -1,5 +1,5 @@
 name: View
-description: A top-level container within a @UserInterface, grouping related @UserInterfaceElement instances — a window, screen, page, or any other full UI surface.
+description: A container within a @UserInterface that groups related @UserInterfaceElement instances — a window, screen, page, or any other full UI surface.
 extends: @UserInterfaceElement
 contains:
   - name: elements
