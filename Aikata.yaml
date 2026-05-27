@@ -7,9 +7,9 @@ goals:
   - Provide tools for describing and navigating project structure
   - Simplify repetitive development tasks
 settings:
-  terms_folder: .
-  readme: ../README.md
-  readme_footer: "This [project](aikata/Aikata.yaml) uses the [aikata framework](aikata/Aikata.yaml), see [@Term](aikata/Term.yaml)."
+  terms_folder: aikata
+  readme: README.md
+  readme_footer: "This [project](Aikata.yaml) uses the [aikata framework](Aikata.yaml), see [@Term](aikata/Term.yaml)."
 guidelines:
   - All documentation must be written in English.
   - Each `.yaml` file defines exactly one term following the @Term format.
@@ -17,6 +17,11 @@ guidelines:
   - Use `@TermName` to reference terms wherever it makes sense.
   - Commit messages must be short and free of unnecessary detail.
 recipes:
+  - name: is_user_repo
+    description: Returns true if the current project is a user's @AikataProject, false if it is the @Aikata framework repository itself
+    instructions:
+      - Read the README (or other description file) to find the link to the @AikataProject term file
+      - If the link points to `Aikata.yaml`, return false; otherwise return true
   - name: install
     description: Installs @Aikata into a @Project
     arguments:
@@ -25,12 +30,13 @@ recipes:
     instructions:
       - Ask the user which installation method they prefer — git submodule (default) or copy — and set `method` accordingly
       - If method is "submodule", run `git submodule add git@github.com:komorebinator/aikata.git aikata` in the target project root
-      - If method is "copy", copy the aikata/ folder into the target project root
+      - If method is "copy", create an `aikata/` folder in the target project root; copy `Aikata.yaml` into it and copy the `aikata/` folder into it as `aikata/aikata/`
+      - All @Term definitions are now available locally; don't fetch them from the internet
       - Scan the root directory for a description file (e.g. README.md); if it exists and already contains a link to an @AikataProject term file, stop — the @AikataProject is already set up; otherwise Invoke @Aikata#create_project()
   - name: create_project
     description: Creates a minimal @AikataProject term file, then optionally imports term definitions from the project source
     instructions:
-      - Ask the user in which folder the @AikataProject term file should be stored
+      - Ask the user in which folder the @AikataProject term file should be stored; it must not be inside the `aikata/` folder — that is reserved for the framework
       - Infer the project name and description from context (repository name, README, etc.); ask the user to confirm or correct them
       - Set `settings.terms_folder` to a subfolder named after the project, located next to the @AikataProject term file (e.g. if the file is `myapp/MyApp.yaml`, set `settings.terms_folder` to `MyApp/`)
       - If a README or other description file exists, set `settings.readme` to its path (relative to the @AikataProject term file)

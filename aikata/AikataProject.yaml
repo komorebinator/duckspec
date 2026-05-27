@@ -2,7 +2,8 @@ name: AikataProject
 description: A @Project managed with @Aikata.
 extends: @Project
 guidelines:
-  - Main description file (e.g. README.md, index.md, or OVERVIEW.md) must contain a footer with three links — to the @AikataProject term file, the @Aikata framework (`aikata/Aikata.yaml`), and the @Term definition (`aikata/Term.yaml`). Use `settings.readme_footer` as the footer text.
+  - All file paths in @AikataProject files are relative to the file in which they appear.
+  - Main description file (e.g. README.md, index.md, or OVERVIEW.md) must contain a footer linking to the @AikataProject term file, the @Aikata framework, and the @Term definition. Use `settings.readme_footer` as the footer text.
   - Whenever working with an @AikataProject, if @Term files have not yet been loaded into context, invoke @AikataProject#load_terms() first.
 contains:
   - name: settings
@@ -11,7 +12,7 @@ recipes:
   - name: load_terms
     description: Loads all @Term files in the @AikataProject and in @Aikata into context
     instructions:
-      - Read all `.yaml` files from the `aikata/` folder; cache each file by name
+      - Read @Aikata.yaml and all `.yaml` files from its `settings.terms_folder`; cache each file by name
       - Read `settings.terms_folder` from @AikataProjectSettings
       - Read all `.yaml` files in that folder; add to the cache, skipping files already cached
   - name: validate

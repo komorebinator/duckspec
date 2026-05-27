@@ -13,6 +13,6 @@ A spec-driven development framework for building complex projects with AI.
 
 Copy and send to your AI assistant:
 
-> Install aikata in this project: https://github.com/komorebinator/aikata/blob/main/aikata/Aikata.yaml
+> Install aikata in this project: https://github.com/komorebinator/aikata/blob/main/Aikata.yaml
 
-This [project](aikata/Aikata.yaml) uses the [aikata framework](aikata/Aikata.yaml), see [@Term](aikata/Term.yaml).
+This [project](Aikata.yaml) uses the [aikata framework](Aikata.yaml), see [@Term](aikata/Term.yaml).

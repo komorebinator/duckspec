@@ -1,5 +1,12 @@
 name: Term
 description: A named element of the @Project's domain vocabulary.
+properties:
+  - name: name
+    required: true
+    description: CamelCase identifier; must match the filename (e.g. `UserInterface` in `UserInterface.yaml`)
+  - name: description
+    required: true
+    description: human-readable explanation of what this @Term represents
 guidelines:
   - When a @Term declares `extends`, resolve the parent @Term first (recursively). The child inherits all parent @Property, @Recipe, and contains slots. Any child member with the same name as a parent member fully replaces it. Members not redefined in the child are inherited as-is.
 contains:
