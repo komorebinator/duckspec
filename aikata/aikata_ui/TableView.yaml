@@ -1,0 +1,3 @@
+name: TableView
+description: A tabular display of structured data with rows and columns.
+extends: @UserInterfaceElement

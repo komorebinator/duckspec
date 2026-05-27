@@ -1,0 +1,9 @@
+name: Input
+description: A single-line text input field.
+extends: @UserInterfaceElement
+properties:
+  - name: placeholder
+    description: hint text displayed inside the field when empty
+  - name: mandatory
+    description: whether a value must be provided; defaults to false
+    default: false

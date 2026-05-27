@@ -1,2 +1,8 @@
 name: UserInterfaceElement
 description: A single visual or interactive component within a @UserInterface.
+properties:
+  - name: label
+    description: text displayed on or alongside the element (button text, field label, option caption, etc.)
+  - name: disabled
+    description: whether the element is non-interactive; defaults to false
+    default: false

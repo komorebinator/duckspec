@@ -1,0 +1,9 @@
+name: ProgressBar
+description: A visual indicator of progress or completion.
+extends: @UserInterfaceElement
+properties:
+  - name: value
+    description: current progress value
+  - name: max
+    description: maximum progress value; defaults to 100
+    default: 100

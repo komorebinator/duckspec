@@ -1,0 +1,7 @@
+name: Toggle
+description: A switch element for enabling or disabling a setting.
+extends: @UserInterfaceElement
+properties:
+  - name: mandatory
+    description: whether a selection is required; defaults to false
+    default: false

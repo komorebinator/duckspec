@@ -1,0 +1,7 @@
+name: Checkbox
+description: A toggle element representing a boolean value.
+extends: @UserInterfaceElement
+properties:
+  - name: mandatory
+    description: whether the checkbox must be checked; defaults to false
+    default: false

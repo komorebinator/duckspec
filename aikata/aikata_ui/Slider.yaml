@@ -1,0 +1,13 @@
+name: Slider
+description: A draggable element for selecting a value within a range.
+extends: @UserInterfaceElement
+properties:
+  - name: mandatory
+    description: whether a value must be set; defaults to false
+    default: false
+  - name: min
+    description: minimum value of the range
+  - name: max
+    description: maximum value of the range
+  - name: step
+    description: increment between selectable values

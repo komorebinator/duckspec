@@ -1,0 +1,8 @@
+name: Image
+description: An element that displays an image.
+extends: @UserInterfaceElement
+properties:
+  - name: src
+    description: URL or path to the image source
+  - name: alt
+    description: alternative text description of the image

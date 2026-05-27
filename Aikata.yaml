@@ -14,6 +14,8 @@ settings:
   terms_folder: aikata
   readme: README.md
   readme_footer: "This [project](Aikata.yaml) uses the [aikata framework](Aikata.yaml), see [@Term](aikata/Term.yaml)."
+ai_instructions:
+  - Never commit without asking the user first.
 guidelines:
   - All documentation must be written in English.
   - Each `.yaml` file defines exactly one term following the @Term format.
