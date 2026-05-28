@@ -4,7 +4,7 @@ extends: @Settings
 properties:
   - name: terms_folder
     required: true
-    description: relative path to the folder where @Term files for this @AikataProject are stored; relative to the @Project term file's location
+    description: relative path to the folder where @Term files for this @AikataProject are stored; relative to the @AikataProject term file's location
   - name: readme
     description: path to the root description file of the @Project (e.g. README.md); relative to the @AikataProject term file's location
   - name: readme_footer

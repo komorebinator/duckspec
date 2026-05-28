@@ -6,25 +6,28 @@ guidelines:
   - Main description file (e.g. README.md, index.md, or OVERVIEW.md) must contain a footer linking to the @AikataProject term file, the @Aikata framework, and the @Term definition. Use `settings.readme_footer` as the footer text.
 ai_instructions:
   - When first opening an @AikataProject, invoke all recipes listed in `startup` before doing anything else.
+  - Maintain a term map for the current session: a dictionary of `TermName → file path` built from all known term folders. The term map always contains all known terms regardless of whether they have been read. Separately track which terms have already been read into context. Use the term map to resolve @TermName references, and the read set to avoid reading the same file twice.
 contains:
   - name: settings
     description: @AikataProject configuration; see @AikataProjectSettings
   - name: startup
     description: list of @Recipe names to invoke automatically before any other work when first opening the @AikataProject
 recipes:
-  - name: load_terms
-    description: Loads all @Term files in the @AikataProject and in @Aikata into context
+  - name: load
+    description: Builds the term map from all known term folders and reads the @AikataProject file
     instructions:
-      - Read @Aikata.yaml and all `.yaml` files from its `settings.terms_folder`; cache each file by name
-      - Read `settings.terms_folder` from @AikataProjectSettings
-      - Read all `.yaml` files in that folder; add to the cache, skipping files already cached
-      - For each project listed in `projects`, invoke @AikataProject#load_terms() for that project
+      - Read the README to find the link to the @Aikata file
+      - Read the @Aikata file and each project listed in its `projects` recursively; for each, list all `.yaml` files in its `settings.terms_folder` and add them to the term map as `TermName → file path`
+      - List all `.yaml` files in the current @AikataProject's `settings.terms_folder` and add them to the term map
+      - If any term name was already present in the term map before being added, report a warning listing each conflicting name and both file paths
+      - Read the current @AikataProject file
+      - Invoke @AikataProject#term_map()
   - name: validate
     description: Validates all @Term files in the @AikataProject
     instructions:
-      - Invoke @AikataProject#load_terms()
+      - Invoke @AikataProject#load()
       - Collect all guidelines from @Aikata and @Term
-      - For each term file: resolve its full inheritance chain using the cache, then check compliance with each guideline; record any violations
+      - For each term in the term map: resolve its full inheritance chain (reading any unread files as needed), check compliance with each guideline; record any violations
       - Report a summary of all violations; fix them where possible, ask the user where the correct resolution is ambiguous
   - name: create_term
     description: Creates a new @Term file in the @AikataProject's terms folder
@@ -44,6 +47,11 @@ recipes:
       - Ask the user where to create the file (default: README.md)
       - Create the file with the @AikataProject name as the H1 heading, description as the opening line, and goals as a bullet list under a "Goals" heading
       - Save the file path to `settings.readme`
+  - name: term_map
+    description: Displays the current term map as a markdown table
+    instructions:
+      - Output a markdown table with columns: Term (@TermName link style), File (markdown link), Loaded (✓ if in the read set, – if not)
+      - One row per entry in the term map, sorted alphabetically by term name
   - name: update_readme
     description: Updates the root description file to reflect the current @AikataProject definition
     instructions:

@@ -7,7 +7,7 @@ goals:
   - Provide tools for describing and navigating project structure
   - Simplify repetitive development tasks
 startup:
-  - load_terms
+  - load
 projects:
   - aikata/AikataUI.yaml
 settings:
@@ -16,6 +16,7 @@ settings:
   readme_footer: "This [project](Aikata.yaml) uses the [aikata framework](Aikata.yaml), see [@Term](aikata/Term.yaml)."
 ai_instructions:
   - Never commit without asking the user first.
+  - Never save information to external memory. Instead, suggest changes to the @AikataProject configuration or term files.
 guidelines:
   - All documentation must be written in English.
   - Each `.yaml` file defines exactly one term following the @Term format.

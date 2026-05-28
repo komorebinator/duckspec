@@ -2,6 +2,6 @@ name: AikataUI
 description: User interface terms for the @Aikata framework.
 extends: @AikataProject
 startup:
-  - load_terms
+  - load
 settings:
   terms_folder: aikata_ui
