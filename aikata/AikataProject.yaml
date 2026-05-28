@@ -14,20 +14,21 @@ contains:
     description: list of @Recipe names to invoke automatically before any other work when first opening the @AikataProject
 recipes:
   - name: load
-    description: Builds the term map from all known term folders and reads the @AikataProject file
+    description: Builds the term map from all known term folders and recursively reads all terms reachable from the @AikataProject
     instructions:
       - Read the README to find the link to the @Aikata file
-      - Read the @Aikata file and each project listed in its `projects` recursively; for each, list all `.yaml` files in its `settings.terms_folder` and add them to the term map as `TermName → file path`
+      - Read the @Aikata file and each project listed in its `projects` recursively only to extract `settings.terms_folder`; list all `.yaml` files in that folder and add them to the term map as `TermName → file path`; do not add these project files to the read set
       - List all `.yaml` files in the current @AikataProject's `settings.terms_folder` and add them to the term map
       - If any term name was already present in the term map before being added, report a warning listing each conflicting name and both file paths
-      - Read the current @AikataProject file
+      - Read the current @AikataProject file; add it to the read set
+      - Recursively resolve all unread references: for each file in the read set, collect every `@TermName` reference and every `extends` value; look each up in the term map; read its file if not yet in the read set and add it to the read set; repeat until no unread references remain. Only read a file when a reference to it has been found in an already-read file — do not read files preemptively or in batches. When resolving `extends`, the child inherits all @Property, @Recipe, and contains slots from the parent; any child member with the same name fully replaces the parent's.
       - Invoke @AikataProject#term_map()
   - name: validate
-    description: Validates all @Term files in the @AikataProject
+    description: Validates all loaded @Term files against the @AikataProject guidelines
     instructions:
       - Invoke @AikataProject#load()
       - Collect all guidelines from @Aikata and @Term
-      - For each term in the term map: resolve its full inheritance chain (reading any unread files as needed), check compliance with each guideline; record any violations
+      - For each term in the read set: check compliance with each guideline; record any violations
       - Report a summary of all violations; fix them where possible, ask the user where the correct resolution is ambiguous
   - name: create_term
     description: Creates a new @Term file in the @AikataProject's terms folder

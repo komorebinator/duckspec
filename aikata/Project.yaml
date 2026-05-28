@@ -1,5 +1,5 @@
 name: Project
-description: Base term for project definitions. Extend this term to describe a specific project — an application, service, or any other endeavor that uses @Aikata for documentation.
+description: Base term for project definitions.
 contains:
   - name: goals
     description: list of @Goal the @Project pursues

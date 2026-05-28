@@ -17,12 +17,14 @@ settings:
 ai_instructions:
   - Never commit without asking the user first.
   - Never save information to external memory. Instead, suggest changes to the @AikataProject configuration or term files.
+  - This is the core @Aikata framework term set. When working with any @AikataProject that uses @Aikata, load this project before any other work.
 guidelines:
   - All documentation must be written in English.
   - Each `.yaml` file defines exactly one term following the @Term format.
   - "@Term names must be written in CamelCase with no spaces. The filename must match the @Term name (e.g. `UserInterface.yaml` for `name: UserInterface`)."
   - Use `@TermName` to reference terms wherever it makes sense.
   - Commit messages must be short and free of unnecessary detail.
+  - All `Invoke @TermName#recipe_name()` references must resolve to an existing @Recipe defined on that @Term or inherited by it.
 recipes:
   - name: is_user_repo
     description: Returns true if the current project is a user's @AikataProject, false if it is the @Aikata framework repository itself
@@ -61,7 +63,7 @@ recipes:
         description: path to the folder to scan
     instructions:
       - Ask the user for `project` if not provided; ask the user for `src` if not provided
-      - Invoke @AikataProject#load_terms()
+      - Invoke @AikataProject#load()
       - Scan all files in `src` recursively; read enough of each file to identify domain concepts, data structures, and key abstractions
       - Determine which concepts are meaningful to document as @Term definitions; skip implementation details that do not belong in domain vocabulary
       - For each identified concept, generate a @Term file in `settings.terms_folder`; reuse or extend existing @Term definitions where appropriate
