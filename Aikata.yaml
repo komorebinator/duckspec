@@ -40,7 +40,7 @@ recipes:
       - Ask the user which installation method they prefer — git submodule (default) or copy — and set `method` accordingly
       - If method is "submodule", run `git submodule add git@github.com:komorebinator/aikata.git aikata` in the target project root
       - If method is "copy", create an `aikata/` folder in the target project root; copy `Aikata.yaml` into it and copy the `aikata/` folder into it as `aikata/aikata/`
-      - All @Term definitions are now available locally; don't fetch them from the internet
+      - The framework is now installed at `aikata/`; the main term file is at `aikata/Aikata.yaml`; from this point on read all files from local paths only — do not fetch anything from the internet
       - Scan the root directory for a description file (e.g. README.md); if it exists and already contains a link to an @AikataProject term file, stop — the @AikataProject is already set up; otherwise Invoke @Aikata#create_project()
   - name: create_project
     description: Creates a minimal @AikataProject term file, then optionally imports term definitions from the project source
