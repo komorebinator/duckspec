@@ -27,8 +27,8 @@ recipes:
     description: Validates all loaded @Term files against the @AikataProject guidelines
     instructions:
       - Invoke @AikataProject#load()
-      - Collect all guidelines from @Aikata and @Term
-      - For each term in the read set: check compliance with each guideline; record any violations
+      - Collect all guidelines and ai_instructions from @Aikata and @Term
+      - For each term in the read set: check compliance with each guideline and ai_instruction; record any violations
       - Report a summary of all violations; fix them where possible, ask the user where the correct resolution is ambiguous
   - name: create_term
     description: Creates a new @Term file in the @AikataProject's terms folder
@@ -53,6 +53,12 @@ recipes:
     instructions:
       - Output a markdown table with columns: Term (@TermName link style), File (markdown link), Loaded (✓ if in the read set, – if not)
       - One row per entry in the term map, sorted alphabetically by term name
+  - name: rules
+    description: Displays all active guidelines and ai_instructions collected from loaded @Term files
+    instructions:
+      - For each term in the read set, collect its guidelines and ai_instructions; include inherited ones, marking the source @Term for each entry
+      - Output a markdown table with columns: Source (@TermName link style), Type (Guideline or AI Instruction), Rule (the text)
+      - One row per entry, grouped by source term, guidelines before ai_instructions within each group
   - name: update_readme
     description: Updates the root description file to reflect the current @AikataProject definition
     instructions:
