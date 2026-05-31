@@ -1,5 +1,6 @@
 name: UserInterfaceElement
 description: A single visual or interactive component within a @UserInterface.
+extends: @DesignPattern
 properties:
   - name: label
     description: text displayed on or alongside the element (button text, field label, option caption, etc.)

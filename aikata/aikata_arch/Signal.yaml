@@ -1,0 +1,12 @@
+name: Signal
+description: An event emitted by a @SoftwareComponent that other components can connect to.
+properties:
+  - name: name
+    required: true
+    description: signal identifier, no spaces (code-style)
+  - name: description
+    required: false
+    description: what triggers this signal
+  - name: parameters
+    required: false
+    description: list of values carried by the signal; each item is a name or a name+description pair

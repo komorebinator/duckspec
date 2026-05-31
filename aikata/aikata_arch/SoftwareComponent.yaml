@@ -1,0 +1,16 @@
+name: SoftwareComponent
+description: A named instance of a @DesignPattern within a @Software.
+properties:
+  - name: name
+    required: true
+    description: local identifier for this component; used in @Function signal references as name#signal_name
+  - name: type
+    required: true
+    description: the @DesignPattern this component instantiates (e.g. @Singleton)
+contains:
+  - name: functions
+    description: list of @Function this component exposes or handles
+  - name: signals
+    description: list of @Signal this component emits
+  - name: components
+    description: list of nested @SoftwareComponent instances owned by this component

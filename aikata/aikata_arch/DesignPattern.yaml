@@ -1,0 +1,9 @@
+name: DesignPattern
+description: A named architectural pattern describing a runtime component's structure and behavior.
+contains:
+  - name: functions
+    description: list of @Function the component exposes or handles
+  - name: signals
+    description: list of @Signal the component emits
+  - name: components
+    description: list of nested @SoftwareComponent instances owned by this component

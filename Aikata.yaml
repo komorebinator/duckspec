@@ -9,7 +9,7 @@ goals:
 startup:
   - load
 projects:
-  - aikata/AikataUI.yaml
+  - aikata/AikataArchitecture.yaml
 settings:
   terms_folder: aikata
   readme: README.md

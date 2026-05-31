@@ -10,3 +10,6 @@ properties:
   - name: arguments
     required: false
     description: list of arguments the @Function accepts; each argument has a name and a description
+  - name: signal
+    required: false
+    description: signal this function connects to; use name#signal_name for a local component or @TermName#signal_name for an external one; if set, the function is automatically called when the signal fires

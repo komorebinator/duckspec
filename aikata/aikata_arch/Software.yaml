@@ -1,8 +1,9 @@
 name: Software
 description: Any kind of software — an @Application, service, library, or tool.
-contains:
-  - name: user_interfaces
-    description: list of @UserInterface the @Software contains
+extends: @DesignPattern
+ai_instructions:
+  - Component names within a @Software act as local identifiers; in @Slot signal references, name#signal_name refers to a sibling or ancestor component by its name field
+  - When reading a @Software, resolve each component's type to its @DesignPattern term to understand what fields it supports
 properties:
   - name: repository
     description: URL or path to the @Software's source repository

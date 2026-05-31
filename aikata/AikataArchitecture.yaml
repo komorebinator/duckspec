@@ -1,0 +1,9 @@
+name: AikataArchitecture
+description: Architecture description terms for the @Aikata framework.
+extends: @AikataProject
+startup:
+  - load
+projects:
+  - aikata_arch/AikataUI.yaml
+settings:
+  terms_folder: aikata_arch
