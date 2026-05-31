@@ -7,6 +7,7 @@ guidelines:
 ai_instructions:
   - When first opening an @AikataProject, invoke all recipes listed in `startup` before doing anything else.
   - Maintain a term map for the current session: a dictionary of `TermName → file path` built from all known term folders. The term map always contains all known terms regardless of whether they have been read. Separately track which terms have already been read into context. Use the term map to resolve @TermName references, and the read set to avoid reading the same file twice.
+  - Term files are loaded on demand. A file enters the read set only when its @TermName appears in the body of an already-read file. Never read a file speculatively or in batches.
 contains:
   - name: settings
     description: @AikataProject configuration; see @AikataProjectSettings
