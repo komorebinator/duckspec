@@ -7,7 +7,12 @@ ai_instructions:
 properties:
   - name: repository
     description: URL or path to the @Software's source repository
-  - name: src
-    description: path to the source folder
   - name: target_platform
     description: language or platform the software is built for (e.g. Python, iOS, web)
+recipes:
+  - name: build
+    description: Creates or updates source files in `src/` to match this @Software's specification
+    instructions:
+      - Read the @Software term; resolve each component's type to its @DesignPattern term
+      - Create the folder at `src` if it does not exist
+      - For each component and for the entry point: if the corresponding source file already exists in `src`, read it and apply only the changes needed to bring it in line with the specification; if it does not exist, create it; follow the conventions of `target_platform`

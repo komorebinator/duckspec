@@ -15,4 +15,5 @@ Copy and send to your AI assistant:
 
 > Install aikata in this project: https://github.com/komorebinator/aikata/blob/main/Aikata.yaml
 
+
 This [project](Aikata.yaml) uses the [aikata framework](Aikata.yaml), see [@Term](aikata/Term.yaml).

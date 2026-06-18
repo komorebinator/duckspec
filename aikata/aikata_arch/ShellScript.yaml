@@ -1,0 +1,3 @@
+name: ShellScript
+description: A @Script written for a Unix shell interpreter (bash, sh, zsh, etc.).
+extends: @Script

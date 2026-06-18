@@ -1,5 +1,8 @@
 name: DesignPattern
 description: A named architectural pattern describing a runtime component's structure and behavior.
+properties:
+  - name: src
+    description: path to the source folder or file for this component
 contains:
   - name: functions
     description: list of @Function the component exposes or handles
