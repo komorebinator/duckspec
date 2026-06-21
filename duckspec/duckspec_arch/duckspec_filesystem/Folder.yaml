@@ -1,0 +1,11 @@
+name: Folder
+description: A directory in the filesystem created or populated at build or deploy time.
+extends: @DesignPattern
+properties:
+  - name: path
+    description: absolute path of this directory in the target filesystem
+  - name: permissions
+    description: directory permissions (e.g. 0755, owner:group); omit if default
+contains:
+  - name: files
+    description: list of @File or @Folder instances this directory directly contains

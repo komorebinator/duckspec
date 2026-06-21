@@ -1,0 +1,10 @@
+name: File
+description: A static file installed into a specific location in the filesystem at build or deploy time. Use more specific sub-types (@Graphic, @ConfigFile) where available.
+extends: @DesignPattern
+properties:
+  - name: path
+    description: destination path where this file is installed in the target filesystem
+  - name: format
+    description: file format or MIME type (e.g. SVG, PNG, JSON, systemd-unit)
+  - name: permissions
+    description: file permissions in the target filesystem (e.g. 0644, 0755); omit if default

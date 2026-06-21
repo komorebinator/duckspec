@@ -1,0 +1,8 @@
+name: Graphic
+description: An image file (SVG, PNG, JPEG, etc.) installed in the filesystem. Distinct from @Image, which is a UI element that renders an image at runtime.
+extends: @File
+properties:
+  - name: alt
+    description: textual description of what the graphic depicts; used for documentation and accessibility
+  - name: role
+    description: purpose this graphic serves (e.g. app-icon, logo, branding, splash, placeholder)
