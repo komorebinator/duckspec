@@ -3,4 +3,5 @@ description: A diff file applied to another file using the patch command to modi
 extends: @ConfigFile
 properties:
   - name: target
+    required: true
     description: path to the file this patch modifies, relative to the directory where patch is applied
