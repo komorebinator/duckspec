@@ -11,7 +11,7 @@ startup:
 uses:
   - duckspec/DuckArch.yaml
   - ducktools/DuckTools.yaml
-version: 0.1.0
+version: 0.1.1
 repository: https://github.com/komorebinator/duckspec
 settings:
   terms_folder: duckspec
@@ -43,20 +43,27 @@ recipes:
     description: Installs @Duckspec into a @Project
     arguments:
       - name: method
-        description: installation method; "submodule" (default) or "copy"
+        description: installation method; see variants; default is submodule
+    variants:
+      - name: submodule
+        description: run `git submodule add git@github.com:komorebinator/duckspec.git duckspec` in the target project root
+      - name: copy
+        description: ask the user for the path to the @Duckspec source (a local clone or download); copy the entire source directory into `duckspec/` in the target project root, overwriting any existing files
     instructions:
-      - Ask the user which installation method they prefer — git submodule (default) or copy — and set `method` accordingly
-      - If method is "submodule", run `git submodule add git@github.com:komorebinator/duckspec.git duckspec` in the target project root
-      - If method is "copy", ask the user for the path to the @Duckspec source (a local clone or download); copy the entire source directory into `duckspec/` in the target project root, overwriting any existing files
+      - Ask the user for `method` if not provided; suggest submodule as default; execute the chosen variant
       - The framework is now installed at `duckspec/`; the main term file is at `duckspec/Duckspec.yaml`; from this point on read all files from local paths only — do not fetch anything from the internet
       - Scan the root directory for a description file (e.g. README.md); if it exists and already contains a link to an @DuckspecProject term file, stop — the @DuckspecProject is already set up; otherwise Invoke @Duckspec#create_project()
       - Invoke @DuckTools#install(project_path=duckspec/Duckspec.yaml)
   - name: update
     description: Updates @Duckspec to the latest version in a @Project where it is already installed
+    variants:
+      - name: submodule
+        description: run `git submodule update --remote duckspec` in the project root
+      - name: copy
+        description: ask the user for the path to the updated @Duckspec source; copy the entire source directory into `duckspec/`, overwriting existing files
     instructions:
-      - Check whether `duckspec/` is a git submodule by inspecting `.gitmodules`; if found, set method to "submodule"; otherwise set method to "copy"
-      - If method is "submodule", run `git submodule update --remote duckspec` in the project root
-      - If method is "copy", ask the user for the path to the updated @Duckspec source (a local clone or download); copy the entire source directory into `duckspec/`, overwriting existing files
+      - Check whether `duckspec/` is a git submodule by inspecting `.gitmodules`; if found, use the submodule variant; otherwise use the copy variant
+      - Execute the chosen variant
       - Invoke @DuckspecProject#validate()
   - name: create_project
     description: Creates a minimal @DuckspecProject term file, then optionally imports term definitions from the project source

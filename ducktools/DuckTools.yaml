@@ -29,14 +29,18 @@ recipes:
     description: Installs DuckTools so it is available in future sessions
     arguments:
       - name: method
-        description: "installation method: `mcp` — register as MCP server; `memory` — write loading instructions to a persistent location the model controls; `claude` — write to ~/.claude/CLAUDE.md specifically"
+        description: installation method; see variants; suggest mcp for the most seamless experience, memory for a model-agnostic approach
       - name: project_path
         description: path to the @DuckspecProject .yaml file to register
+    variants:
+      - name: mcp
+        description: register ducktools as an MCP server in the model's tool configuration; the server is started with `python3 -m ducktools serve <project_path>` from the ducktools/src directory
+      - name: memory
+        description: write the load command to AGENTS.md next to the @DuckspecProject file; also write it to any persistent memory location available to the current model; the load command is `PYTHONPATH=<path to ducktools/src> python3 -m ducktools load <project_path>`
+      - name: claude
+        description: append a project entry to ~/.claude/CLAUDE.md with the project name and load command; create the file if it does not exist
     instructions:
-      - Ask the user for `method` if not provided; suggest `mcp` for the most seamless experience, `memory` for a model-agnostic approach
-      - "If method is `mcp`: register ducktools as an MCP server in the model's tool configuration; the server is started with `python3 -m ducktools serve <project_path>` from the ducktools/src directory"
-      - "If method is `memory`: write the load command to AGENTS.md next to the @DuckspecProject file; also write it to any persistent memory location available to the current model (e.g. model memory files, project notes, or similar); the load command is `PYTHONPATH=<path to ducktools/src> python3 -m ducktools load <project_path>`"
-      - "If method is `claude`: append a project entry to ~/.claude/CLAUDE.md with the project name and load command; create the file if it does not exist"
+      - Ask the user for `method` if not provided; execute the chosen variant
 settings:
   terms_folder: ducktools
 software:
