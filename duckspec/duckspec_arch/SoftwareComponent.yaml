@@ -3,7 +3,7 @@ description: A named instance of a @DesignPattern within a @Software.
 properties:
   - name: name
     required: true
-    description: local identifier for this component; used in @Function signal references as name#signal_name
+    description: local path identifier for this component; use `component#element` path syntax (see @Term) to reference its functions, signals, or nested components
   - name: type
     required: true
     description: the @DesignPattern this component instantiates (e.g. @Singleton)

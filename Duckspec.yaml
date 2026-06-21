@@ -8,12 +8,14 @@ goals:
   - Simplify repetitive development tasks
 startup:
   - load
-projects:
+uses:
   - duckspec/DuckArch.yaml
+  - ducktools/DuckTools.yaml
 settings:
   terms_folder: duckspec
   readme: README.md
-  readme_footer: "This [project](Duckspec.yaml) uses the [duckspec framework](Duckspec.yaml), see [@Term](duckspec/Term.yaml)."
+  agents: AGENTS.md
+
 ai_instructions:
   - Never commit without asking the user first.
   - Never save information to external memory. Instead, suggest changes to the @DuckspecProject configuration or term files.
@@ -40,15 +42,16 @@ recipes:
     instructions:
       - Ask the user which installation method they prefer — git submodule (default) or copy — and set `method` accordingly
       - If method is "submodule", run `git submodule add git@github.com:komorebinator/duckspec.git duckspec` in the target project root
-      - If method is "copy", create an `duckspec/` folder in the target project root; copy `Duckspec.yaml` into it and copy the `duckspec/` folder into it as `duckspec/duckspec/`
+      - If method is "copy", ask the user for the path to the @Duckspec source (a local clone or download); copy the entire source directory into `duckspec/` in the target project root, overwriting any existing files
       - The framework is now installed at `duckspec/`; the main term file is at `duckspec/Duckspec.yaml`; from this point on read all files from local paths only — do not fetch anything from the internet
       - Scan the root directory for a description file (e.g. README.md); if it exists and already contains a link to an @DuckspecProject term file, stop — the @DuckspecProject is already set up; otherwise Invoke @Duckspec#create_project()
+      - Invoke @DuckTools#install(project_path=duckspec/Duckspec.yaml)
   - name: update
     description: Updates @Duckspec to the latest version in a @Project where it is already installed
     instructions:
       - Check whether `duckspec/` is a git submodule by inspecting `.gitmodules`; if found, set method to "submodule"; otherwise set method to "copy"
       - If method is "submodule", run `git submodule update --remote duckspec` in the project root
-      - If method is "copy", ask the user for the path to the updated @Duckspec source (a local clone or download); copy `Duckspec.yaml` into `duckspec/` and copy the `duckspec/` folder into `duckspec/duckspec/`, overwriting existing files
+      - If method is "copy", ask the user for the path to the updated @Duckspec source (a local clone or download); copy the entire source directory into `duckspec/`, overwriting existing files
       - Invoke @DuckspecProject#validate()
   - name: create_project
     description: Creates a minimal @DuckspecProject term file, then optionally imports term definitions from the project source
@@ -57,22 +60,24 @@ recipes:
       - Infer the project name and description from context (repository name, README, etc.); ask the user to confirm or correct them
       - Set `settings.terms_folder` to a subfolder named after the project, located next to the @DuckspecProject term file (e.g. if the file is `myapp/MyApp.yaml`, set `settings.terms_folder` to `MyApp/`)
       - If a README or other description file exists, set `settings.readme` to its path (relative to the @DuckspecProject term file)
-      - Set `settings.readme_footer` to the default template from @DuckspecProjectSettings with `<path to the @DuckspecProject term file>` replaced by the actual relative path to the term file being created
       - Create the @DuckspecProject term file with only the fields that are known — name, description, and settings; leave all optional slots empty
       - Create the terms folder on disk at the path set in `settings.terms_folder`
       - Invoke @DuckspecProject#update_readme()
       - Ask the user if they want to import term definitions from the project source; if yes, Invoke @Duckspec#import_project(project=<path to the created @DuckspecProject term file>)
   - name: import_project
-    description: Scans a project source folder and generates @Term definitions from it
+    description: Analyzes source files and generates @Term definitions detailed enough that running `build` on the result would recreate the project faithfully
     arguments:
       - name: project
         description: path to the @DuckspecProject term file
       - name: src
-        description: path to the folder to scan
+        description: root folder of the source to import
     instructions:
       - Ask the user for `project` if not provided; ask the user for `src` if not provided
-      - Invoke @DuckspecProject#load()
-      - Scan all files in `src` recursively; read enough of each file to identify domain concepts, data structures, and key abstractions
-      - Determine which concepts are meaningful to document as @Term definitions; skip implementation details that do not belong in domain vocabulary
-      - For each identified concept, generate a @Term file in `settings.terms_folder`; reuse or extend existing @Term definitions where appropriate
+      - Invoke @DuckspecProject#load() to understand all available @DesignPattern building blocks
+      - Scan all files in `src` recursively; skip any subfolder that contains a @DuckspecProject installation (identified by the presence of a Duckspec.yaml or equivalent)
+      - For each file: read its full content; classify it by mapping it to the most specific applicable @DesignPattern (@Singleton, @Application, @Server, @Script, etc.); identify all functions, signals, and dependencies on other files; ask the user where the role is ambiguous
+      - Group classified files into @Software entries reflecting the project's module/package boundaries; capture cross-component dependencies using path reference syntax
+      - For each @Function: write a description with enough algorithmic detail — including edge cases, data flow, and key logic — that the function could be reimplemented from the description alone without reading the source
+      - Verify coverage: every scanned file must be accounted for by at least one @SoftwareComponent or @Function
+      - Verify fidelity: for the most complex functions, mentally simulate what `build` would produce from the description alone; if the result would differ from the source in any meaningful way, add the missing detail
       - Invoke @DuckspecProject#validate()

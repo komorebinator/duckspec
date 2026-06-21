@@ -1,5 +1,6 @@
 name: UserInterface
 description: The visual interface through which a user interacts with a @Software.
+extends: @DesignPattern
 contains:
   - name: views
     description: list of @View the @UserInterface contains

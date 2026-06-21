@@ -3,34 +3,31 @@ description: A @Project managed with @Duckspec.
 extends: @Project
 guidelines:
   - All file paths in @DuckspecProject files are relative to the file in which they appear.
-  - Main description file (e.g. README.md, index.md, or OVERVIEW.md) must contain a footer linking to the @DuckspecProject term file, the @Duckspec framework, and the @Term definition. Use `settings.readme_footer` as the footer text.
+  - All entries in `uses` are loaded unconditionally when this project is loaded.
+  - A @DuckspecProject may reference another @DuckspecProject in a different directory via `uses` with a relative path (e.g. `../OtherProject.yaml`); circular references are safe — the resolver deduplicates by resolved path.
 ai_instructions:
   - When first opening an @DuckspecProject, invoke all recipes listed in `startup` before doing anything else.
-  - Maintain a term map for the current session: a dictionary of `TermName → file path` built from all known term folders. The term map always contains all known terms regardless of whether they have been read. Separately track which terms have already been read into context. Use the term map to resolve @TermName references, and the read set to avoid reading the same file twice.
-  - Term files are loaded on demand. A file enters the read set only when its @TermName appears in the body of an already-read file. Never read a file speculatively or in batches.
+  - For any @Term not covered after loading, read its file individually on demand.
 contains:
   - name: settings
     description: @DuckspecProject configuration; see @DuckspecProjectSettings
   - name: startup
     description: list of @Recipe names to invoke automatically before any other work when first opening the @DuckspecProject
+  - name: uses
+    description: list of paths to other @DuckspecProject files this project uses; all are loaded unconditionally when this project is loaded
 recipes:
   - name: load
-    description: Builds the term map from all known term folders and recursively reads all terms reachable from the @DuckspecProject
+    description: Loads all @Term definitions for this @DuckspecProject into context; follows `uses` entries recursively and all @TermName references in any loaded file
     instructions:
-      - Read the README to find the link to the @Duckspec file
-      - Read the @Duckspec file and each project listed in its `projects` recursively only to extract `settings.terms_folder`; list all `.yaml` files in that folder and add them to the term map as `TermName → file path`; do not add these project files to the read set
-      - List all `.yaml` files in the current @DuckspecProject's `settings.terms_folder` and add them to the term map
-      - If any term name was already present in the term map before being added, report a warning listing each conflicting name and both file paths
-      - Read the current @DuckspecProject file; add it to the read set
-      - Recursively resolve all unread references: for each file in the read set, collect every `@TermName` reference and every `extends` value; look each up in the term map; read its file if not yet in the read set and add it to the read set; repeat until no unread references remain. Only read a file when a reference to it has been found in an already-read file — do not read files preemptively or in batches. When resolving `extends`, the child inherits all @Property, @Recipe, and contains slots from the parent; any child member with the same name fully replaces the parent's.
-      - Invoke @DuckspecProject#term_map()
+      - Invoke @DuckTools#run(command=load, project_path=<path to this @DuckspecProject file>) and read the full output into context
   - name: validate
-    description: Validates all loaded @Term files against the @DuckspecProject guidelines
+    description: Validates all loaded @Term files against the @DuckspecProject guidelines and runs software tests
     instructions:
       - Invoke @DuckspecProject#load()
-      - Collect all guidelines and ai_instructions from @Duckspec and @Term
-      - For each term in the read set: check compliance with each guideline and ai_instruction; record any violations
-      - Report a summary of all violations; fix them where possible, ask the user where the correct resolution is ambiguous
+      - Collect all guidelines and ai_instructions from every loaded @Term
+      - For each loaded term: check that all required @Property fields are present; check that all @TermName references exist in the term map; check that all `Invoke @TermName#recipe_name()` references resolve to an existing @Recipe; check compliance with all collected guidelines and ai_instructions; record any violations
+      - For each @Software in the project: Invoke @Software#test()
+      - Report a summary of all violations and test results; fix where possible, ask the user where the correct resolution is ambiguous
   - name: create_term
     description: Creates a new @Term file in the @DuckspecProject's terms folder
     arguments:
@@ -52,14 +49,18 @@ recipes:
   - name: term_map
     description: Displays the current term map as a markdown table
     instructions:
-      - Output a markdown table with columns: Term (@TermName link style), File (markdown link), Loaded (✓ if in the read set, – if not)
-      - One row per entry in the term map, sorted alphabetically by term name
+      - Invoke @DuckTools#run(command=list, project_path=<project_path>) and output the result
   - name: rules
     description: Displays all active guidelines and ai_instructions collected from loaded @Term files
     instructions:
-      - For each term in the read set, collect its guidelines and ai_instructions; include inherited ones, marking the source @Term for each entry
+      - For each loaded term, collect its guidelines and ai_instructions; include inherited ones, marking the source @Term for each entry
       - Output a markdown table with columns: Source (@TermName link style), Type (Guideline or AI Instruction), Rule (the text)
       - One row per entry, grouped by source term, guidelines before ai_instructions within each group
+  - name: update_agents
+    description: Creates or updates AGENTS.md with the command to load this @DuckspecProject
+    instructions:
+      - Determine the load command for this project using @DuckTools#run
+      - Write or overwrite `AGENTS.md` next to this @DuckspecProject file with a single section containing the load command; keep it as brief as possible
   - name: update_readme
     description: Updates the root description file to reflect the current @DuckspecProject definition
     instructions:

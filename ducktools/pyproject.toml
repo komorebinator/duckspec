@@ -1,0 +1,16 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ducktools"
+version = "0.1.0"
+description = "CLI and MCP tools for working with Duckspec projects"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+ducktools = "ducktools.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ducktools"]

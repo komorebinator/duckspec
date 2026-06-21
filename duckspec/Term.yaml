@@ -2,6 +2,7 @@ name: Term
 description: A named element of the @Project's domain vocabulary.
 ai_instructions:
   - When a @Term declares `extends`, resolve the parent @Term first (recursively). The child inherits all parent @Property, @Recipe, and contains slots. Any child member with the same name as a parent member fully replaces it. Members not redefined in the child are inherited as-is.
+  - "Path references: any named element within a @Term can be addressed by a `#`-separated path through its namespace (e.g. `cli#load` to reach the element named `load` inside `cli`). The path does not have to follow strict parent-child nesting — it is a sequence of names that narrows the namespace at each step. To reference an element in another @Term, prefix the path with `@TermName` (e.g. `@DuckTools#cli#load`)."
 properties:
   - name: name
     required: true

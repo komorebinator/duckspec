@@ -7,6 +7,5 @@ properties:
     description: relative path to the folder where @Term files for this @DuckspecProject are stored; relative to the @DuckspecProject term file's location
   - name: readme
     description: path to the root description file of the @Project (e.g. README.md); relative to the @DuckspecProject term file's location
-  - name: readme_footer
-    description: footer text appended to the root description file
-    default: "This [@DuckspecProject](<path to the @DuckspecProject term file>) uses the [duckspec framework](duckspec/Duckspec.yaml), see [@Term](duckspec/duckspec/Term.yaml)."
+  - name: agents
+    description: path to the AGENTS.md file with model loading instructions; relative to the @DuckspecProject term file's location

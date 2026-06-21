@@ -7,5 +7,5 @@ contains:
     description: list of @Guideline the @Project defines
   - name: software
     description: list of @Software the @Project contains
-  - name: projects
-    description: list of @Project the @Project contains
+  - name: uses
+    description: list of @Project this @Project uses or depends on

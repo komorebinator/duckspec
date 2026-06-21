@@ -14,6 +14,3 @@ A spec-driven development framework for building complex projects with AI.
 Copy and send to your AI assistant:
 
 > Install duckspec in this project: https://github.com/komorebinator/duckspec/blob/main/Duckspec.yaml
-
-
-This [project](Duckspec.yaml) uses the [duckspec framework](Duckspec.yaml), see [@Term](duckspec/Term.yaml).

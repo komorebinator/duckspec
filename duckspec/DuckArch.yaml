@@ -3,7 +3,7 @@ description: Architecture description terms for the @Duckspec framework.
 extends: @DuckspecProject
 startup:
   - load
-projects:
+uses:
   - duckspec_arch/DuckUI.yaml
 settings:
   terms_folder: duckspec_arch
