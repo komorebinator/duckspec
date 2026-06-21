@@ -1,0 +1,6 @@
+name: Keyring
+description: A named collection of @Key or @Certificate entries stored together, typically in a file or managed by a secret service.
+extends: @DesignPattern
+properties:
+  - name: storage
+    description: where the keyring is stored (e.g. file path, hardware security module, cloud KMS, OS keychain)

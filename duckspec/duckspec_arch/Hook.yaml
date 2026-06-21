@@ -1,0 +1,8 @@
+name: Hook
+description: A function registered to run automatically at a named point in a framework or runtime lifecycle (e.g. before/after a build step, on component mount, on git commit).
+extends: @DesignPattern
+properties:
+  - name: trigger
+    description: the lifecycle event or named hook point this function is registered on (e.g. pre-commit, onMount, afterEach, build:start)
+  - name: framework
+    description: the framework or runtime that owns the hook system (e.g. React, Webpack, git, WordPress)

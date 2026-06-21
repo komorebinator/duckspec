@@ -1,0 +1,6 @@
+name: Middleware
+description: A function or component that sits in a processing pipeline between input and output, inspecting or transforming data as it passes through. Calls the next handler in the chain or short-circuits the pipeline.
+extends: @DesignPattern
+properties:
+  - name: pipeline
+    description: the pipeline or framework this middleware runs in (e.g. HTTP request handler, message queue consumer, build step)

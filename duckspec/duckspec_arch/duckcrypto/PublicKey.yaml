@@ -1,0 +1,3 @@
+name: PublicKey
+description: The public half of an asymmetric key pair. Safe to distribute; used by others for signature verification or encryption.
+extends: @Key

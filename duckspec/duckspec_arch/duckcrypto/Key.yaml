@@ -1,0 +1,10 @@
+name: Key
+description: A cryptographic key used for encryption, decryption, signing, or verification.
+extends: @DesignPattern
+properties:
+  - name: algorithm
+    description: cryptographic algorithm (e.g. RSA-2048, ECDSA P-256, Ed25519, AES-256)
+  - name: format
+    description: storage format (e.g. PEM, DER, JWK, raw bytes)
+  - name: purpose
+    description: what this key is used for — signing, verification, encryption, decryption, or key exchange

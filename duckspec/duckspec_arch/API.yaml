@@ -1,0 +1,11 @@
+name: API
+description: A set of HTTP, RPC, or similar endpoints that a @Server exposes for clients to call.
+extends: @DesignPattern
+properties:
+  - name: protocol
+    description: the API protocol (e.g. REST, GraphQL, gRPC, WebSocket, JSON-RPC)
+  - name: base_path
+    description: the URL prefix all endpoints share (e.g. /api/v1)
+contains:
+  - name: endpoints
+    description: list of individual endpoints; each has a method (GET/POST/etc.), path, request schema, response schema, and description

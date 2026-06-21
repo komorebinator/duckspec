@@ -1,0 +1,8 @@
+name: Digest
+description: The output of a cryptographic hash function applied to data. Used for integrity verification and content-addressable references.
+extends: @DesignPattern
+properties:
+  - name: algorithm
+    description: hash algorithm (e.g. SHA-256, SHA-512, BLAKE3)
+  - name: covers
+    description: the data or artifact this digest was computed from

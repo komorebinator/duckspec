@@ -1,0 +1,10 @@
+name: Certificate
+description: A @PublicKey bound to an identity and signed by a certificate authority or self-signed. Establishes trust between parties.
+extends: @PublicKey
+properties:
+  - name: issuer
+    description: who issued this certificate (CA name, or "self-signed")
+  - name: subject
+    description: the identity this certificate belongs to
+  - name: expiry
+    description: when this certificate expires; omit if it does not expire

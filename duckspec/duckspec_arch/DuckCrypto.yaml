@@ -1,0 +1,9 @@
+name: DuckCrypto
+description: Cryptographic asset terms for the @Duckspec framework — keys, certificates, signatures, digests, and keyrings.
+extends: @DuckspecProject
+startup:
+  - load
+uses:
+  - ../DuckArch.yaml
+settings:
+  terms_folder: duckcrypto

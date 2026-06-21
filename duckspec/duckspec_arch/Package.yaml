@@ -1,0 +1,8 @@
+name: Package
+description: A distributable unit of code published to a package registry. Contains one or more @Module or @Software items and a manifest describing its name, version, and dependencies.
+extends: @DesignPattern
+properties:
+  - name: registry
+    description: the package registry this package is published to (e.g. npm, PyPI, crates.io, RubyGems)
+  - name: manifest
+    description: the package manifest file (e.g. package.json, pyproject.toml, Cargo.toml)

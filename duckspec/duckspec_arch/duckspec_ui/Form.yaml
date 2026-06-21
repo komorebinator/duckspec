@@ -1,0 +1,8 @@
+name: Form
+description: A group of input fields that the user fills out and submits together as a single unit. Has a submit action and optional validation.
+extends: @View
+properties:
+  - name: submit_label
+    description: label on the submit button (e.g. Save, Apply, Send)
+  - name: validation
+    description: validation rules applied before submission (e.g. required fields, format checks)

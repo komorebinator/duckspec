@@ -1,0 +1,3 @@
+name: SymmetricKey
+description: A shared secret key used for symmetric encryption or MAC generation. Must be kept secret by all parties that hold it.
+extends: @Key

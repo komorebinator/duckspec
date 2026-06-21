@@ -1,0 +1,10 @@
+name: Signature
+description: A digital signature produced by signing data with a @PrivateKey. Verified using the corresponding @PublicKey or @Certificate.
+extends: @DesignPattern
+properties:
+  - name: algorithm
+    description: signature algorithm (e.g. ECDSA, Ed25519, RSA-PSS)
+  - name: signed_by
+    description: the @PrivateKey or @Certificate used to produce this signature
+  - name: covers
+    description: the data or artifact this signature covers (e.g. a container image digest, a file, a git commit)
