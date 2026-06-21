@@ -1,12 +1,12 @@
-name: AikataProjectSettings
-description: Configuration for an @AikataProject.
+name: DuckspecProjectSettings
+description: Configuration for an @DuckspecProject.
 extends: @Settings
 properties:
   - name: terms_folder
     required: true
-    description: relative path to the folder where @Term files for this @AikataProject are stored; relative to the @AikataProject term file's location
+    description: relative path to the folder where @Term files for this @DuckspecProject are stored; relative to the @DuckspecProject term file's location
   - name: readme
-    description: path to the root description file of the @Project (e.g. README.md); relative to the @AikataProject term file's location
+    description: path to the root description file of the @Project (e.g. README.md); relative to the @DuckspecProject term file's location
   - name: readme_footer
     description: footer text appended to the root description file
-    default: "This [@AikataProject](<path to the @AikataProject term file>) uses the [aikata framework](aikata/Aikata.yaml), see [@Term](aikata/aikata/Term.yaml)."
+    default: "This [@DuckspecProject](<path to the @DuckspecProject term file>) uses the [duckspec framework](duckspec/Duckspec.yaml), see [@Term](duckspec/duckspec/Term.yaml)."

@@ -1,7 +1,7 @@
-name: AikataUI
-description: User interface terms for the @Aikata framework.
-extends: @AikataProject
+name: DuckspecUI
+description: User interface terms for the @Duckspec framework.
+extends: @DuckspecProject
 startup:
   - load
 settings:
-  terms_folder: aikata_ui
+  terms_folder: duckspec_ui

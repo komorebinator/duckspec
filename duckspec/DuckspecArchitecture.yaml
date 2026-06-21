@@ -1,9 +1,9 @@
-name: AikataArchitecture
-description: Architecture description terms for the @Aikata framework.
-extends: @AikataProject
+name: DuckspecArchitecture
+description: Architecture description terms for the @Duckspec framework.
+extends: @DuckspecProject
 startup:
   - load
 projects:
-  - aikata_arch/AikataUI.yaml
+  - duckspec_arch/DuckspecUI.yaml
 settings:
-  terms_folder: aikata_arch
+  terms_folder: duckspec_arch
