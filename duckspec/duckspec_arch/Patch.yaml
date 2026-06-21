@@ -1,0 +1,6 @@
+name: Patch
+description: A diff file applied to another file using the patch command to modify its contents at build time. Typically produced by diff -u.
+extends: @ConfigFile
+properties:
+  - name: target
+    description: path to the file this patch modifies, relative to the directory where patch is applied

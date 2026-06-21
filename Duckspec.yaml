@@ -11,14 +11,15 @@ startup:
 uses:
   - duckspec/DuckArch.yaml
   - ducktools/DuckTools.yaml
-version: 0.5.0
+version: 0.6.0
 repository: https://github.com/komorebinator/duckspec
 settings:
   terms_folder: duckspec
   readme: README.md
 
 ai_instructions:
-  - Never commit, push, or invoke the release recipe unless the user explicitly requests it. Completing a task does not imply permission to release or push.
+  - Never commit, push, or invoke the release recipe unless the user explicitly requests it with an imperative statement ("commit", "push", "release"). Completing a task, permissive phrasing ("we can push", "it's fine to commit"), or confirmation that changes look good do NOT count as a request.
+  - Never manually edit the `version` field in any @DuckspecProject file. Version changes must always go through the @DuckspecProject#release recipe, which handles validation and the correct bump calculation.
   - Never save information to external memory. Instead, suggest changes to the @DuckspecProject configuration or term files.
   - This is the core @Duckspec framework term set. When working with any @DuckspecProject that uses @Duckspec, load this project before any other work.
 guidelines:
