@@ -36,7 +36,7 @@ recipes:
       - name: mcp
         description: register ducktools as an MCP server in the model's tool configuration; the server is started with `python3 -m ducktools serve <project_path>` from the ducktools/src directory
       - name: memory
-        description: write the load command to AGENTS.md next to the @DuckspecProject file; also write it to any persistent memory location available to the current model; the load command is `PYTHONPATH=<path to ducktools/src> python3 -m ducktools load <project_path>`
+        description: write `../AGENTS.md` into any persistent memory location available to the current model
       - name: claude
         description: append a project entry to ~/.claude/CLAUDE.md with the project name and load command; create the file if it does not exist
     instructions:

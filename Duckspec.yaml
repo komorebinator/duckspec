@@ -11,12 +11,11 @@ startup:
 uses:
   - duckspec/DuckArch.yaml
   - ducktools/DuckTools.yaml
-version: 0.1.2
+version: 0.1.3
 repository: https://github.com/komorebinator/duckspec
 settings:
   terms_folder: duckspec
   readme: README.md
-  agents: AGENTS.md
 
 ai_instructions:
   - Never commit without asking the user first.
@@ -53,7 +52,7 @@ recipes:
       - Ask the user for `method` if not provided; suggest submodule as default; execute the chosen variant
       - The framework is now installed at `duckspec/`; the main term file is at `duckspec/Duckspec.yaml`; from this point on read all files from local paths only — do not fetch anything from the internet
       - Scan the root directory for a description file (e.g. README.md); if it exists and already contains a link to an @DuckspecProject term file, stop — the @DuckspecProject is already set up; otherwise Invoke @Duckspec#create_project()
-      - Invoke @DuckTools#install(project_path=duckspec/Duckspec.yaml)
+      - Invoke @DuckTools#install(project_path=<path to the @DuckspecProject file created in the previous step>)
   - name: update
     description: Updates @Duckspec to the latest version in a @Project where it is already installed
     variants:
@@ -68,28 +67,28 @@ recipes:
   - name: create_project
     description: Creates a minimal @DuckspecProject term file, then optionally imports term definitions from the project source
     instructions:
+      - Invoke @DuckTools#run(command=load --all, project_path=<path to this file>) and read the full output into context
       - Ask the user in which folder the @DuckspecProject term file should be stored; it must not be inside the `duckspec/` folder — that is reserved for the framework
       - Infer the project name and description from context (repository name, README, etc.); ask the user to confirm or correct them
       - Set `settings.terms_folder` to a subfolder named after the project, located next to the @DuckspecProject term file (e.g. if the file is `myapp/MyApp.yaml`, set `settings.terms_folder` to `MyApp/`)
       - If a README or other description file exists, set `settings.readme` to its path (relative to the @DuckspecProject term file)
-      - Create the @DuckspecProject term file with only the fields that are known — name, description, and settings; leave all optional slots empty
+      - Create the @DuckspecProject term file named `<ProjectName>.yaml` (matching the `name:` field) in the folder chosen in the first step, with only the fields that are known — name, description, settings, and `uses` set to the relative path from the @DuckspecProject file to `duckspec/Duckspec.yaml`; leave all other slots empty
       - Create the terms folder on disk at the path set in `settings.terms_folder`
       - Invoke @DuckspecProject#update_readme()
-      - Ask the user if they want to import term definitions from the project source; if yes, Invoke @Duckspec#import_project(project=<path to the created @DuckspecProject term file>)
+      - Invoke @DuckTools#run(command=load --all, project_path=<path to the created @DuckspecProject file>) and read the full output into context
+      - Ask the user whether to import term definitions from the project source; if yes, Invoke @Duckspec#import_project(project=<path to the created @DuckspecProject file>)
   - name: import_project
     description: Analyzes source files and generates @Term definitions detailed enough that running `build` on the result would recreate the project faithfully
     arguments:
       - name: project
         description: path to the @DuckspecProject term file
-      - name: src
-        description: root folder of the source to import
     instructions:
-      - Ask the user for `project` if not provided; ask the user for `src` if not provided
-      - Invoke @DuckspecProject#load() to understand all available @DesignPattern building blocks
-      - Scan all files in `src` recursively; skip any subfolder that contains a @DuckspecProject installation (identified by the presence of a Duckspec.yaml or equivalent)
-      - For each file: read its full content; classify it by mapping it to the most specific applicable @DesignPattern (@Singleton, @Application, @Server, @Script, etc.); identify all functions, signals, and dependencies on other files; ask the user where the role is ambiguous
-      - Group classified files into @Software entries reflecting the project's module/package boundaries; capture cross-component dependencies using path reference syntax
-      - For each @Function: write a description with enough algorithmic detail — including edge cases, data flow, and key logic — that the function could be reimplemented from the description alone without reading the source
-      - Verify coverage: every scanned file must be accounted for by at least one @SoftwareComponent or @Function
+      - Ask the user for `project` if not provided
+      - Invoke @DuckTools#run(command=load --all, project_path=<project>) and read the full output to understand all available @DesignPattern building blocks
+      - Scan every file in the repository recursively; skip any subfolder that contains a @DuckspecProject installation (identified by the presence of a Duckspec.yaml or equivalent); no file type is excluded — code, config, markup, assets, and documentation all count
+      - For each file: read its full content; decide how to document it — map it to the most specific applicable @DesignPattern if it is a software artifact, or introduce a new @Term if no existing pattern fits; identify dependencies on other files; group related files under a single @Term where that better reflects the project structure; ask the user where the role is ambiguous
+      - If the dependency tree requires concepts not covered by any loaded @Term, introduce new @Term files in `settings.terms_folder` to fill the gaps
+      - For each @Term produced: create a file named `<TermName>.yaml` in the project's `settings.terms_folder`; for @Software terms populate functions, signals, and components; for @Function entries write descriptions with enough algorithmic detail that the function could be reimplemented from the description alone, including edge cases and data flow
+      - Verify coverage: every file in the repository must be accounted for by at least one @Term, @SoftwareComponent, or @Function; report the ratio of covered to total files
       - Verify fidelity: for the most complex functions, mentally simulate what `build` would produce from the description alone; if the result would differ from the source in any meaningful way, add the missing detail
       - Invoke @DuckspecProject#validate()
