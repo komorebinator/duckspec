@@ -11,7 +11,7 @@ startup:
 uses:
   - duckspec/DuckArch.yaml
   - ducktools/DuckTools.yaml
-version: 0.1.3
+version: 0.1.4
 repository: https://github.com/komorebinator/duckspec
 settings:
   terms_folder: duckspec
@@ -88,7 +88,7 @@ recipes:
       - Ask the user for `project` if not provided; infer `src` as the repository root if not provided and confirm with the user
       - Invoke @DuckTools#run(command=load --all, project_path=<project>) and read the full output — this loads the complete term map including @ShellScript, @Extension, @UserInterface, @View, and all @UserInterfaceElement sub-types (@Button, @Toggle, @Input, @Label, @ProgressBar, @Spinner, @Image, etc.)
       - Scan all files in `src` recursively; skip subfolders that contain a @DuckspecProject installation (Duckspec.yaml present); assign each file to exactly one of four categories — (a) code: executable logic, maps to a @DesignPattern; (b) config: configuration or data file (JSON, YAML, TOML, INI, .desktop, systemd unit, GSchema override, polkit rule, etc.), maps to a @Singleton; (c) asset: images, icons, fonts, compiled binaries — path and purpose only; (d) meta: .gitignore, LICENSE, lockfiles, README already in settings.readme — record existence, skip
-      - Classify each category (a) file using the most specific available @DesignPattern — @ShellScript for bash/sh/zsh scripts; @Application for program entry points; @View for windows, screens, dialogs, and modal overlays; @UserInterface for a module that owns and composes multiple @View instances; @Extension for plugins and add-ons; @Singleton for shared service or utility modules; @Server for daemons; @Script for other scripting files
+      - Classify each category (a) file using the most specific available @DesignPattern — @ShellScript for bash/sh/zsh scripts; @Application for program entry points; @View for windows, screens, dialogs, and modal overlays; @UserInterface for a module that owns and composes multiple @View instances; @Extension for plugins and add-ons; @Singleton for shared service or utility modules; @Server for daemons; @Script for other scripting files; if no existing pattern fits, introduce a new @Term file in the project's `settings.terms_folder` to define the missing pattern and use it
       - Decide the term hierarchy — for each self-contained runnable unit (its own entry point, can run independently, contains at least 3 source files) promote it to a @DuckspecProject sub-term with its own terms folder and uses entry in the parent; otherwise embed as @Software inline
       - Produce a proposed term tree — a structured outline listing every planned @Term file, its type, the source files it covers, and which project it belongs to — and present it to the user for approval or adjustment before writing any files
       - For each @View term — (1) document the visual structure as components enumerating every @UserInterfaceElement (@Button, @Toggle, @Input, @Label, @ProgressBar, @Spinner, etc.) with its label, role, and enabled/visible conditions; (2) document page or state transitions; (3) add @Function entries only for event handlers and non-trivial logic, not for widget construction
@@ -98,4 +98,5 @@ recipes:
       - Write all term files to the appropriate terms folders; for existing term files update them in place — preserve any manually written content not contradicted by the source
       - Verify coverage — for every file in categories (a), (b), and (c) confirm it has a dedicated named entry (a @SoftwareComponent, a @View, a @Singleton, or a named @UserInterfaceElement); a file is NOT covered if it appears only inside another component's description text; list all remaining gaps
       - Output a coverage report as a markdown table in the conversation: total files scanned, covered files (path → term name), skipped files (path → reason), and any remaining gaps
+      - Verify fidelity: for the most complex functions and components, mentally simulate what `build` would produce from the description alone; if the result would differ from the source in any meaningful way, add the missing detail
       - Invoke @DuckspecProject#validate()
