@@ -11,7 +11,7 @@ startup:
 uses:
   - duckspec/DuckArch.yaml
   - ducktools/DuckTools.yaml
-version: 0.6.2
+version: 0.6.3
 repository: https://github.com/komorebinator/duckspec
 settings:
   terms_folder: duckspec
@@ -106,5 +106,6 @@ recipes:
       - Write all term files to the appropriate terms folders; for existing term files update them in place — preserve any manually written content not contradicted by the source
       - Verify coverage — for every file in categories (a), (b), and (c) confirm it has a dedicated named entry (a @SoftwareComponent, a @View, a @Singleton, or a named @UserInterfaceElement); a file is NOT covered if it appears only inside another component's description text; list all remaining gaps
       - Output a coverage report as a markdown table in the conversation: total files scanned, covered files (path → term name), skipped files (path → reason), and any remaining gaps
+      - Review type precision: for every existing @SoftwareComponent in the covered terms, check whether a more specific @DesignPattern is now available in the term map that better describes the component than its current type (e.g. a component typed as @ConfigFile that matches a newly added @SystemdUnit or @Patch); propose re-typing and ask the user to confirm before changing
       - Verify fidelity: for the most complex functions and components, mentally simulate what `build` would produce from the description alone; if the result would differ from the source in any meaningful way, add the missing detail
       - Invoke @DuckspecProject#validate()
