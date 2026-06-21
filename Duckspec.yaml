@@ -78,17 +78,24 @@ recipes:
       - Invoke @DuckTools#run(command=load --all, project_path=<path to the created @DuckspecProject file>) and read the full output into context
       - Ask the user whether to import term definitions from the project source; if yes, Invoke @Duckspec#import_project(project=<path to the created @DuckspecProject file>)
   - name: import_project
-    description: Analyzes source files and generates @Term definitions detailed enough that running `build` on the result would recreate the project faithfully
+    description: Analyzes source files and generates @Term definitions detailed enough that running `build` on the result would recreate the project faithfully. Idempotent — can be run multiple times to refine or update existing terms.
     arguments:
       - name: project
         description: path to the @DuckspecProject term file
+      - name: src
+        description: root folder of the source to import; defaults to the repository root (inferred from project path)
     instructions:
-      - Ask the user for `project` if not provided
-      - Invoke @DuckTools#run(command=load --all, project_path=<project>) and read the full output to understand all available @DesignPattern building blocks
-      - Scan every file in the repository recursively; skip any subfolder that contains a @DuckspecProject installation (identified by the presence of a Duckspec.yaml or equivalent); no file type is excluded — code, config, markup, assets, and documentation all count
-      - For each file: read its full content; decide how to document it — map it to the most specific applicable @DesignPattern if it is a software artifact, or introduce a new @Term if no existing pattern fits; identify dependencies on other files; group related files under a single @Term where that better reflects the project structure; ask the user where the role is ambiguous
-      - If the dependency tree requires concepts not covered by any loaded @Term, introduce new @Term files in `settings.terms_folder` to fill the gaps
-      - For each @Term produced: create a file named `<TermName>.yaml` in the project's `settings.terms_folder`; for @Software terms populate functions, signals, and components; for @Function entries write descriptions with enough algorithmic detail that the function could be reimplemented from the description alone, including edge cases and data flow
-      - Verify coverage: every file in the repository must be accounted for by at least one @Term, @SoftwareComponent, or @Function; report the ratio of covered to total files
-      - Verify fidelity: for the most complex functions, mentally simulate what `build` would produce from the description alone; if the result would differ from the source in any meaningful way, add the missing detail
+      - Ask the user for `project` if not provided; infer `src` as the repository root if not provided and confirm with the user
+      - Invoke @DuckTools#run(command=load --all, project_path=<project>) and read the full output — this loads the complete term map including @ShellScript, @Extension, @UserInterface, @View, and all @UserInterfaceElement sub-types (@Button, @Toggle, @Input, @Label, @ProgressBar, @Spinner, @Image, etc.)
+      - Scan all files in `src` recursively; skip subfolders that contain a @DuckspecProject installation (Duckspec.yaml present); assign each file to exactly one of four categories — (a) code: executable logic, maps to a @DesignPattern; (b) config: configuration or data file (JSON, YAML, TOML, INI, .desktop, systemd unit, GSchema override, polkit rule, etc.), maps to a @Singleton; (c) asset: images, icons, fonts, compiled binaries — path and purpose only; (d) meta: .gitignore, LICENSE, lockfiles, README already in settings.readme — record existence, skip
+      - Classify each category (a) file using the most specific available @DesignPattern — @ShellScript for bash/sh/zsh scripts; @Application for program entry points; @View for windows, screens, dialogs, and modal overlays; @UserInterface for a module that owns and composes multiple @View instances; @Extension for plugins and add-ons; @Singleton for shared service or utility modules; @Server for daemons; @Script for other scripting files
+      - Decide the term hierarchy — for each self-contained runnable unit (its own entry point, can run independently, contains at least 3 source files) promote it to a @DuckspecProject sub-term with its own terms folder and uses entry in the parent; otherwise embed as @Software inline
+      - Produce a proposed term tree — a structured outline listing every planned @Term file, its type, the source files it covers, and which project it belongs to — and present it to the user for approval or adjustment before writing any files
+      - For each @View term — (1) document the visual structure as components enumerating every @UserInterfaceElement (@Button, @Toggle, @Input, @Label, @ProgressBar, @Spinner, etc.) with its label, role, and enabled/visible conditions; (2) document page or state transitions; (3) add @Function entries only for event handlers and non-trivial logic, not for widget construction
+      - For each @ShellScript or @Script term write a single run function whose description covers every major step, conditional branch, environment variable dependency, external command invoked, and expected side effect on the system
+      - For each category (b) config file create a named @Singleton (or a named component of the most closely related @Software) with a configure function describing the file's purpose and the meaning of its key fields
+      - For each @Function in code components write a description covering the algorithm, data flow, edge cases, and expected output in enough detail that a developer could reimplement the function without reading the source
+      - Write all term files to the appropriate terms folders; for existing term files update them in place — preserve any manually written content not contradicted by the source
+      - Verify coverage — for every file in categories (a), (b), and (c) confirm it has a dedicated named entry (a @SoftwareComponent, a @View, a @Singleton, or a named @UserInterfaceElement); a file is NOT covered if it appears only inside another component's description text; list all remaining gaps
+      - Output a coverage report as a markdown table in the conversation: total files scanned, covered files (path → term name), skipped files (path → reason), and any remaining gaps
       - Invoke @DuckspecProject#validate()
