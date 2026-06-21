@@ -8,7 +8,7 @@ properties:
     description: what this test verifies
   - name: command
     required: true
-    description: command to run following the software's `target_platform` conventions
+    description: command to run following the software's `platform` conventions
   - name: expect
     required: true
     description: expected output or behavior that indicates the test passed

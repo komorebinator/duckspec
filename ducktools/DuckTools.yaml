@@ -45,7 +45,7 @@ settings:
   terms_folder: ducktools
 software:
   - extends: @Application
-    target_platform: Python
+    platform: Python
     src: src/
     tests:
       - name: load

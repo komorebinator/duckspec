@@ -7,7 +7,7 @@ ai_instructions:
 properties:
   - name: repository
     description: URL or path to the @Software's source repository
-  - name: target_platform
+  - name: platform
     description: language or platform the software is built for (e.g. Python, iOS, web)
 contains:
   - name: tests
@@ -18,23 +18,23 @@ recipes:
     instructions:
       - Read the @Software term; resolve each component's type to its @DesignPattern term
       - Create the folder at `src` if it does not exist
-      - For each component and for the entry point: if the corresponding source file already exists in `src`, read it and apply only the changes needed to bring it in line with the specification; if it does not exist, create it; follow the conventions of `target_platform`
+      - For each component and for the entry point: if the corresponding source file already exists in `src`, read it and apply only the changes needed to bring it in line with the specification; if it does not exist, create it; follow the conventions of `platform`
   - name: test
     description: Runs all @Test cases listed in `tests` and reports results
     instructions:
-      - Read the @Software term to get `target_platform` and `tests`
-      - For each @Test: run `command` following `target_platform` conventions; check output against `expect`; record pass (✓) or fail (✗) and the observed output
+      - Read the @Software term to get `platform` and `tests`
+      - For each @Test: run `command` following `platform` conventions; check output against `expect`; record pass (✓) or fail (✗) and the observed output
       - Output a markdown table with columns: Test | Status (✓ or ✗) | Detail
   - name: run
-    description: Runs the @Software using the conventions of `target_platform`
+    description: Runs the @Software using the conventions of `platform`
     arguments:
       - name: args
         description: command-line arguments to pass to the software
     instructions:
-      - Read the @Software term to determine `target_platform` and `src`
-      - Run the software following `target_platform` conventions (e.g. `python3 -m <package> <args>` for Python)
+      - Read the @Software term to determine `platform` and `src`
+      - Run the software following `platform` conventions (e.g. `python3 -m <package> <args>` for Python)
   - name: install
-    description: Installs the @Software as a system command using the conventions of `target_platform`
+    description: Installs the @Software as a system command using the conventions of `platform`
     instructions:
-      - Read the @Software term to determine `target_platform` and `src`
-      - Run the standard install command for `target_platform` (e.g. `pip install -e <src>` for Python, `npm install` for Node.js) from the directory containing the project's package descriptor
+      - Read the @Software term to determine `platform` and `src`
+      - Run the standard install command for `platform` (e.g. `pip install -e <src>` for Python, `npm install` for Node.js) from the directory containing the project's package descriptor
