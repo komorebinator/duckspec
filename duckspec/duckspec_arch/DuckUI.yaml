@@ -1,4 +1,4 @@
-name: DuckspecUI
+name: DuckUI
 description: User interface terms for the @Duckspec framework.
 extends: @DuckspecProject
 startup:

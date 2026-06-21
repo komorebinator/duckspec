@@ -1,9 +1,9 @@
-name: DuckspecArchitecture
+name: DuckArch
 description: Architecture description terms for the @Duckspec framework.
 extends: @DuckspecProject
 startup:
   - load
 projects:
-  - duckspec_arch/DuckspecUI.yaml
+  - duckspec_arch/DuckUI.yaml
 settings:
   terms_folder: duckspec_arch
