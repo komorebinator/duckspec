@@ -1,0 +1,8 @@
+name: Database
+description: A persistent data store with a defined schema. Stores and retrieves records, documents, or key-value pairs in response to queries.
+extends: @DesignPattern
+properties:
+  - name: engine
+    description: the database engine (e.g. PostgreSQL, MySQL, SQLite, MongoDB, Redis)
+  - name: schema
+    description: reference to the @Schema that defines the structure of stored data

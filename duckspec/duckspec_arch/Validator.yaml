@@ -1,0 +1,6 @@
+name: Validator
+description: A component that checks data against a set of rules and reports violations. Context-agnostic — the same @Validator can be used in a @Form, a @Server endpoint, a @Middleware, or anywhere else data needs to be checked.
+extends: @DesignPattern
+contains:
+  - name: rules
+    description: list of validation rules; each rule has a name, the condition it checks, and the error message returned when the condition is violated

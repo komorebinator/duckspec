@@ -1,0 +1,8 @@
+name: Worker
+description: An asynchronous component that executes a task in the background, separate from the main execution flow. Triggered by a @Queue, a timer, or a direct call.
+extends: @DesignPattern
+properties:
+  - name: trigger
+    description: what starts this worker — a @Queue message, a timer, an event, or a direct invocation
+  - name: concurrency
+    description: how many instances of this worker may run in parallel; omit if always single-instance

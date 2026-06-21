@@ -1,0 +1,9 @@
+name: WebSocket
+description: A persistent bidirectional connection between client and server that allows either side to send messages at any time without a new request.
+extends: @DesignPattern
+properties:
+  - name: protocol
+    description: application-level protocol over the WebSocket connection (e.g. JSON-RPC, Socket.IO, raw JSON, binary frames)
+contains:
+  - name: messages
+    description: list of message types exchanged; each message has a direction (client→server or server→client), a name, and a payload schema

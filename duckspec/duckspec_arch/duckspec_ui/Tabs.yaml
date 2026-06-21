@@ -1,0 +1,6 @@
+name: Tabs
+description: A navigation container that switches between named @Page children via a visible tab bar. Each tab has a label and optionally an icon.
+extends: @View
+contains:
+  - name: tabs
+    description: list of tabs; each tab has a label, an optional icon, and a @Page it reveals when selected

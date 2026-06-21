@@ -1,0 +1,11 @@
+name: Queue
+description: A data structure or service that holds items to be processed in order. Items are enqueued by producers and dequeued by consumers.
+extends: @DesignPattern
+properties:
+  - name: ordering
+    description: processing order — FIFO (default), LIFO, or priority-based
+  - name: persistence
+    description: whether the queue survives restarts — in-memory or persistent
+contains:
+  - name: consumers
+    description: list of @Worker or @Software components that dequeue and process items from this queue

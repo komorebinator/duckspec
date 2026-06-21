@@ -1,0 +1,10 @@
+name: Scheduler
+description: A component that triggers tasks at specific times or intervals, independently of external events or incoming requests.
+extends: @DesignPattern
+properties:
+  - name: schedule
+    description: when this scheduler fires — a cron expression (e.g. "0 10 * * *"), an interval (e.g. every 5 minutes), or a one-off datetime
+  - name: timezone
+    description: timezone used to interpret the schedule; omit if UTC
+  - name: task
+    description: the @Worker, @Function, or @ShellScript this scheduler invokes on each trigger

@@ -1,0 +1,11 @@
+name: Template
+description: A text document with named placeholders that is rendered by substituting values at runtime. Used for emails, HTML pages, configuration files, notifications, installer scripts, and any generated text output.
+extends: @DesignPattern
+properties:
+  - name: engine
+    description: template engine or syntax (e.g. Jinja2, Handlebars, Go templates, Mustache, lorax, ERB)
+  - name: output_format
+    description: format of the rendered output (e.g. HTML, plain text, YAML, shell script)
+contains:
+  - name: variables
+    description: list of named placeholders the template expects; each variable has a name and a description of the value it receives

@@ -1,0 +1,10 @@
+name: Webhook
+description: An HTTP callback sent to a registered URL when an event occurs. The sender POSTs an event payload to the receiver's endpoint — no polling required.
+extends: @DesignPattern
+properties:
+  - name: trigger_event
+    description: the event that causes this webhook to fire (e.g. push, payment.completed, image.built)
+  - name: payload_schema
+    description: reference to the @Schema describing the request body sent to the receiver
+  - name: delivery
+    description: delivery guarantees and retry behavior (e.g. at-least-once with exponential backoff, signed with HMAC-SHA256)

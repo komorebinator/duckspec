@@ -11,14 +11,14 @@ startup:
 uses:
   - duckspec/DuckArch.yaml
   - ducktools/DuckTools.yaml
-version: 0.4.0
+version: 0.5.0
 repository: https://github.com/komorebinator/duckspec
 settings:
   terms_folder: duckspec
   readme: README.md
 
 ai_instructions:
-  - Never commit without asking the user first.
+  - Never commit, push, or invoke the release recipe unless the user explicitly requests it. Completing a task does not imply permission to release or push.
   - Never save information to external memory. Instead, suggest changes to the @DuckspecProject configuration or term files.
   - This is the core @Duckspec framework term set. When working with any @DuckspecProject that uses @Duckspec, load this project before any other work.
 guidelines:
@@ -29,6 +29,8 @@ guidelines:
   - Commit messages must be short and free of unnecessary detail.
   - All `Invoke @TermName#recipe_name()` references must resolve to an existing @Recipe defined on that @Term or inherited by it.
   - Sub-project @Term names must follow the pattern `Duck` + what it does (e.g. `DuckArch`, `DuckUI`); the word "spec" must not appear in sub-project names.
+  - A new @Term belongs in the @Duckspec framework (global) if and only if all three hold — (1) the concept exists in standard CS/software engineering vocabulary without platform qualification and can be explained without mentioning any specific technology; (2) it would be useful in projects written in different languages and built on different stacks; (3) its name and definition are immediately understandable to a developer unfamiliar with this project's tech stack. If any of these fails, the term belongs in the project's own terms_folder.
+  - A gap requiring a new @Term exists when the closest available @DesignPattern would lose significant architectural information — using it feels like a stretch that hides the real concept rather than describing it.
 recipes:
   - name: release
     description: Releases a new version of the @Duckspec framework
@@ -88,7 +90,8 @@ recipes:
       - Ask the user for `project` if not provided; infer `src` as the repository root if not provided and confirm with the user
       - Invoke @DuckTools#run(command=load --all, project_path=<project>) and read the full output — this loads the complete term map including @ShellScript, @Extension, @UserInterface, @View, and all @UserInterfaceElement sub-types (@Button, @Toggle, @Input, @Label, @ProgressBar, @Spinner, @Image, etc.)
       - Scan all files in `src` recursively; skip subfolders that contain a @DuckspecProject installation (Duckspec.yaml present); assign each file to exactly one of four categories — (a) code: executable logic, maps to a @DesignPattern; (b) config: declarative configuration or data file (JSON, YAML, TOML, INI, .desktop, systemd unit, GSchema override, polkit rule, etc.), maps to a @ConfigFile; (c) asset: images, icons, fonts, compiled binaries — path and purpose only; (d) meta: .gitignore, LICENSE, lockfiles, README already in settings.readme — record existence, skip
-      - Classify each category (a) file using the most specific available @DesignPattern — @ShellScript for bash/sh/zsh scripts; @Application for program entry points; @View for windows, screens, dialogs, and modal overlays; @Page for named pages within a stack or tab view; @UserInterface for a module that owns and composes multiple @View instances; @Extension for plugins and add-ons; @Pipeline for CI/CD workflows triggered by events (push, cron, webhook); @ContainerImage for Dockerfiles or Containerfiles; @Singleton for shared service or utility modules; @Server for daemons; @Script for other scripting files; if no existing pattern fits, introduce a new @Term file in the project's `settings.terms_folder` to define the missing pattern and use it
+      - Classify each category (a) file using the most specific available @DesignPattern — @ShellScript for bash/sh/zsh scripts; @Application for program entry points; @View for windows, screens, dialogs, and modal overlays; @Page for named pages within a stack or tab view; @UserInterface for a module that owns and composes multiple @View instances; @Extension for plugins and add-ons; @Pipeline for CI/CD workflows triggered by events (push, cron, webhook); @ContainerImage for Dockerfiles or Containerfiles; @Singleton for shared service or utility modules; @Server for daemons; @Script for other scripting files; while classifying, note every file where the closest available pattern is a stretch — where using it would hide the real concept rather than describe it
+      - For each noted gap, draft a proposed @Term (name, description, extends, properties, contains) and classify its scope using the framework guidelines: global (@Duckspec framework) if the concept is standard CS vocabulary, stack-agnostic, and universally understandable; project-local otherwise; then present all proposed terms as a multi-select checklist — each item shows the term name, a one-line description, and the proposed scope (global → PR to duckspec / local → project terms_folder) — and ask the user to select which terms to create; skip unselected terms entirely; for selected global terms: write the term files and create a pull request to the duckspec repository via `gh pr create --repo komorebinator/duckspec` with a description explaining what each term represents and why it belongs in the framework; for selected local terms: write the term files to the appropriate sub-project `settings.terms_folder`
       - Identify external platforms or applications that project files extend (e.g. GNOME Shell, systemd, a browser); define each as a named @Application term so that @Extension terms can reference it via `target:`
       - Group files into sub-projects by domain — all files that extend or configure the same external platform form one @DuckspecProject sub-project (e.g. all systemd units → Systemd sub-project, all GNOME extensions and config → Gnome sub-project); self-contained runnable applications with their own entry point also form sub-projects; everything else embeds inline; the root project connects sub-projects only via `uses:` — no `software:` list at the root level
       - Ensure no naming conflicts: the sub-project file name (e.g. Systemd.yaml with `name: Systemd`) must not match any term name inside its `terms_folder`; use more specific names for inner terms (e.g. `SystemdManager.yaml`, `RuntimeScripts.yaml`)
