@@ -11,6 +11,8 @@ startup:
 uses:
   - duckspec/DuckArch.yaml
   - ducktools/DuckTools.yaml
+version: 0.1.0
+repository: https://github.com/komorebinator/duckspec
 settings:
   terms_folder: duckspec
   readme: README.md
@@ -29,11 +31,14 @@ guidelines:
   - All `Invoke @TermName#recipe_name()` references must resolve to an existing @Recipe defined on that @Term or inherited by it.
   - Sub-project @Term names must follow the pattern `Duck` + what it does (e.g. `DuckArch`, `DuckUI`); the word "spec" must not appear in sub-project names.
 recipes:
-  - name: is_user_repo
-    description: Returns true if the current project is a user's @DuckspecProject, false if it is the @Duckspec framework repository itself
+  - name: release
+    description: Releases a new version of the @Duckspec framework
+    arguments:
+      - name: bump
+        description: version component to bump; see @DuckspecProject#release
     instructions:
-      - Read the README (or other description file) to find the link to the @DuckspecProject term file
-      - If the link points to `Duckspec.yaml`, return false; otherwise return true
+      - Check that the URL of the current git repository matches `repository`; if not, abort — releases must be run from the official @Duckspec repository
+      - Invoke @DuckspecProject#release(bump=<bump>)
   - name: install
     description: Installs @Duckspec into a @Project
     arguments:

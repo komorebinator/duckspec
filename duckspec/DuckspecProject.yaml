@@ -8,6 +8,11 @@ guidelines:
 ai_instructions:
   - When first opening an @DuckspecProject, invoke all recipes listed in `startup` before doing anything else.
   - For any @Term not covered after loading, read its file individually on demand.
+properties:
+  - name: version
+    description: current release version in semver format (e.g. 0.1.0)
+  - name: repository
+    description: URL of the project's source repository
 contains:
   - name: settings
     description: @DuckspecProject configuration; see @DuckspecProjectSettings
@@ -68,3 +73,13 @@ recipes:
       - Read `settings.readme` from @DuckspecProjectSettings; if it is not set, ask the user whether to set an existing path or Invoke @DuckspecProject#create_readme()
       - If the file at `settings.readme` does not exist, Invoke @DuckspecProject#create_readme()
       - If the file exists, apply only the necessary edits to bring its name, description, and goals in sync with the @DuckspecProject definition; leave all other content untouched
+  - name: release
+    description: Validates the project, bumps the version, and commits the release
+    arguments:
+      - name: bump
+        description: version component to bump; patch (default), minor, or major
+    instructions:
+      - Ask the user for `bump` if not provided; check git log since the last version tag for new .yaml files added to `settings.terms_folder` — if any exist, suggest minor; otherwise suggest patch; offer major only if the user explicitly requests it
+      - Invoke @DuckspecProject#validate()
+      - Increment the `version` field in this @DuckspecProject file according to `bump` using semver rules
+      - Commit all changes with the message `<name> v<new_version>`
