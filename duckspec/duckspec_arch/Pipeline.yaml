@@ -1,0 +1,13 @@
+name: Pipeline
+description: A declarative automation workflow triggered by external events (push, schedule, webhook) rather than called directly. Defines jobs that may run in parallel or sequence, optionally with a matrix of parameter variants.
+extends: @DesignPattern
+properties:
+  - name: platform
+    description: CI/CD platform this pipeline runs on (e.g. GitHub Actions, GitLab CI, Jenkins)
+contains:
+  - name: triggers
+    description: list of events that start this pipeline (e.g. push to branch, cron schedule, workflow_dispatch, workflow_run)
+  - name: jobs
+    description: list of named jobs; each job has steps, optional needs (dependencies on other jobs), and optional matrix (parallel variants with different parameter sets)
+  - name: outputs
+    description: artifacts or side effects produced when the pipeline succeeds (e.g. pushed container images, uploaded files, deployed services)

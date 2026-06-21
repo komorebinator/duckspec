@@ -1,0 +1,6 @@
+name: Page
+description: A named screen or content area within a multi-page @View, shown or hidden based on application state. Typically one of several children in a stack, tab bar, or navigation controller.
+extends: @View
+properties:
+  - name: visible_when
+    description: condition or application state that causes this page to be shown (e.g. "while loading", "on error", "when mode === 'installing'")

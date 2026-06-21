@@ -1,0 +1,13 @@
+name: ContainerImage
+description: A container image definition built from a Dockerfile or Containerfile, potentially with multiple named stages that layer on top of each other.
+extends: @Software
+properties:
+  - name: registry
+    description: container registry where the image is pushed (e.g. ghcr.io/komorebinator)
+  - name: tags
+    description: list of tags applied to the pushed image (e.g. latest, stable, DD.MM.YYYY)
+contains:
+  - name: stages
+    description: ordered list of build stages; each stage has a name, a base image it builds FROM, and the components it installs or configures
+  - name: build_args
+    description: build-time ARG values that parameterize the build (e.g. FEDORA_MAJOR_VERSION, IMAGE_NAME)

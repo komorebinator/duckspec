@@ -1,0 +1,10 @@
+name: ConfigFile
+description: A declarative configuration or data file read by software at runtime or build time. Contains no executable logic — only structured data, settings, or rules.
+extends: @DesignPattern
+properties:
+  - name: format
+    description: file format (e.g. JSON, YAML, TOML, INI, XML)
+  - name: path
+    description: where this file is installed or read from at runtime
+  - name: scope
+    description: who reads this file and when (e.g. system, user, build tool, runtime)
