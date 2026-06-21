@@ -24,7 +24,7 @@ recipes:
   - name: load
     description: Loads all @Term definitions for this @DuckspecProject into context; follows `uses` entries recursively and all @TermName references in any loaded file
     instructions:
-      - Invoke @DuckTools#run(command=load, project_path=<path to this @DuckspecProject file>) and read the full output into context
+      - Invoke @DuckTools#run(command=load, project_path=<path to this @DuckspecProject file>); if the output was truncated and saved to a file, read that file completely before proceeding — do not rely on the truncated preview
   - name: validate
     description: Validates all loaded @Term files against the @DuckspecProject guidelines and runs software tests
     instructions:
