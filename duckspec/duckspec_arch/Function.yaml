@@ -12,4 +12,4 @@ properties:
     description: list of arguments the @Function accepts; each argument has a name and a description
   - name: signal
     required: false
-    description: signal this function connects to; use name#signal_name for a local component or @TermName#signal_name for an external one; if set, the function is automatically called when the signal fires
+    description: "@Signal this @Function connects to; use name#signal_name for a local @SoftwareComponent or @TermName#signal_name for an external one; if set, the @Function is automatically called when the @Signal fires"
