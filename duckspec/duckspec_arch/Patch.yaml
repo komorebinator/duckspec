@@ -1,7 +1,6 @@
 name: Patch
-description: A diff file applied to another file using the patch command to modify its contents at build time. Typically produced by diff -u.
+description: A diff file applied to a component's source at build time to modify its default settings or behavior. Typically produced by diff -u.
 extends: @ConfigFile
 properties:
   - name: target
-    required: true
-    description: path to the file this patch modifies, relative to the directory where patch is applied
+    description: the @Term or component this patch applies to; use @TermName or component#element path syntax (e.g. @MyTerm or #my-component); implicit when @Patch is nested inside a component's patches block

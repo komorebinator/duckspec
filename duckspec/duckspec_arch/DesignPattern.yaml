@@ -10,3 +10,5 @@ contains:
     description: list of @Signal the component emits
   - name: components
     description: list of nested @SoftwareComponent instances owned by this component
+  - name: patches
+    description: list of @Patch instances that modify this component's source files at build time; when a @Patch is nested here, its target is implicit
