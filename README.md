@@ -1,4 +1,6 @@
-# 🦆 duckspec
+# duckspec
+
+<img src="logo.png" alt="duckspec" width="320"/>
 
 A spec-driven development framework for building complex projects with AI.
 
