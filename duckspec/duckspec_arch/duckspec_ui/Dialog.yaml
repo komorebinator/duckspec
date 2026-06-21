@@ -1,0 +1,6 @@
+name: Dialog
+description: A modal overlay that interrupts the user flow to request an explicit response. Blocks interaction with the rest of the UI until dismissed.
+extends: @View
+properties:
+  - name: responses
+    description: the possible responses the user can give (e.g. confirm/cancel, ok, custom labels) and the action triggered by each

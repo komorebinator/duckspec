@@ -1,0 +1,6 @@
+name: Toast
+description: A brief, non-modal notification that appears temporarily and dismisses automatically without requiring user interaction.
+extends: @UserInterfaceElement
+properties:
+  - name: timeout
+    description: how long the toast is visible before auto-dismissing (e.g. 3 seconds); omit if it persists until manually dismissed

@@ -1,0 +1,8 @@
+name: TranslationFile
+description: A locale resource file that maps translation keys to localized strings for a specific language.
+extends: @ConfigFile
+properties:
+  - name: locale
+    description: the language/locale this file covers (e.g. en, ru, uk, zh-CN)
+  - name: fallback_locale
+    description: the locale to fall back to when a key is missing; typically en
