@@ -7,3 +7,5 @@ properties:
     description: relative path to the folder where @Term files for this @DuckspecProject are stored; relative to the @DuckspecProject term file's location
   - name: readme
     description: path to the root description file of the @Project (e.g. README.md); relative to the @DuckspecProject term file's location
+  - name: src
+    description: path to the source root of the project; relative to the @DuckspecProject term file's location; defaults to `..` (the repository root)

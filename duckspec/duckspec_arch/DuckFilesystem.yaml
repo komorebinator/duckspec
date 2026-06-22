@@ -4,6 +4,6 @@ extends: @DuckspecProject
 startup:
   - load
 uses:
-  - ../../DuckArch.yaml
+  - ../DuckArch.yaml
 settings:
   terms_folder: duckspec_filesystem

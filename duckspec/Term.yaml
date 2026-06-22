@@ -23,3 +23,5 @@ contains:
     description: list of @Guideline the @Term defines for content and artifact quality
   - name: ai_instructions
     description: list of behavioral directives for the model when working with this @Term
+  - name: lists
+    description: named lookup tables available to this @Term's recipes; each list has a name and items, where each item has a name and a description; referenced by name in recipe instructions

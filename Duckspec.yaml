@@ -11,14 +11,14 @@ startup:
 uses:
   - duckspec/DuckArch.yaml
   - ducktools/DuckTools.yaml
-version: 0.7.0
+version: 0.8.0
 repository: https://github.com/komorebinator/duckspec
 settings:
   terms_folder: duckspec
   readme: README.md
 
 ai_instructions:
-  - Never commit, push, or invoke the release recipe unless the user explicitly requests it with an imperative statement ("commit", "push", "release"). Completing a task, permissive phrasing ("we can push", "it's fine to commit"), or confirmation that changes look good do NOT count as a request.
+  - Never commit directly. When the user requests a commit or release with an imperative statement ("commit", "push", "release"), always invoke @DuckspecProject#release() instead of committing manually. Completing a task, permissive phrasing ("we can push", "it's fine to commit"), or confirmation that changes look good do NOT count as a request.
   - Never manually edit the `version` field in any @DuckspecProject file. Version changes must always go through the @DuckspecProject#release recipe, which handles validation and the correct bump calculation.
   - Never save information to external memory. Instead, suggest changes to the @DuckspecProject configuration or term files.
   - This is the core @Duckspec framework term set. When working with any @DuckspecProject that uses @Duckspec, load this project before any other work.
@@ -32,6 +32,47 @@ guidelines:
   - Sub-project @Term names must follow the pattern `Duck` + what it does (e.g. `DuckArch`, `DuckUI`); the word "spec" must not appear in sub-project names.
   - A new @Term belongs in the @Duckspec framework (global) if and only if all three hold — (1) the concept exists in standard CS/software engineering vocabulary without platform qualification and can be explained without mentioning any specific technology; (2) it would be useful in projects written in different languages and built on different stacks; (3) its name and definition are immediately understandable to a developer unfamiliar with this project's tech stack. If any of these fails, the term belongs in the project's own terms_folder.
   - A gap requiring a new @Term exists when the closest available @DesignPattern would lose significant architectural information — using it feels like a stretch that hides the real concept rather than describing it.
+lists:
+  - name: installation-methods
+    items:
+      - name: submodule
+        description: run `git submodule add git@github.com:komorebinator/duckspec.git duckspec` in the target project root
+      - name: copy
+        description: ask the user for the path to the @Duckspec source (a local clone or download); copy the entire source directory into `duckspec/` in the target project root, overwriting any existing files
+  - name: file-categories
+    items:
+      - name: code
+        description: executable logic; maps to a @DesignPattern
+      - name: config
+        description: declarative configuration or data file (JSON, YAML, TOML, INI, .desktop, systemd unit, GSchema override, polkit rule, etc.); maps to @ConfigFile
+      - name: asset
+        description: images, icons, fonts, compiled binaries — record path and purpose only
+      - name: meta
+        description: .gitignore, LICENSE, lockfiles, README already in settings.readme — record existence, skip
+  - name: code-patterns
+    items:
+      - name: ShellScript
+        description: bash/sh/zsh scripts
+      - name: Application
+        description: program entry points
+      - name: View
+        description: windows, screens, dialogs, and modal overlays
+      - name: Page
+        description: named pages within a stack or tab view
+      - name: UserInterface
+        description: a module that owns and composes multiple @View instances
+      - name: Extension
+        description: plugins and add-ons
+      - name: Pipeline
+        description: CI/CD workflows triggered by events (push, cron, webhook)
+      - name: ContainerImage
+        description: Dockerfiles or Containerfiles
+      - name: Singleton
+        description: shared service or utility modules
+      - name: Server
+        description: daemons
+      - name: Script
+        description: other scripting files
 recipes:
   - name: release
     description: Releases a new version of the @Duckspec framework
@@ -45,27 +86,17 @@ recipes:
     description: Installs @Duckspec into a @Project
     arguments:
       - name: method
-        description: installation method; see variants; default is submodule
-    variants:
-      - name: submodule
-        description: run `git submodule add git@github.com:komorebinator/duckspec.git duckspec` in the target project root
-      - name: copy
-        description: ask the user for the path to the @Duckspec source (a local clone or download); copy the entire source directory into `duckspec/` in the target project root, overwriting any existing files
+        description: installation method; from installation-methods list; default is submodule
     instructions:
-      - Ask the user for `method` if not provided; suggest submodule as default; execute the chosen variant
+      - Ask the user for `method` if not provided; suggest submodule as default; execute the chosen method from installation-methods
       - The framework is now installed at `duckspec/`; the main term file is at `duckspec/Duckspec.yaml`; from this point on read all files from local paths only — do not fetch anything from the internet
       - Scan the root directory for a description file (e.g. README.md); if it exists and already contains a link to an @DuckspecProject term file, stop — the @DuckspecProject is already set up; otherwise Invoke @Duckspec#create_project()
       - Invoke @DuckTools#install(project_path=<path to the @DuckspecProject file created in the previous step>)
   - name: update
     description: Updates @Duckspec to the latest version in a @Project where it is already installed
-    variants:
-      - name: submodule
-        description: run `git submodule update --remote duckspec` in the project root
-      - name: copy
-        description: ask the user for the path to the updated @Duckspec source; copy the entire source directory into `duckspec/`, overwriting existing files
     instructions:
-      - Check whether `duckspec/` is a git submodule by inspecting `.gitmodules`; if found, use the submodule variant; otherwise use the copy variant
-      - Execute the chosen variant
+      - Check whether `duckspec/` is a git submodule by inspecting `.gitmodules`; if found, use the submodule method from installation-methods; otherwise use the copy method
+      - Execute the chosen method
       - Invoke @DuckspecProject#validate()
   - name: create_project
     description: Creates a minimal @DuckspecProject term file, then optionally imports term definitions from the project source
@@ -79,33 +110,4 @@ recipes:
       - Create the terms folder on disk at the path set in `settings.terms_folder`
       - Invoke @DuckspecProject#update_readme()
       - Invoke @DuckTools#run(command=load --all, project_path=<path to the created @DuckspecProject file>) and read the full output into context
-      - Ask the user whether to import term definitions from the project source; if yes, Invoke @Duckspec#import_project(project=<path to the created @DuckspecProject file>)
-  - name: import_project
-    description: Analyzes source files and generates @Term definitions detailed enough that running `build` on the result would recreate the project faithfully. Idempotent — can be run multiple times to refine or update existing terms.
-    arguments:
-      - name: project
-        description: path to the @DuckspecProject term file
-      - name: src
-        description: root folder of the source to import; defaults to the repository root (inferred from project path)
-    instructions:
-      - Ask the user for `project` if not provided; infer `src` as the repository root if not provided and confirm with the user
-      - Invoke @DuckTools#run(command=load --all, project_path=<project>) and read the full output — this loads the complete term map including @ShellScript, @Extension, @UserInterface, @View, and all @UserInterfaceElement sub-types (@Button, @Toggle, @Input, @Label, @ProgressBar, @Spinner, @Image, etc.)
-      - Scan all files in `src` recursively; skip subfolders that contain a @DuckspecProject installation (Duckspec.yaml present); assign each file to exactly one of four categories — (a) code: executable logic, maps to a @DesignPattern; (b) config: declarative configuration or data file (JSON, YAML, TOML, INI, .desktop, systemd unit, GSchema override, polkit rule, etc.), maps to a @ConfigFile; (c) asset: images, icons, fonts, compiled binaries — path and purpose only; (d) meta: .gitignore, LICENSE, lockfiles, README already in settings.readme — record existence, skip
-      - Classify each category (a) file using the most specific available @DesignPattern — @ShellScript for bash/sh/zsh scripts; @Application for program entry points; @View for windows, screens, dialogs, and modal overlays; @Page for named pages within a stack or tab view; @UserInterface for a module that owns and composes multiple @View instances; @Extension for plugins and add-ons; @Pipeline for CI/CD workflows triggered by events (push, cron, webhook); @ContainerImage for Dockerfiles or Containerfiles; @Singleton for shared service or utility modules; @Server for daemons; @Script for other scripting files; while classifying, note every file where the closest available pattern is a stretch — where using it would hide the real concept rather than describe it
-      - For each noted gap, draft a proposed @Term (name, description, extends, properties, contains) and classify its scope using the framework guidelines: global (@Duckspec framework) if the concept is standard CS vocabulary, stack-agnostic, and universally understandable; project-local otherwise; then present all proposed terms as a multi-select checklist — each item shows the term name, a one-line description, and the proposed scope (global → PR to duckspec / local → project terms_folder) — and ask the user to select which terms to create; skip unselected terms entirely; for selected global terms: write the term files and create a pull request to the duckspec repository via `gh pr create --repo komorebinator/duckspec` with a description explaining what each term represents and why it belongs in the framework; for selected local terms: write the term files to the appropriate sub-project `settings.terms_folder`
-      - Identify external platforms or applications that project files extend (e.g. GNOME Shell, systemd, a browser); define each as a named @Application term so that @Extension terms can reference it via `target:`
-      - Group files into sub-projects by domain — all files that extend or configure the same external platform form one @DuckspecProject sub-project (e.g. all systemd units → Systemd sub-project, all GNOME extensions and config → Gnome sub-project); self-contained runnable applications with their own entry point also form sub-projects; everything else embeds inline; the root project connects sub-projects only via `uses:` — no `software:` list at the root level
-      - Ensure no naming conflicts: the sub-project file name (e.g. Systemd.yaml with `name: Systemd`) must not match any term name inside its `terms_folder`; use more specific names for inner terms (e.g. `SystemdManager.yaml`, `RuntimeScripts.yaml`)
-      - Produce a proposed term tree — a structured outline listing every planned @Term file, its type, the source files it covers, and which sub-project it belongs to — and present it to the user for approval or adjustment before writing any files
-      - For each @View term — (1) document the visual structure as components enumerating every @UserInterfaceElement (@Button, @Toggle, @Input, @Label, @ProgressBar, @Spinner, @Page, etc.) with its label, role, and enabled/visible conditions; (2) document page or state transitions; (3) add @Function entries only for event handlers and non-trivial logic, not for widget construction
-      - For each @ShellScript or @Script term write a single run function whose description covers every major step, conditional branch, environment variable dependency, external command invoked, and expected side effect on the system
-      - For each @Pipeline term document its triggers, jobs, matrix variants, and outputs
-      - For each @ContainerImage term document its stages, build args, and what each stage installs or configures
-      - For each category (b) config file create a named @ConfigFile term (or a named component of the most closely related @Software) with a configure function describing the file's purpose and the meaning of its key fields
-      - For each @Function in code components write a description covering the algorithm, data flow, edge cases, and expected output in enough detail that a developer could reimplement the function without reading the source
-      - Write all term files to the appropriate terms folders; for existing term files update them in place — preserve any manually written content not contradicted by the source
-      - Verify coverage — for every file in categories (a), (b), and (c) confirm it has a dedicated named entry (a @SoftwareComponent, a @View, a @Singleton, or a named @UserInterfaceElement); a file is NOT covered if it appears only inside another component's description text; list all remaining gaps
-      - Output a coverage report as a markdown table in the conversation: total files scanned, covered files (path → term name), skipped files (path → reason), and any remaining gaps
-      - Review type precision: for every existing @SoftwareComponent in the covered terms, check whether a more specific @DesignPattern is now available in the term map that better describes the component than its current type (e.g. a component typed as @ConfigFile that matches a newly added @SystemdUnit or @Patch); propose re-typing and ask the user to confirm before changing
-      - Verify fidelity: for the most complex functions and components, mentally simulate what `build` would produce from the description alone; if the result would differ from the source in any meaningful way, add the missing detail
-      - Invoke @DuckspecProject#validate()
+      - Ask the user whether to assess coverage of the project source; if yes, Invoke @DuckspecProject#assess_coverage()

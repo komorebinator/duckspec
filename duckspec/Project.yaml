@@ -1,11 +1,13 @@
 name: Project
 description: Base term for project definitions.
+guidelines:
+  - Entries in `software:` must be @TermName references only (e.g. `- @ImageManager`). Never use `extends:` in a `software:` list entry. Every software piece must be defined as its own named @Term.
 contains:
   - name: goals
     description: list of @Goal the @Project pursues
   - name: guidelines
     description: list of @Guideline the @Project defines
   - name: software
-    description: list of @Software the @Project contains
+    description: list of @Software terms the @Project contains; each entry must be a @TermName reference (e.g. `- @ImageManager`); inline definitions are not allowed — every software piece must be defined as its own term
   - name: uses
     description: list of @Project this @Project uses or depends on

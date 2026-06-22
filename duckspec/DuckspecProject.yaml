@@ -26,12 +26,23 @@ recipes:
     instructions:
       - Invoke @DuckTools#run(command=load, project_path=<path to this @DuckspecProject file>); if the output was truncated and saved to a file, read that file completely before proceeding — do not rely on the truncated preview
       - Invoke @DuckspecProject#rules()
+  - name: check_guidelines
+    description: Checks a single term file against all guidelines and ai_instructions applicable to it, derived from its full inheritance chain
+    arguments:
+      - name: file_path
+        description: path to the .yaml term file to check
+    instructions:
+      - Identify the term defined in file_path from the already-loaded term data; if not found in context, read the file directly
+      - Build the full inheritance chain by following `extends` recursively through loaded terms until reaching a term with no `extends`
+      - Collect all guidelines and ai_instructions from the term itself and every ancestor in the chain; annotate each rule with its source @Term
+      - For each collected rule: evaluate whether the term's content complies; record each violation with the rule text, source @Term, and a description of the non-compliance
+      - Output a report: file path, term name, inheritance chain, and list of violations (or "no violations" if compliant)
   - name: validate
     description: Validates all loaded @Term files against the @DuckspecProject guidelines and runs software tests
     instructions:
       - Invoke @DuckspecProject#load()
-      - Collect all guidelines and ai_instructions from every loaded @Term
-      - For each loaded term: check that all required @Property fields are present; check that all @TermName references exist in the term map; check that all `Invoke @TermName#recipe_name()` references resolve to an existing @Recipe; check compliance with all collected guidelines and ai_instructions; record any violations
+      - For each term file in the loaded output: check that all required @Property fields are present; check that all @TermName references exist in the term map; check that all `Invoke @TermName#recipe_name()` references resolve to an existing @Recipe; record any structural violations
+      - For each term file in the loaded output: Invoke @DuckspecProject#check_guidelines(file_path=<path>)
       - For each @Software in the project: Invoke @Software#test()
       - Report a summary of all violations and test results; fix where possible, ask the user where the correct resolution is ambiguous
   - name: create_term
@@ -74,6 +85,30 @@ recipes:
       - Read `settings.readme` from @DuckspecProjectSettings; if it is not set, ask the user whether to set an existing path or Invoke @DuckspecProject#create_readme()
       - If the file at `settings.readme` does not exist, Invoke @DuckspecProject#create_readme()
       - If the file exists, apply only the necessary edits to bring its name, description, and goals in sync with the @DuckspecProject definition; leave all other content untouched
+  - name: assess_coverage
+    description: Analyzes source files and generates or updates @Term definitions detailed enough that running `build` on the result would recreate the project faithfully. Idempotent — can be run multiple times to refine or update existing terms.
+    instructions:
+      - Invoke @DuckTools#run(command=load --all, project_path=<path to this @DuckspecProject file>); if the output was truncated and saved to a file, read that file completely before proceeding
+      - Read `src` from settings.src; if not set, default to `..` relative to this @DuckspecProject file's location; confirm the resolved path with the user before proceeding
+      - Scan all files in `src` recursively; skip subfolders that contain a @DuckspecProject installation (Duckspec.yaml present); assign each file to exactly one category from file-categories
+      - Classify each code file using the most specific pattern from code-patterns; use the same priority order as the list; note every file where the closest available pattern is a stretch — where using it would hide the real concept rather than describe it
+      - For each noted gap, draft a proposed @Term (name, description, extends, properties, contains) and classify its scope using the framework guidelines: global (@Duckspec framework) if the concept is standard CS vocabulary, stack-agnostic, and universally understandable; project-local otherwise; then present all proposed terms as a multi-select checklist — each item shows the term name, a one-line description, and the proposed scope (global → PR to duckspec / local → project terms_folder) — and ask the user to select which terms to create; skip unselected terms entirely; for selected global terms: write the term files and create a pull request to the duckspec repository via `gh pr create --repo komorebinator/duckspec` with a description explaining what each term represents and why it belongs in the framework; for selected local terms: write the term files to the appropriate sub-project `settings.terms_folder`
+      - Identify external platforms or applications that project files extend (e.g. GNOME Shell, systemd, a browser); define each as a named @Application term so that @Extension terms can reference it via `target:`
+      - Group files into sub-projects by domain — all files that extend or configure the same external platform form one @DuckspecProject sub-project (e.g. all systemd units → Systemd sub-project, all GNOME extensions and config → Gnome sub-project); self-contained runnable applications with their own entry point also form sub-projects; everything else embeds inline; the root project connects sub-projects only via `uses:` — no `software:` list at the root level
+      - Ensure no naming conflicts: the sub-project file name (e.g. Systemd.yaml with `name: Systemd`) must not match any term name inside its `terms_folder`; use more specific names for inner terms (e.g. `SystemdManager.yaml`, `RuntimeScripts.yaml`)
+      - For each @Application identified, collect all code files that are used exclusively by that application (not imported or referenced by files belonging to any other application). Propose those files as inline `components:` of the application term rather than as separate top-level terms. A module warrants its own named term only if it is shared across two or more distinct applications; in that case define it as a @Singleton or other appropriate @DesignPattern term and reference it via `@TermName#component-name` path syntax from the application's component descriptions.
+      - Produce a proposed term tree — a structured outline listing every planned @Term file, its type, the source files it covers, and which sub-project it belongs to — and present it to the user for approval or adjustment before writing any files
+      - For each @View term — (1) document the visual structure as components enumerating every @UserInterfaceElement (@Button, @Toggle, @Input, @Label, @ProgressBar, @Spinner, @Page, etc.) with its label, role, and enabled/visible conditions; (2) document page or state transitions; (3) add @Function entries only for event handlers and non-trivial logic, not for widget construction
+      - For each @ShellScript or @Script term write a single run function whose description covers every major step, conditional branch, environment variable dependency, external command invoked, and expected side effect on the system
+      - For each @Pipeline term document its triggers, jobs, matrix variants, and outputs
+      - For each @ContainerImage term document its stages, build args, and what each stage installs or configures
+      - For each config file create a named @ConfigFile term (or a named component of the most closely related @Software) with a configure function describing the file's purpose and the meaning of its key fields
+      - For each @Function in code components write a description covering the algorithm, data flow, edge cases, and expected output in enough detail that a developer could reimplement the function without reading the source
+      - Write all term files to the appropriate terms folders; for existing term files update them in place — preserve any manually written content not contradicted by the source
+      - Verify coverage — for every file in code, config, and asset categories confirm it has a dedicated named entry; a file is NOT covered if it appears only inside another component's description text; list all remaining gaps
+      - Output a coverage report as a markdown table in the conversation: total files scanned, covered files (path → term name), skipped files (path → reason), and any remaining gaps
+      - Review type precision: for every existing @SoftwareComponent in the covered terms, check whether a more specific @DesignPattern is now available in the term map that better describes the component than its current type; propose re-typing and ask the user to confirm before changing
+      - Verify fidelity: for the most complex functions and components, mentally simulate what `build` would produce from the description alone; if the result would differ from the source in any meaningful way, add the missing detail
   - name: release
     description: Validates the project, bumps the version, and commits the release
     arguments:

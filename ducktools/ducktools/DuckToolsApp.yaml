@@ -1,0 +1,71 @@
+name: DuckToolsApp
+description: Python application that implements the DuckTools CLI commands and MCP server for loading and navigating @DuckspecProject files.
+extends: @Application
+platform: Python
+src: src/
+tests:
+  - name: load
+    description: loads all reachable terms and prints them as blocks
+    command: "python3 -m ducktools load Duckspec.yaml"
+    expect: output contains at least one `--- @TermName [` block
+  - name: list
+    description: lists reachable term names and file paths
+    command: "python3 -m ducktools list Duckspec.yaml"
+    expect: output contains at least one `| @TermName |` row
+components:
+  - name: resolver
+    type: @Singleton
+    functions:
+      - name: load_project
+        description: "Builds the reachable set for the given @DuckspecProject file using two rules applied together: (1) all files listed under `uses:` are always included and traversed recursively; (2) any @TermName reference (regex @([A-Z][A-Za-z]+)) found in any already-included file is looked up in the term map and included if found. The term map is built first by scanning all `settings.terms_folder` directories (collected recursively from `uses:`) and adding project files themselves. Repeats until no new files are added. Reads all included files and returns a list of {name, path, content} sorted by name. If include_all is true, returns all terms in the term map instead of only reachable ones."
+        arguments:
+          - name: project_path
+            description: path to a @DuckspecProject .yaml file
+          - name: include_all
+            description: if true, return all terms in the term map regardless of @TermName mentions; default false
+      - name: list_project
+        description: "Same traversal as load_project() but does not read file contents; returns a list of {name, path} for all terms in the reachable set (or the full term map if include_all is true)"
+        arguments:
+          - name: project_path
+            description: path to a @DuckspecProject .yaml file
+          - name: include_all
+            description: if true, return all terms in the term map regardless of @TermName mentions; default false
+  - name: cli
+    type: @Application
+    functions:
+      - name: load
+        description: "Command `ducktools load <project_path> [--all]`; calls resolver#load_project; prints each term as: `--- @TermName [file_path] ---\\n<yaml content>`"
+        arguments:
+          - name: project_path
+            description: path to a @DuckspecProject .yaml file
+          - name: --all
+            description: pass to resolver#load_project as include_all=true
+      - name: list
+        description: "Command `ducktools list <project_path> [--all]`; calls resolver#list_project; prints a markdown table of TermName and file path"
+        arguments:
+          - name: project_path
+            description: path to a @DuckspecProject .yaml file
+          - name: --all
+            description: pass to resolver#list_project as include_all=true
+      - name: serve
+        description: "Command `ducktools serve <project_path>`; starts mcp_server bound to the given project"
+        arguments:
+          - name: project_path
+            description: path to a @DuckspecProject .yaml file
+  - name: mcp_server
+    type: @Server
+    functions:
+      - name: load_project
+        description: "MCP tool `load_project`; calls resolver#load_project; returns formatted term content as a string"
+        arguments:
+          - name: project_path
+            description: path to a @DuckspecProject .yaml file
+          - name: all
+            description: pass to resolver#load_project as include_all=true; default false
+      - name: list_project
+        description: "MCP tool `list_project`; calls resolver#list_project; returns term map as a list of {name, path} objects"
+        arguments:
+          - name: project_path
+            description: path to a @DuckspecProject .yaml file
+          - name: all
+            description: pass to resolver#list_project as include_all=true; default false
