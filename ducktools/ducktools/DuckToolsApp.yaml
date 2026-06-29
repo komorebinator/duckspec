@@ -48,7 +48,7 @@ components:
           - name: --all
             description: pass to resolver#list_project as include_all=true
       - name: serve
-        description: "Command `ducktools serve <project_path>`; starts mcp_server bound to the given project"
+        description: "Command `ducktools serve <project_path>`; starts the MCP server in stdio mode; project_path is accepted by the CLI but currently unused — the server accepts any project_path per MCP request via the tools/call arguments"
         arguments:
           - name: project_path
             description: path to a @DuckspecProject .yaml file
