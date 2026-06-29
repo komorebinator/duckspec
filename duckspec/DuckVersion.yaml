@@ -1,0 +1,9 @@
+name: DuckVersion
+description: Version control workflow terms for @Duckspec — defines how changes are delivered and released across different VCS and review systems.
+extends: @DuckspecProject
+startup:
+  - load
+uses:
+  - ../DuckArch.yaml
+settings:
+  terms_folder: duckversion

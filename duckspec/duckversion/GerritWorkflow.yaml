@@ -1,0 +1,46 @@
+name: GerritWorkflow
+description: Gerrit-based delivery workflow. Changes are submitted as Change Lists via git push to refs/for/<main_branch>. Author commits and pushes for review; reviewer votes and submits via the Gerrit SSH API.
+extends: @DuckWorkflow
+properties:
+  - name: remote
+    description: git remote to push Change Lists to; defaults to `origin`
+    default: origin
+  - name: topic
+    description: optional Gerrit topic appended to the push refspec (e.g. my-feature)
+  - name: squash_on_send
+    description: whether to squash all commits for a task into one before pushing; when true, each logical task becomes exactly one Gerrit change
+    default: false
+recipes:
+  - name: submit
+    description: Author — stages, commits (or amends if a Change-Id trailer is present), and pushes to Gerrit for review
+    instructions:
+      - Resolve main_branch from `workflow.main_branch`; if not set, query `git remote show origin`; fall back to `main`
+      - Resolve remote from `workflow.remote`; default to `origin`
+      - Ensure the commit-msg hook is installed — it stamps Change-Id trailers required by Gerrit
+      - Stage all modified files relevant to this project
+      - If a Change-Id trailer is present in the last commit message, amend the commit with staged changes; otherwise create a new commit with a short descriptive message
+      - Run `git push <remote> HEAD:refs/for/<main_branch>` appending `%topic=<topic>` if topic is set
+  - name: update
+    description: Author — amends the current commit with new changes and pushes a new patchset to the same Gerrit change
+    instructions:
+      - Stage any new changes; amend the commit (`git commit --amend --no-edit`); the Change-Id trailer is preserved, so the push lands as a new patchset on the same change
+      - Run `git push <remote> HEAD:refs/for/<main_branch>`
+  - name: review
+    description: Reviewer — queries open changes and records a vote
+    instructions:
+      - Derive SSH connection details from `git remote get-url <remote>` — extract user, host, and port
+      - List open changes via `ssh -p <port> <user>@<host> gerrit query --format=JSON --current-patch-set "status:open project:<project>"`
+      - Fetch and examine the change diff; post a comment or vote via `ssh … gerrit review <number>,<patchset> --code-review <-2|-1|0|+1|+2> -m "<message>"`
+  - name: merge
+    description: Reviewer — votes Code-Review +2 and submits the change
+    instructions:
+      - Derive SSH connection details from `git remote get-url <remote>`
+      - Run `ssh -p <port> <user>@<host> gerrit review <number>,<patchset> --code-review +2 --submit -m "<message>"`
+  - name: release
+    description: Submits the release Change List to Gerrit; provides the tag command to run after the CL is merged
+    arguments:
+      - name: version
+        description: the new version string (e.g. 1.2.3)
+    instructions:
+      - Invoke @GerritWorkflow#submit()
+      - Inform the user that the version tag must be created after the CL is merged — `git tag <version> && git push <remote> <version>`

@@ -1,0 +1,21 @@
+name: DuckWorkflow
+description: Base term for delivery workflows — defines how changes in a @DuckspecProject are submitted and released. A workflow is @Software that owns the delivery pipeline. Only `submit` and `release` are required; workflows that involve a review step add `update`, `review`, and `merge` as needed.
+extends: @Software
+properties:
+  - name: main_branch
+    description: branch changes are ultimately merged into; inferred from the remote default branch via `git remote show origin` if not set; falls back to `main`
+guidelines:
+  - Every @DuckWorkflow subtype must implement `submit` and `release`.
+  - Workflows with a review step should also implement `update` (re-send after feedback), `review` (reviewer examination and verdict), and `merge` (reviewer approval and integration). Workflows without a review step omit these.
+recipes:
+  - name: submit
+    description: Delivers pending changes to their destination — directly or via a review request, depending on the workflow
+    instructions:
+      - Read the concrete @DuckWorkflow subtype and execute its delivery procedure
+  - name: release
+    description: Tags and publishes a versioned release
+    arguments:
+      - name: version
+        description: the new version string to release (e.g. 1.2.3)
+    instructions:
+      - Read the concrete @DuckWorkflow subtype and execute its release procedure; at minimum, tag the version and deliver it to the destination

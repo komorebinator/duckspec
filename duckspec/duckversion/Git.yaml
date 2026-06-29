@@ -1,0 +1,5 @@
+name: Git
+description: The Git distributed version control system. External dependency — not built by this project.
+extends: @Application
+platform: C (external dependency)
+repository: https://git-scm.com

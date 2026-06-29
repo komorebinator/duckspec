@@ -1,0 +1,27 @@
+name: GitWorkflow
+description: Plain git delivery workflow. Changes are committed and pushed directly to the remote branch with no review step. `review` and `merge` are not applicable — submit is the delivery.
+extends: @DuckWorkflow
+properties:
+  - name: remote
+    description: git remote to push to; defaults to `origin`
+    default: origin
+recipes:
+  - name: submit
+    description: Author — commits pending changes and pushes directly to the remote branch
+    instructions:
+      - Resolve main_branch from `workflow.main_branch`; if not set, query `git remote show origin`; fall back to `main`
+      - Resolve remote from `workflow.remote`; default to `origin`
+      - Stage all modified files relevant to this project and commit with a short descriptive message
+      - Run `git push <remote> HEAD:<main_branch>`
+  - name: update
+    description: Author — pushes additional commits directly to the remote branch
+    instructions:
+      - Stage and commit any new changes; run `git push <remote> HEAD:<main_branch>`
+  - name: release
+    description: Commits, pushes, and tags the release
+    arguments:
+      - name: version
+        description: the new version string (e.g. 1.2.3)
+    instructions:
+      - Invoke @GitWorkflow#submit()
+      - Run `git tag <version> && git push <remote> <version>`

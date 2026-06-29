@@ -1,0 +1,42 @@
+name: GitHubWorkflow
+description: GitHub-based delivery workflow. Changes are submitted as pull requests. Author pushes a branch and opens a PR; reviewer examines and merges via GitHub.
+extends: @DuckWorkflow
+properties:
+  - name: merge_strategy
+    description: how pull requests are merged — merge, squash, or rebase
+    default: squash
+recipes:
+  - name: submit
+    description: Author — commits pending changes, pushes the branch, and opens a pull request (or pushes directly if the user has write access)
+    instructions:
+      - Resolve repo from the project's `repository` field by stripping the protocol and host
+      - Resolve main_branch from `workflow.main_branch`; if not set, query `git remote show origin`; fall back to `main`
+      - Stage all modified files relevant to this project and commit with a short descriptive message
+      - Check push access via `gh repo view <repo> --json viewerPermission -q .viewerPermission`; if WRITE, MAINTAIN, or ADMIN — push directly to main_branch; otherwise push the current branch to origin and run `gh pr create --repo <repo> --base <main_branch>` with a title and body summarising the changes
+  - name: update
+    description: Author — pushes new commits to the existing branch; the open PR updates automatically
+    instructions:
+      - Stage and commit any new changes with a short descriptive message
+      - Push the current branch to origin — the open PR is updated automatically
+  - name: review
+    description: Reviewer — examines the pull request and records a verdict
+    instructions:
+      - Resolve repo from the project's `repository` field
+      - List open PRs targeting main_branch via `gh pr list --repo <repo> --base <main_branch>`
+      - For the PR under review: read the diff (`gh pr diff <number> --repo <repo>`), check CI status (`gh pr checks <number>`), and record a comment or review via `gh pr review <number> --comment -b "<message>"` or `--request-changes -b "<message>"`
+  - name: merge
+    description: Reviewer — approves and merges the pull request
+    instructions:
+      - Resolve repo from the project's `repository` field
+      - Approve via `gh pr review <number> --approve --repo <repo>`
+      - Merge via `gh pr merge <number> --repo <repo> --<merge_strategy>`
+  - name: release
+    description: Publishes a GitHub Release with auto-generated release notes
+    arguments:
+      - name: version
+        description: the new version string (e.g. 1.2.3)
+    instructions:
+      - Resolve repo and main_branch as in @GitHubWorkflow#submit
+      - Invoke @GitHubWorkflow#submit()
+      - Create and push a git tag — `git tag <version> && git push origin <version>`
+      - Run `gh release create <version> --generate-notes --target <main_branch> --repo <repo>`

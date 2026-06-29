@@ -1,0 +1,5 @@
+name: GitHub
+description: GitHub — a hosted Git repository platform with pull requests, Actions CI/CD, and Releases. External dependency — not built by this project.
+extends: @Application
+platform: web (external dependency)
+repository: https://github.com

@@ -21,6 +21,8 @@ contains:
     description: list of @Recipe names to invoke automatically before any other work when first opening the @DuckspecProject
   - name: uses
     description: list of paths to other @DuckspecProject files this project uses; all are loaded unconditionally when this project is loaded
+  - name: workflow
+    description: delivery workflow for this project; `type:` references a @DuckWorkflow subtype (e.g. `@GitHubWorkflow`); all other fields are property overrides — omit any that should be inferred from context
 recipes:
   - name: load
     description: Loads all @Term definitions for this @DuckspecProject into context; follows `uses` entries recursively and all @TermName references in any loaded file
@@ -110,8 +112,14 @@ recipes:
       - Output a coverage report as a markdown table in the conversation: total files scanned, covered files (path → term name), skipped files (path → reason), and any remaining gaps
       - Review type precision: for every existing @SoftwareComponent in the covered terms, check whether a more specific @DesignPattern is now available in the term map that better describes the component than its current type; propose re-typing and ask the user to confirm before changing
       - Verify fidelity: for the most complex functions and components, mentally simulate what `build` would produce from the description alone; if the result would differ from the source in any meaningful way, add the missing detail
+  - name: submit
+    description: Validates the project and runs the author-side delivery step of the configured @DuckWorkflow; other workflow recipes (update, review, merge) can be invoked directly on the workflow type
+    instructions:
+      - Invoke @DuckspecProject#validate()
+      - Read `workflow` from this project; if not set, ask the user to configure it and stop
+      - Invoke @DuckWorkflow#submit() using the workflow type and any configured property overrides
   - name: release
-    description: Validates the project, bumps the version, and commits the release
+    description: Validates the project, bumps the version, and publishes a release using the configured @VCSWorkflow
     arguments:
       - name: bump
         description: version component to bump; patch (default), minor, or major
@@ -119,4 +127,5 @@ recipes:
       - Ask the user for `bump` if not provided; check git log since the last version tag for new .yaml files added to `settings.terms_folder` — if any exist, suggest minor; otherwise suggest patch; offer major only if the user explicitly requests it
       - Invoke @DuckspecProject#validate()
       - Increment the `version` field in this @DuckspecProject file according to `bump` using semver rules
-      - Commit all changes with the message `<name> v<new_version>`
+      - Read `workflow` from this project; if not set, ask the user to configure it and stop
+      - Invoke @DuckWorkflow#release(version=<new_version>) using the workflow type and any configured property overrides

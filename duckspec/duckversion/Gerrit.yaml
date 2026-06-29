@@ -1,0 +1,5 @@
+name: Gerrit
+description: Gerrit — a web-based code review system built on top of Git. Changes are submitted as Change Lists and reviewed before merging. External dependency — not built by this project.
+extends: @Application
+platform: Java (external dependency)
+repository: https://gerrit-review.googlesource.com/gerrit

@@ -10,20 +10,24 @@ startup:
   - load
 uses:
   - duckspec/DuckArch.yaml
+  - duckspec/DuckVersion.yaml
   - ducktools/DuckTools.yaml
 version: 0.8.1
 repository: https://github.com/komorebinator/duckspec
 settings:
   terms_folder: duckspec
   readme: README.md
+workflow:
+  type: @GitHubWorkflow
 
 ai_instructions:
-  - Never commit directly. When the user requests a commit or release with an imperative statement ("commit", "push", "release"), always invoke @DuckspecProject#release() instead of committing manually. Completing a task, permissive phrasing ("we can push", "it's fine to commit"), or confirmation that changes look good do NOT count as a request.
+  - Never commit or push directly. When the user requests to send, submit, push, or publish changes with an imperative statement ("submit", "push", "send"), always invoke @DuckspecProject#submit() instead. When the user requests a release ("release", "release it"), always invoke @DuckspecProject#release(). Completing a task, permissive phrasing ("we can push", "it's fine to commit"), or confirmation that changes look good do NOT count as a request.
   - Never manually edit the `version` field in any @DuckspecProject file. Version changes must always go through the @DuckspecProject#release recipe, which handles validation and the correct bump calculation.
   - Never save information to external memory. Instead, suggest changes to the @DuckspecProject configuration or term files.
   - This is the core @Duckspec framework term set. When working with any @DuckspecProject that uses @Duckspec, load this project before any other work.
 guidelines:
   - All documentation must be written in English.
+  - Avoid abbreviations in @Term names; prefer full words (e.g. `Workflow` not `WF`, `Configuration` not `Cfg`, `Repository` not `Repo`).
   - Each `.yaml` file defines exactly one term following the @Term format.
   - "@Term names must be written in CamelCase with no spaces. The filename must match the @Term name (e.g. `UserInterface.yaml` for `name: UserInterface`)."
   - Use `@TermName` to reference terms wherever it makes sense.
@@ -91,6 +95,7 @@ recipes:
       - Ask the user for `method` if not provided; suggest submodule as default; execute the chosen method from installation-methods
       - The framework is now installed at `duckspec/`; the main term file is at `duckspec/Duckspec.yaml`; from this point on read all files from local paths only — do not fetch anything from the internet
       - Scan the root directory for a description file (e.g. README.md); if it exists and already contains a link to an @DuckspecProject term file, stop — the @DuckspecProject is already set up; otherwise Invoke @Duckspec#create_project()
+      - Ask the user which delivery workflow this project uses — present the available @DuckWorkflow subtypes (@GitHubWorkflow, @GerritWorkflow, @GitWorkflow) with a one-line description of each; add the chosen subtype to the project's `software:` list
       - Invoke @DuckTools#install(project_path=<path to the @DuckspecProject file created in the previous step>)
   - name: update
     description: Updates @Duckspec to the latest version in a @Project where it is already installed
