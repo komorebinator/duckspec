@@ -9,7 +9,7 @@ properties:
     description: CamelCase identifier; must match the filename (e.g. `UserInterface` in `UserInterface.yaml`)
   - name: description
     required: true
-    description: human-readable explanation of what this @Term represents
+    description: top-level overview of what this @Term represents or does; sufficient on its own for simple terms; other slots (properties, functions, components, etc.) add detail
 contains:
   - name: extends
     description: parent @Term to inherit from

@@ -5,6 +5,7 @@ guidelines:
   - All file paths in @DuckspecProject files are relative to the file in which they appear.
   - All entries in `uses` are loaded unconditionally when this project is loaded.
   - A @DuckspecProject may reference another @DuckspecProject in a different directory via `uses` with a relative path (e.g. `../OtherProject.yaml`); circular references are safe — the resolver deduplicates by resolved path.
+  - Place sub-project files inside the parent project's directory, not alongside it (e.g. `Parent/Child.yaml`, not `Child.yaml` next to `Parent.yaml`).
 ai_instructions:
   - When first opening an @DuckspecProject, invoke all recipes listed in `startup` before doing anything else.
   - For any @Term not covered after loading, read its file individually on demand.

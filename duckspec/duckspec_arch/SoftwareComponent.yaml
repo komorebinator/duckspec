@@ -7,6 +7,9 @@ properties:
   - name: type
     required: true
     description: the @DesignPattern this component instantiates (e.g. @Singleton)
+  - name: description
+    required: true
+    description: top-level overview of what this component does or is; sufficient on its own for declarative components (e.g. @ConfigFile, @Patch); other slots (functions, signals, components) add detail for components with non-trivial behavior
 contains:
   - name: functions
     description: list of @Function this component exposes or handles
