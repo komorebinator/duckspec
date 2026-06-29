@@ -1,0 +1,13 @@
+name: VersioningStrategy
+description: Base term for versioning strategies — defines how a project's version string is calculated and incremented. Add a concrete subtype to the project's `versioning:` slot to configure version management. Only `next_version` is required; subtypes may add additional recipes.
+guidelines:
+  - Every @VersioningStrategy subtype must implement `next_version`.
+recipes:
+  - name: next_version
+    description: Calculates and returns the next version string based on this strategy's rules
+    arguments:
+      - name: bump
+        description: hint about the significance of the change; interpretation depends on the strategy (e.g. major/minor/patch for SemVer, ignored for CalVer)
+    instructions:
+      - Read the concrete @VersioningStrategy subtype and calculate the next version string
+      - Return the new version string for the caller to write into the project's `version:` field

@@ -1,0 +1,14 @@
+name: SequentialVersion
+description: Simple incrementing integer versioning (1, 2, 3…). Suitable for projects where the semantic significance of changes is not tracked. Optionally prefixed (e.g. v1, v2).
+extends: @VersioningStrategy
+properties:
+  - name: prefix
+    description: string prepended to the version number (e.g. "v" → v1, v2, v3); defaults to empty string
+    default: ""
+recipes:
+  - name: next_version
+    description: Strips the prefix, parses the integer, increments by one, and re-applies the prefix
+    instructions:
+      - Read the current version from the project's `version:` field; strip `prefix`; parse the remainder as an integer
+      - Increment by 1; prepend `prefix`
+      - Return the new version string

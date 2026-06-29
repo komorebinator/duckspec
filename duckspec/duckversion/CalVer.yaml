@@ -1,0 +1,17 @@
+name: CalVer
+description: Calendar versioning — the version is derived from the current date. Common formats include YYYY.MM.DD, YYYY.MM, YY.MM. Multiple releases on the same date are distinguished by an optional micro increment.
+extends: @VersioningStrategy
+properties:
+  - name: format
+    description: "date format string using: YYYY (4-digit year), YY (2-digit year), MM (month 1–12), DD (day 1–31), 0M (zero-padded month), 0D (zero-padded day); default is YYYY.MM.DD"
+    default: YYYY.MM.DD
+  - name: micro
+    description: whether to append an incrementing suffix when multiple releases occur on the same date (e.g. 2024.06.23.1, 2024.06.23.2); defaults to false
+    default: false
+recipes:
+  - name: next_version
+    description: Formats today's date using the configured format; appends a micro increment if a release already exists for today and micro is true
+    instructions:
+      - Format today's date according to `format`
+      - If `micro` is true, check git tags for an existing release with today's date prefix; if found, append an incrementing suffix (.1, .2, …)
+      - Return the new version string

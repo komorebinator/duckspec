@@ -19,6 +19,8 @@ settings:
   readme: README.md
 workflow:
   type: @GitHubWorkflow
+versioning:
+  type: @SemVer
 
 ai_instructions:
   - Never commit or push directly. When the user requests to send, submit, push, or publish changes with an imperative statement ("submit", "push", "send"), always invoke @DuckspecProject#submit() instead. When the user requests a release ("release", "release it"), always invoke @DuckspecProject#release(). Completing a task, permissive phrasing ("we can push", "it's fine to commit"), or confirmation that changes look good do NOT count as a request.

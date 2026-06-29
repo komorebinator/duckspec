@@ -1,0 +1,14 @@
+name: SemVer
+description: Semantic versioning (major.minor.patch). Patch for bug fixes and small changes; minor for new terms or features; major for breaking changes. The suggested bump is inferred from git log unless overridden.
+extends: @VersioningStrategy
+recipes:
+  - name: next_version
+    description: Increments the appropriate version component and resets lower ones to zero
+    arguments:
+      - name: bump
+        description: patch (default), minor, or major; if not provided, inferred from git log since the last version tag — new .yaml files in `settings.terms_folder` suggest minor, otherwise patch
+    instructions:
+      - Read the current version from the project's `version:` field; parse into major, minor, patch integers
+      - If bump is not provided, check git log since the last version tag for new .yaml files added to `settings.terms_folder`; if any exist, suggest minor; otherwise suggest patch; offer major only if the user explicitly requests it; confirm with the user
+      - Increment the specified component; reset all lower components to zero (e.g. minor bump: minor+1, patch=0)
+      - Return the new version string in major.minor.patch format

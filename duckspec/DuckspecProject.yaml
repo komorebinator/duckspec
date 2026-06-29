@@ -11,7 +11,7 @@ ai_instructions:
   - For any @Term not covered after loading, read its file individually on demand.
 properties:
   - name: version
-    description: current release version in semver format (e.g. 0.1.0)
+    description: current version string; format determined by the project's `versioning` strategy
   - name: repository
     description: URL of the project's source repository
 contains:
@@ -23,6 +23,8 @@ contains:
     description: list of paths to other @DuckspecProject files this project uses; all are loaded unconditionally when this project is loaded
   - name: workflow
     description: delivery workflow for this project; `type:` references a @DuckWorkflow subtype (e.g. `@GitHubWorkflow`); all other fields are property overrides — omit any that should be inferred from context
+  - name: versioning
+    description: versioning strategy for this project; `type:` references a @VersioningStrategy subtype (e.g. `@SemVer`); all other fields are property overrides
 recipes:
   - name: load
     description: Loads all @Term definitions for this @DuckspecProject into context; follows `uses` entries recursively and all @TermName references in any loaded file
@@ -119,13 +121,14 @@ recipes:
       - Read `workflow` from this project; if not set, ask the user to configure it and stop
       - Invoke @DuckWorkflow#submit() using the workflow type and any configured property overrides
   - name: release
-    description: Validates the project, bumps the version, and publishes a release using the configured @VCSWorkflow
+    description: Calculates the next version via the configured @VersioningStrategy, submits all changes, and publishes a release via the configured @DuckWorkflow
     arguments:
       - name: bump
-        description: version component to bump; patch (default), minor, or major
+        description: hint passed to the versioning strategy (e.g. patch/minor/major for @SemVer); interpretation depends on the configured strategy
     instructions:
-      - Ask the user for `bump` if not provided; check git log since the last version tag for new .yaml files added to `settings.terms_folder` — if any exist, suggest minor; otherwise suggest patch; offer major only if the user explicitly requests it
-      - Invoke @DuckspecProject#validate()
-      - Increment the `version` field in this @DuckspecProject file according to `bump` using semver rules
+      - Read `versioning` from this project; if not set, ask the user to configure it and stop
+      - Invoke @VersioningStrategy#next_version(bump=<bump>) to obtain the new version string
+      - Update the `version` field in this @DuckspecProject file to the new version string
+      - Invoke @DuckspecProject#submit()
       - Read `workflow` from this project; if not set, ask the user to configure it and stop
-      - Invoke @DuckWorkflow#release(version=<new_version>) using the workflow type and any configured property overrides
+      - Invoke @DuckWorkflow#release(version=<new_version>)
