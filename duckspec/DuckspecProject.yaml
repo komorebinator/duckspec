@@ -114,6 +114,20 @@ recipes:
       - Output a coverage report as a markdown table in the conversation: total files scanned, covered files (path → term name), skipped files (path → reason), and any remaining gaps
       - Review type precision: for every existing @SoftwareComponent in the covered terms, check whether a more specific @DesignPattern is now available in the term map that better describes the component than its current type; propose re-typing and ask the user to confirm before changing
       - Verify fidelity: for the most complex functions and components, mentally simulate what `build` would produce from the description alone; if the result would differ from the source in any meaningful way, add the missing detail
+  - name: learn
+    description: Captures durable knowledge from the current session into spec files — updates existing descriptions, properties, or function documentation when non-obvious facts were confirmed. Does not create new terms; use assess_coverage for that.
+    instructions:
+      - Review the current session for confirmed, non-obvious, durable facts — behaviors verified against the source, gotchas and their fixes, mechanisms worked out, clarifications to existing descriptions; skip anything one-off, already documented, or derivable from a quick read of the code
+      - For each qualifying fact: identify the exact @Term and field to update; read that term file; apply only the targeted edit — change nothing else
+      - Invoke @DuckspecProject#validate() to verify no violations were introduced
+  - name: verify_source
+    description: Finds contradictions between the spec and the source code — checks that src paths exist, that named functions and components are present in the referenced files, and that descriptions do not contradict the actual implementation
+    instructions:
+      - Invoke @DuckspecProject#load()
+      - For every `src:` field in every loaded term and component — check that the file or directory exists at the specified path relative to the project root; record any missing paths
+      - For every @Function entry with a named function — open the referenced source file and check that a definition matching the function name exists; record any that are absent or clearly renamed
+      - For the most complex @Function descriptions — read the corresponding source and check for direct contradictions (wrong return type, wrong conditionals, steps that don't exist); record contradictions but do not flag style differences or minor omissions
+      - Report all findings grouped by term file: missing paths, absent functions, and description contradictions; suggest the corrective edit for each; fix on user confirmation
   - name: submit
     description: Validates the project and runs the author-side delivery step of the configured @DuckWorkflow; other workflow recipes (update, review, merge) can be invoked directly on the workflow type
     instructions:
