@@ -11,6 +11,7 @@ recipes:
     instructions:
       - Resolve repo from the project's `repository` field by stripping the protocol and host
       - Resolve main_branch from `workflow.main_branch`; if not set, query `git remote show origin`; fall back to `main`
+      - Fetch origin and fast-forward (or merge) the local main_branch to incorporate upstream commits; resolve any conflicts against pending changes before continuing
       - Stage all modified files relevant to this project and commit with a short descriptive message
       - Check push access via `gh repo view <repo> --json viewerPermission -q .viewerPermission`; if WRITE, MAINTAIN, or ADMIN — push directly to main_branch; otherwise push the current branch to origin and run `gh pr create --repo <repo> --base <main_branch>` with a title and body summarising the changes
   - name: update

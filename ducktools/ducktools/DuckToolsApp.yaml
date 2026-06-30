@@ -2,7 +2,7 @@ name: DuckToolsApp
 description: Python application that implements the DuckTools CLI commands and MCP server for loading and navigating @DuckspecProject files.
 extends: @Application
 platform: Python
-src: src/
+src: ../src/
 tests:
   - name: load
     description: loads all reachable terms and prints them as blocks
@@ -16,8 +16,17 @@ components:
   - name: resolver
     type: @Singleton
     functions:
+      - name: _load_workspace
+        description: "Reads `~/.duckspec/workspace.yaml` and returns a dict mapping repository URLs to local @DuckspecProject file paths. Parses with regex (`^\\s+(https?://\\S+):\\s*(\\S+)`). Returns an empty dict if the file does not exist or cannot be read."
+      - name: _resolve_entry
+        description: "Resolves a single `uses:` entry to a local Path. If `sub` starts with `http://` or `https://`, looks it up in the workspace dict; prints a warning and returns None if not found. Otherwise resolves `sub` relative to `base` (the directory of the current file). Returns None if the entry cannot be resolved."
+        arguments:
+          - name: sub
+            description: raw string from the `uses:` list — either a relative path or a repository URL
+          - name: base
+            description: directory of the file containing the `uses:` entry
       - name: load_project
-        description: "Builds the reachable set for the given @DuckspecProject file using two rules applied together: (1) all files listed under `uses:` are always included and traversed recursively; (2) any @TermName reference (regex @([A-Z][A-Za-z]+)) found in any already-included file is looked up in the term map and included if found. The term map is built first by scanning all `settings.terms_folder` directories (collected recursively from `uses:`) and adding project files themselves. Repeats until no new files are added. Reads all included files and returns a list of {name, path, content} sorted by name. If include_all is true, returns all terms in the term map instead of only reachable ones."
+        description: "Builds the reachable set for the given @DuckspecProject file using two rules applied together: (1) all files listed under `uses:` are always included and traversed recursively — each entry is resolved via _resolve_entry (relative path or workspace URL); (2) any @TermName reference (regex @([A-Z][A-Za-z]+)) found in any already-included file is looked up in the term map and included if found. The term map is built first by scanning all `settings.terms_folder` directories (collected recursively from `uses:`) and adding project files themselves. Repeats until no new files are added. Reads all included files and returns a list of {name, path, content} sorted by name. If include_all is true, returns all terms in the term map instead of only reachable ones."
         arguments:
           - name: project_path
             description: path to a @DuckspecProject .yaml file
@@ -30,6 +39,11 @@ components:
             description: path to a @DuckspecProject .yaml file
           - name: include_all
             description: if true, return all terms in the term map regardless of @TermName mentions; default false
+  - name: workspace
+    type: @ConfigFile
+    format: YAML
+    src: ~/.duckspec/workspace.yaml
+    description: "Optional user-local file mapping repository URLs to local @DuckspecProject file paths. Created manually by the developer; gitignored. Format: a `projects` key containing a mapping of `<repository URL>: <absolute path to the @DuckspecProject .yaml file>`. Loaded once at resolver startup; if absent, URL-based `uses:` entries are skipped with a warning."
   - name: cli
     type: @Application
     functions:

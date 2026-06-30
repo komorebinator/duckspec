@@ -6,6 +6,7 @@ guidelines:
   - All entries in `uses` are loaded unconditionally when this project is loaded.
   - A @DuckspecProject may reference another @DuckspecProject in a different directory via `uses` with a relative path (e.g. `../OtherProject.yaml`); circular references are safe — the resolver deduplicates by resolved path.
   - Place sub-project files inside the parent project's directory, not alongside it (e.g. `Parent/Child.yaml`, not `Child.yaml` next to `Parent.yaml`).
+  - A @DuckspecProject may reference an external @DuckspecProject by its `repository` URL (e.g. `https://github.com/user/repo`); the resolver looks up the URL in `~/.duckspec/workspace.yaml` to find the local path. If no workspace entry exists, the entry is skipped with a warning.
 ai_instructions:
   - When first opening an @DuckspecProject, invoke all recipes listed in `startup` before doing anything else.
   - For any @Term not covered after loading, read its file individually on demand.
@@ -20,7 +21,7 @@ contains:
   - name: startup
     description: list of @Recipe names to invoke automatically before any other work when first opening the @DuckspecProject
   - name: uses
-    description: list of paths to other @DuckspecProject files this project uses; all are loaded unconditionally when this project is loaded
+    description: list of paths or repository URLs to other @DuckspecProject files this project uses; entries may be relative paths (e.g. `../OtherProject.yaml`) or repository URLs (e.g. `https://github.com/user/repo`) resolved via `~/.duckspec/workspace.yaml`; all are loaded unconditionally when this project is loaded
   - name: workflow
     description: delivery workflow for this project; `type:` references a @DuckWorkflow subtype (e.g. `@GitHubWorkflow`); all other fields are property overrides — omit any that should be inferred from context
   - name: versioning

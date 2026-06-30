@@ -11,6 +11,7 @@ recipes:
     instructions:
       - Resolve main_branch from `workflow.main_branch`; if not set, query `git remote show origin`; fall back to `main`
       - Resolve remote from `workflow.remote`; default to `origin`
+      - Fetch remote and fast-forward (or merge) the local main_branch to incorporate upstream commits; resolve any conflicts against pending changes before continuing
       - Stage all modified files relevant to this project and commit with a short descriptive message
       - Run `git push <remote> HEAD:<main_branch>`
   - name: update

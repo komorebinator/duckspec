@@ -16,6 +16,7 @@ recipes:
     instructions:
       - Resolve main_branch from `workflow.main_branch`; if not set, query `git remote show origin`; fall back to `main`
       - Resolve remote from `workflow.remote`; default to `origin`
+      - Fetch remote and fast-forward (or merge) the local main_branch to incorporate upstream commits; resolve any conflicts against pending changes before continuing
       - Ensure the commit-msg hook is installed — it stamps Change-Id trailers required by Gerrit
       - Stage all modified files relevant to this project
       - If a Change-Id trailer is present in the last commit message, amend the commit with staged changes; otherwise create a new commit with a short descriptive message

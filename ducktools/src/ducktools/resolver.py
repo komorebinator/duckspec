@@ -5,9 +5,34 @@ _TERM_REF = re.compile(r'@([A-Z][A-Za-z]+)')
 _TERMS_FOLDER = re.compile(r'^\s*terms_folder:\s*(\S+)', re.MULTILINE)
 _USES_BLOCK = re.compile(r'^uses:\n((?:[ \t]+-[ \t]+\S+\n?)+)', re.MULTILINE)
 _LIST_ITEM = re.compile(r'-\s+(\S+)')
+_WORKSPACE_ENTRY = re.compile(r'^\s+(https?://\S+):\s*(\S+)', re.MULTILINE)
+
+_WORKSPACE_PATH = Path.home() / '.duckspec' / 'workspace.yaml'
+
+
+def _load_workspace() -> dict[str, Path]:
+    if not _WORKSPACE_PATH.is_file():
+        return {}
+    try:
+        text = _WORKSPACE_PATH.read_text()
+        return {url: Path(p) for url, p in _WORKSPACE_ENTRY.findall(text)}
+    except Exception:
+        return {}
+
+
+def _resolve_entry(sub: str, base: Path, workspace: dict[str, Path]) -> Path | None:
+    if sub.startswith('https://') or sub.startswith('http://'):
+        path = workspace.get(sub)
+        if path is None:
+            print(f'warning: no workspace entry for "{sub}" — skipping')
+        return path
+    return base / sub
 
 
 class Resolver:
+    def __init__(self) -> None:
+        self._workspace = _load_workspace()
+
     def _collect(self, project_path: Path) -> tuple[list[Path], list[Path]]:
         """Returns (term_folders, project_files) discovered recursively."""
         folders: list[Path] = []
@@ -32,9 +57,10 @@ class Resolver:
             m = _USES_BLOCK.search(text)
             if m:
                 for sub in _LIST_ITEM.findall(m.group(1)):
-                    sub_path = path.parent / sub
-                    project_files.append(sub_path)
-                    queue.append(sub_path)
+                    sub_path = _resolve_entry(sub, path.parent, self._workspace)
+                    if sub_path is not None:
+                        project_files.append(sub_path)
+                        queue.append(sub_path)
         return folders, project_files
 
     def _build_term_map(self, project_path: Path) -> dict[str, Path]:
@@ -72,7 +98,9 @@ class Resolver:
             m = _USES_BLOCK.search(content)
             if m:
                 for sub in _LIST_ITEM.findall(m.group(1)):
-                    sub_path = path.parent / sub
+                    sub_path = _resolve_entry(sub, path.parent, self._workspace)
+                    if sub_path is None:
+                        continue
                     name = sub_path.stem
                     if name not in reachable and sub_path.is_file():
                         reachable[name] = sub_path

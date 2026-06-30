@@ -7,6 +7,7 @@ properties:
 guidelines:
   - Every @DuckWorkflow subtype must implement `submit` and `release`.
   - Workflows with a review step should also implement `update` (re-send after feedback), `review` (reviewer examination and verdict), and `merge` (reviewer approval and integration). Workflows without a review step omit these.
+  - Before staging or committing changes, every `submit` implementation must first fetch the remote and fast-forward (or merge) the local `main_branch` to incorporate any upstream commits, resolving conflicts against pending changes before continuing. This prevents edits from being made against a stale checkout and avoids unnecessary merge conflicts discovered only at push time.
 recipes:
   - name: submit
     description: Delivers pending changes to their destination — directly or via a review request, depending on the workflow
