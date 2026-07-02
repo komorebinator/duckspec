@@ -1,0 +1,18 @@
+name: Field
+description: A named unit of state declared by a @SoftwareComponent — an instance property, a module-level constant, or a member of a plain data structure (e.g. a JSON shape or a state bag attached to an object the component does not own). Captures the shape of data a component's functions read and mutate, distinct from the behavior described in functions.
+guidelines:
+  - "Scope is not a separate property — it follows the same rules as the OOP constructs being described, from two things already present: where the @Field is nested, and its name prefix. A @Field nested in a @SoftwareComponent's own `fields:` list is an instance member of that component (name it `this.x`, matching the source). A @Field nested at the top level of a @Software/@Application, not inside any child component, is module-level (name it bare, e.g. `BUILD`, `SNAP_PX`, matching a top-level const/let in the source). A @Field whose name is prefixed by some other identifier (e.g. `win._bwmState`) belongs to an object the component does not own — the prefix itself names that object; no extra property is needed to say so."
+  - "If a @Field is simply the instance-variable binding for a UI element that already has its own named @UserInterfaceElement entry in `components:` (e.g. a Gtk.Button stored as `this._installBtn` that is also documented as the `install-button` component), declare the field directly on that child component's own `fields:` list — not as a separate top-level entry on the parent. The component's existing `type:`/`label:`/`description:` already cover what the widget is; the nested field only needs to record the instance-variable name it's bound to. Only put a @Field at the parent level when it has no corresponding named component — i.e. real state (business data, control objects, module constants), not a duplicate listing of widgets already described elsewhere."
+properties:
+  - name: name
+    required: true
+    description: "field identifier, no spaces (code-style); the prefix conveys scope by convention — `this.x` for an instance member of the component it's nested in, a bare name for a module-level constant declared at the top level of the @Software, or `<owner>.x` for state attached to an object the component does not own"
+  - name: type
+    required: false
+    description: free-form description of the value's type or shape (e.g. boolean, string, MetaWorkspace | undefined, "{wr, hr}"); omit when nesting under an existing @UserInterfaceElement component whose `type:` already implies it
+  - name: default
+    required: false
+    description: initial or default value, if any
+  - name: description
+    required: false
+    description: what this field represents, when it is set or cleared, and any invariants it must satisfy; omit when nesting under an existing component whose own `description:` already covers it

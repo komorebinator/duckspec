@@ -9,7 +9,7 @@ guidelines:
   - A @DuckspecProject may reference an external @DuckspecProject by its `repository` URL (e.g. `https://github.com/user/repo`); the resolver looks up the URL in `~/.duckspec/workspace.yaml` to find the local path. If no workspace entry exists, the entry is skipped with a warning.
 ai_instructions:
   - When first opening an @DuckspecProject, invoke all recipes listed in `startup` before doing anything else.
-  - For any @Term not covered after loading, read its file individually on demand.
+  - For any @Term not covered after loading, read its file individually on demand. If only one named element is needed (a single recipe, function, or component) rather than the whole term, prefer @DuckToolsApp#resolver#resolve_path(ref=<TermName>#<path>) over loading the entire term — it resolves directly to the target element without pulling in transitive dependencies that would otherwise be discarded unread.
 properties:
   - name: version
     description: current version string; format determined by the project's `versioning` strategy
@@ -28,10 +28,10 @@ contains:
     description: versioning strategy for this project; `type:` references a @VersioningStrategy subtype (e.g. `@SemVer`); all other fields are property overrides
 recipes:
   - name: load
-    description: Loads all @Term definitions for this @DuckspecProject into context; follows `uses` entries recursively and all @TermName references in any loaded file
+    description: Loads an overview of this @DuckspecProject into context — root file content, term list with descriptions, available recipes, and all active rules (guidelines and ai_instructions); then loads specific terms on demand as work requires
     instructions:
-      - Invoke @DuckTools#run(command=load, project_path=<path to this @DuckspecProject file>); if the output was truncated and saved to a file, read that file completely before proceeding — do not rely on the truncated preview
-      - Invoke @DuckspecProject#rules()
+      - Invoke @DuckToolsApp#resolver#load_project(project_path=<path to this @DuckspecProject file>)
+      - Load additional terms on demand via @DuckToolsApp#resolver#load_terms(project_path=<path>, term_names=<names>)
   - name: check_guidelines
     description: Checks a single term file against all guidelines and ai_instructions applicable to it, derived from its full inheritance chain
     arguments:
@@ -40,16 +40,16 @@ recipes:
     instructions:
       - Identify the term defined in file_path from the already-loaded term data; if not found in context, read the file directly
       - Build the full inheritance chain by following `extends` recursively through loaded terms until reaching a term with no `extends`
-      - Collect all guidelines and ai_instructions from the term itself and every ancestor in the chain; annotate each rule with its source @Term
+      - Collect applicable rules from two sources: (1) guidelines and ai_instructions from the term itself and every ancestor in the inheritance chain; (2) all rules from the Rules table already loaded into context via @DuckspecProject#load — these are project-wide rules that apply to every term regardless of inheritance; annotate each rule with its source @Term and deduplicate
       - For each collected rule: evaluate whether the term's content complies; record each violation with the rule text, source @Term, and a description of the non-compliance
       - Output a report: file path, term name, inheritance chain, and list of violations (or "no violations" if compliant)
   - name: validate
     description: Validates all loaded @Term files against the @DuckspecProject guidelines and runs software tests
     instructions:
       - Invoke @DuckspecProject#load()
-      - For each term file in the loaded output: check that all required @Property fields are present; check that all @TermName references exist in the term map; check that all `Invoke @TermName#recipe_name()` references resolve to an existing @Recipe; record any structural violations
+      - "For each term file in the loaded output: check that all required @Property fields are present; check that all @TermName references exist in the term map, excluding placeholder examples that illustrate the `#`-path reference syntax itself (e.g. generic names like `@TermName` or `@MyTerm` used in guideline/recipe documentation about the syntax, not as an actual reference to a specific term); check that all `Invoke @TermName#recipe_name()` references resolve to an existing @Recipe; record any structural violations"
       - For each term file in the loaded output: Invoke @DuckspecProject#check_guidelines(file_path=<path>)
-      - For each @Software in the project: Invoke @Software#test()
+      - "For each @Software reachable transitively via `uses:` and `software:` from this project — including sub-projects referenced by relative path or by `repository` URL alike, regardless of which repository they live in: Invoke @Software#test(); a @Software with no `tests:` of its own has nothing to run and is reported as such, so no separate exclusion list is needed"
       - Report a summary of all violations and test results; fix where possible, ask the user where the correct resolution is ambiguous
   - name: create_term
     description: Creates a new @Term file in the @DuckspecProject's terms folder
@@ -70,11 +70,11 @@ recipes:
       - Create the file with the @DuckspecProject name as the H1 heading, description as the opening line, and goals as a bullet list under a "Goals" heading
       - Save the file path to `settings.readme`
   - name: term_map
-    description: Displays the current term map as a markdown table
+    description: Displays the current term map as a markdown table with descriptions
     instructions:
-      - Invoke @DuckTools#run(command=list, project_path=<project_path>) and output the result
+      - Invoke @DuckToolsApp#resolver#list_terms(project_path=<project_path>) and output the result
   - name: rules
-    description: Displays all active guidelines and ai_instructions collected from loaded @Term files
+    description: Displays all active rules (guidelines and ai_instructions) collected from loaded @Term files, including inherited ones. Useful when rules need to be reviewed in isolation; rules are also included in the @DuckspecProject#load output automatically.
     instructions:
       - For each loaded term, collect its guidelines and ai_instructions; include inherited ones, marking the source @Term for each entry
       - Output a markdown table with columns: Source (@TermName link style), Type (Guideline or AI Instruction), Rule (the text)
@@ -82,8 +82,7 @@ recipes:
   - name: update_agents
     description: Creates or updates AGENTS.md with the command to load this @DuckspecProject
     instructions:
-      - Determine the load command for this project using @DuckTools#run
-      - Write or overwrite `AGENTS.md` next to this @DuckspecProject file with a single section containing the load command; keep it as brief as possible
+      - Write or overwrite `AGENTS.md` next to this @DuckspecProject file instructing the reader to invoke @DuckToolsApp#resolver#load_project(project_path=<path>) via whichever interface is available (MCP tool or CLI); keep it as brief as possible
   - name: update_readme
     description: Updates the root description file to reflect the current @DuckspecProject definition
     instructions:
@@ -94,7 +93,7 @@ recipes:
   - name: assess_coverage
     description: Analyzes source files and generates or updates @Term definitions detailed enough that running `build` on the result would recreate the project faithfully. Idempotent — can be run multiple times to refine or update existing terms.
     instructions:
-      - Invoke @DuckTools#run(command=load --all, project_path=<path to this @DuckspecProject file>); if the output was truncated and saved to a file, read that file completely before proceeding
+      - Invoke @DuckToolsApp#resolver#list_terms(project_path=<path>, all=true) to get all term names; then invoke @DuckToolsApp#resolver#load_terms(project_path=<path>, term_names=<all names from previous step>) to load their content; if the output was truncated and saved to a file, read that file completely before proceeding
       - Read `src` from settings.src; if not set, default to `..` relative to this @DuckspecProject file's location; confirm the resolved path with the user before proceeding
       - Scan all files in `src` recursively; skip subfolders that contain a @DuckspecProject installation (Duckspec.yaml present); assign each file to exactly one category from file-categories
       - Classify each code file using the most specific pattern from code-patterns; use the same priority order as the list; note every file where the closest available pattern is a stretch — where using it would hide the real concept rather than describe it
@@ -110,11 +109,12 @@ recipes:
       - For each @ContainerImage term document its stages, build args, and what each stage installs or configures
       - For each config file create a named @ConfigFile term (or a named component of the most closely related @Software) with a configure function describing the file's purpose and the meaning of its key fields
       - For each @Function in code components write a description covering the algorithm, data flow, edge cases, and expected output in enough detail that a developer could reimplement the function without reading the source
+      - For each component with non-trivial state, declare it as `fields:` (a list of @Field) rather than describing it in prose: instance fields (`this.x` / class field declarations) nested on the owning component, module-level constants nested at the top level of the @Software, and state the component attaches to objects it does not own (e.g. a property set on a window, DOM node, or other external object), named with that object's local identifier as a prefix (e.g. `win._bwmState`). Do not add a `scope` property — scope follows from where the @Field is nested and its name prefix (see @Field). A field's `type` should capture its real shape (union of literal states, nullable, array/map element types, or an inline object shape for plain data records). If a field is just the instance-variable binding for a widget that already has its own named @UserInterfaceElement entry in `components:`, nest the @Field on that child component instead of listing it again on the parent — never describe the same widget's identity in two places in the tree. Do not duplicate the same state as both a `fields:` entry and a narrative description elsewhere — the prose `description` should cover behavior and algorithms; `fields:` is the single source of truth for state shape.
       - Write all term files to the appropriate terms folders; for existing term files update them in place — preserve any manually written content not contradicted by the source
       - Verify coverage — for every file in code, config, and asset categories confirm it has a dedicated named entry; a file is NOT covered if it appears only inside another component's description text; list all remaining gaps
       - Output a coverage report as a markdown table in the conversation: total files scanned, covered files (path → term name), skipped files (path → reason), and any remaining gaps
       - Review type precision: for every existing @SoftwareComponent in the covered terms, check whether a more specific @DesignPattern is now available in the term map that better describes the component than its current type; propose re-typing and ask the user to confirm before changing
-      - Verify fidelity: for the most complex functions and components, mentally simulate what `build` would produce from the description alone; if the result would differ from the source in any meaningful way, add the missing detail
+      - Verify fidelity: for at least one non-trivial component, actually invoke @Software#build() against an empty/scratch location (not the real `src`) from the spec alone, then diff the result against the real source — do not just mentally simulate it; reconstructing each component's `fields:` as real field/property declarations. Treat naming/formatting/control-flow-shape differences as expected and not worth fixing. Treat these as real gaps and fix the spec when found: (1) a defensive guard or precondition check on an external API call (null/undefined checks, type checks on returned data, range checks) that the description's algorithm steps don't mention — these are exactly the details prose summaries tend to drop; (2) a pervasive cross-cutting convention (logging, a particular event-ordering rule, a naming pattern) that the source applies broadly but no single @Function description states — these belong in `guidelines:`, not in every function individually. If the result differs from the source in any other meaningful way (missing state, wrong shape, wrong algorithm step), add the missing detail.
   - name: learn
     description: Captures durable knowledge from the current session into spec files — updates existing descriptions, properties, or function documentation when non-obvious facts were confirmed. Does not create new terms; use assess_coverage for that.
     instructions:

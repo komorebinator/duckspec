@@ -4,7 +4,9 @@ extends: @DuckspecProject
 uses:
   - ../Duckspec.yaml
 goals:
-  - Load all reachable @Term definitions for a @DuckspecProject in one operation
+  - Provide a lightweight project overview (root file + term list with descriptions) as the primary entry point
+  - Load selected @Term definitions and their transitive dependencies by name, on demand
+  - Search across term content by keyword to locate relevant terms without loading everything
   - Expose a consistent interface as CLI commands and as an optional MCP server
   - Support any model or runtime without model-specific integration
 lists:
@@ -15,7 +17,7 @@ lists:
       - name: memory
         description: write `../AGENTS.md` into any persistent memory location available to the current model
       - name: claude
-        description: append a project entry to ~/.claude/CLAUDE.md with the project name and load command; create the file if it does not exist
+        description: register via mcp method first, then append a project entry to ~/.claude/CLAUDE.md noting the project path and that MCP tools (load_project, list_terms, load_terms, grep_terms) are available; create the file if it does not exist
 guidelines:
   - Zero external dependencies; only Python stdlib is allowed for all features including the MCP server.
   - "@DuckspecProject files and @Term files are read as plain text; field extraction is done with regex, not a YAML parser."

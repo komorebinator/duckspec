@@ -4,6 +4,8 @@ properties:
   - name: src
     description: path to the source folder or file for this component
 contains:
+  - name: fields
+    description: list of @Field the component declares — instance state, module-level constants, or external state it attaches to objects it does not own
   - name: functions
     description: list of @Function the component exposes or handles
   - name: signals
@@ -12,3 +14,6 @@ contains:
     description: list of nested @SoftwareComponent instances owned by this component
   - name: patches
     description: list of @Patch instances that modify this component's source files at build time; when a @Patch is nested here, its target is implicit
+guidelines:
+  - Prefer `fields:` entries over narrative prose for state. Any instance property, module-level constant, or state attached to an object the component does not own belongs in `fields:` (structured name/type/default; see @Field for how scope follows from nesting and name prefix), not buried in a `description` paragraph — this is what lets the state model be reconstructed precisely on rebuild instead of being reverse-engineered from prose each time.
+  - Do not duplicate the same fact in two places in the tree. A field that is an instance-variable binding for a widget already documented as a nested @UserInterfaceElement component belongs on that component's own `fields:`, not repeated on the parent's. Each fact about the structure of a component should have exactly one home in the tree.

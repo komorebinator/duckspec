@@ -29,15 +29,16 @@ ai_instructions:
   - This is the core @Duckspec framework term set. When working with any @DuckspecProject that uses @Duckspec, load this project before any other work.
 guidelines:
   - All documentation must be written in English.
+  - Prefer `@TermName#path#to#element` references over concrete CLI commands, MCP tool names, or other interface-specific syntax in descriptions, recipes, and guidelines; this keeps documentation interface-agnostic and lets the executor choose the appropriate interface. Use concrete syntax only when no term reference exists or when the exact detail is essential.
   - Avoid abbreviations in @Term names; prefer full words (e.g. `Workflow` not `WF`, `Configuration` not `Cfg`, `Repository` not `Repo`).
   - Each `.yaml` file defines exactly one term following the @Term format.
   - "@Term names must be written in CamelCase with no spaces. The filename must match the @Term name (e.g. `UserInterface.yaml` for `name: UserInterface`)."
-  - Use `@TermName` to reference terms wherever it makes sense.
   - Commit messages must be short and free of unnecessary detail.
   - All `Invoke @TermName#recipe_name()` references must resolve to an existing @Recipe defined on that @Term or inherited by it.
   - Sub-project @Term names must follow the pattern `Duck` + what it does (e.g. `DuckArch`, `DuckUI`); the word "spec" must not appear in sub-project names.
   - A new @Term belongs in the @Duckspec framework (global) if and only if all three hold — (1) the concept exists in standard CS/software engineering vocabulary without platform qualification and can be explained without mentioning any specific technology; (2) it would be useful in projects written in different languages and built on different stacks; (3) its name and definition are immediately understandable to a developer unfamiliar with this project's tech stack. If any of these fails, the term belongs in the project's own terms_folder.
   - A gap requiring a new @Term exists when the closest available @DesignPattern would lose significant architectural information — using it feels like a stretch that hides the real concept rather than describing it.
+  - Avoid using the word "extends" in a description in its everyday English sense when it could be confused with the formal `extends:` field — prefer synonyms like "built on", "managed by", "implements" to avoid implying a false inheritance relationship or referencing a term that does not exist.
 lists:
   - name: installation-methods
     items:
@@ -108,7 +109,7 @@ recipes:
   - name: create_project
     description: Creates a minimal @DuckspecProject term file, then optionally imports term definitions from the project source
     instructions:
-      - Invoke @DuckTools#run(command=load --all, project_path=<path to this file>) and read the full output into context
+      - Invoke @DuckToolsApp#resolver#load_project(project_path=<path to this file>)
       - Ask the user in which folder the @DuckspecProject term file should be stored; it must not be inside the `duckspec/` folder — that is reserved for the framework
       - Infer the project name and description from context (repository name, README, etc.); ask the user to confirm or correct them
       - Set `settings.terms_folder` to a subfolder named after the project, located next to the @DuckspecProject term file (e.g. if the file is `myapp/MyApp.yaml`, set `settings.terms_folder` to `MyApp/`)
@@ -116,5 +117,5 @@ recipes:
       - Create the @DuckspecProject term file named `<ProjectName>.yaml` (matching the `name:` field) in the folder chosen in the first step, with only the fields that are known — name, description, settings, and `uses` set to the relative path from the @DuckspecProject file to `duckspec/Duckspec.yaml`; leave all other slots empty
       - Create the terms folder on disk at the path set in `settings.terms_folder`
       - Invoke @DuckspecProject#update_readme()
-      - Invoke @DuckTools#run(command=load --all, project_path=<path to the created @DuckspecProject file>) and read the full output into context
+      - Invoke @DuckToolsApp#resolver#load_project(project_path=<path to the created @DuckspecProject file>)
       - Ask the user whether to assess coverage of the project source; if yes, Invoke @DuckspecProject#assess_coverage()

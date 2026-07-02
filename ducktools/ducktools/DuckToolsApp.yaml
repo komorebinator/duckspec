@@ -4,18 +4,42 @@ extends: @Application
 platform: Python
 src: ../src/
 tests:
-  - name: load
-    description: loads all reachable terms and prints them as blocks
-    command: "python3 -m ducktools load Duckspec.yaml"
-    expect: output contains at least one `--- @TermName [` block
-  - name: list
-    description: lists reachable term names and file paths
-    command: "python3 -m ducktools list Duckspec.yaml"
-    expect: output contains at least one `| @TermName |` row
+  - name: load-project
+    description: loads the root project file content and lists all reachable terms, recipes, and rules (guidelines + ai_instructions)
+    command: "python3 -m ducktools load-project Duckspec.yaml"
+    expect: output contains the root file content followed by Terms, Recipes, and Rules markdown tables
+  - name: list-terms
+    description: lists reachable term names, file paths, and descriptions
+    command: "python3 -m ducktools list-terms Duckspec.yaml"
+    expect: output contains at least one `| @TermName |` row with a non-empty description column
+  - name: load-terms
+    description: loads specific terms and their transitive dependencies
+    command: "python3 -m ducktools load-terms Duckspec.yaml DuckToolsApp"
+    expect: output contains `--- @DuckToolsApp [` block and its transitive dependencies; does not contain unrelated top-level terms
+  - name: grep
+    description: searches term content by keyword and prints matching term names
+    command: "python3 -m ducktools grep Duckspec.yaml resolver"
+    expect: output contains `@DuckToolsApp` in results
+  - name: resolve-path
+    description: resolves a Term#path reference to a single nested element's raw block, without loading the whole term or its transitive dependencies
+    command: "python3 -m ducktools resolve-path Duckspec.yaml DuckspecProject#validate"
+    expect: output contains the `- name: validate` block and its `instructions:`, and does not contain unrelated recipes such as `create_readme`
 components:
   - name: resolver
     type: @Singleton
     functions:
+      - name: _parse_list_block
+        description: "Module-level pure function. Finds the block matching `pattern` in `content`, returns a list of strings — one per item (lines starting with `- `, stripped of the leading `- `). Returns an empty list if the block is absent. Used by callers to extract `guidelines:` and `ai_instructions:` from already-read file content."
+        arguments:
+          - name: content
+            description: raw text content of a term .yaml file
+          - name: pattern
+            description: compiled regex matching the target block (e.g. _GUIDELINES_BLOCK or _AI_INSTRUCTIONS_BLOCK)
+      - name: _parse_recipes
+        description: "Module-level pure function. Finds the `recipes:` block in `content`, splits on item boundaries, and returns a list of {name, description} dicts. Returns an empty list if the block is absent."
+        arguments:
+          - name: content
+            description: raw text content of a term .yaml file
       - name: _load_workspace
         description: "Reads `~/.duckspec/workspace.yaml` and returns a dict mapping repository URLs to local @DuckspecProject file paths. Parses with regex (`^\\s+(https?://\\S+):\\s*(\\S+)`). Returns an empty dict if the file does not exist or cannot be read."
       - name: _resolve_entry
@@ -25,20 +49,55 @@ components:
             description: raw string from the `uses:` list — either a relative path or a repository URL
           - name: base
             description: directory of the file containing the `uses:` entry
+      - name: _walk_terms
+        description: "Generator that builds the term map and reachable set, then yields (name, path, content) for each reachable term, reading each file exactly once. All content-extraction methods use this as their single traversal primitive to avoid re-reading files. If include_all is true, yields all terms in the term map instead of only reachable ones."
+        arguments:
+          - name: project_path
+            description: path to a @DuckspecProject .yaml file
+          - name: include_all
+            description: if true, yield all terms in the term map; default false
       - name: load_project
-        description: "Builds the reachable set for the given @DuckspecProject file using two rules applied together: (1) all files listed under `uses:` are always included and traversed recursively — each entry is resolved via _resolve_entry (relative path or workspace URL); (2) any @TermName reference (regex @([A-Z][A-Za-z]+)) found in any already-included file is looked up in the term map and included if found. The term map is built first by scanning all `settings.terms_folder` directories (collected recursively from `uses:`) and adding project files themselves. Repeats until no new files are added. Reads all included files and returns a list of {name, path, content} sorted by name. If include_all is true, returns all terms in the term map instead of only reachable ones."
+        description: "Reads the root project file content, then calls _walk_terms() for a single-pass extraction of descriptions, recipes, guidelines, and ai_instructions from all reachable terms. Returns a dict {root_content: str, terms: list[{name, path, description}], recipes: list[{term, name, description}], rules: list[{term, type, text}]} where type is 'Guideline' or 'AI Instruction'. Intended as the primary entry point for AI assistants: gives an overview of the project without loading all term content."
+        arguments:
+          - name: project_path
+            description: path to a @DuckspecProject .yaml file
+      - name: list_terms
+        description: "Calls _walk_terms() and extracts description from each file's content using regex `^description:\\s*(.+)$` (first match, stripped); returns a list of {name, path, description} sorted by name. If include_all is true, returns all terms in the term map instead of only reachable ones."
         arguments:
           - name: project_path
             description: path to a @DuckspecProject .yaml file
           - name: include_all
             description: if true, return all terms in the term map regardless of @TermName mentions; default false
-      - name: list_project
-        description: "Same traversal as load_project() but does not read file contents; returns a list of {name, path} for all terms in the reachable set (or the full term map if include_all is true)"
+      - name: load_terms
+        description: "Builds the term map from the project, then runs BFS seeded with the files corresponding to the given term_names instead of the project root. Returns a list of {name, path, content} sorted by name, covering only the requested terms and their transitive @TermName dependencies. Unrecognised names are silently skipped."
+        arguments:
+          - name: project_path
+            description: path to a @DuckspecProject .yaml file; used to build the term map
+          - name: term_names
+            description: list of term names (without @) to load
+      - name: grep_terms
+        description: "Calls _walk_terms() and filters terms whose content contains the query string (case-insensitive). Returns a list of {name, path, lines} where lines is a list of matching line strings (stripped)."
         arguments:
           - name: project_path
             description: path to a @DuckspecProject .yaml file
+          - name: query
+            description: substring to search for (case-insensitive)
           - name: include_all
-            description: if true, return all terms in the term map regardless of @TermName mentions; default false
+            description: if true, search all terms in the term map instead of only reachable ones; default false
+      - name: _extract_named_block
+        description: "Module-level pure function. Scans `content` line by line for a `- name: <name>` entry at any indentation, then captures every subsequent line indented deeper than that entry, stopping at the next sibling list item (a line at the same or shallower indentation starting with `- `) or end of content. Returns the raw block text including the `- name:` line itself, or None if no matching entry is found. Used by resolve_path to narrow a term's content to one nested element without a full YAML parser."
+        arguments:
+          - name: content
+            description: raw text to search — either a whole term file's content or a block previously returned by this same function
+          - name: name
+            description: the value following `name:` to match
+      - name: resolve_path
+        description: "Splits `ref` on `#`; the first segment (leading `@` stripped if present) is the term name, the remaining segments are a path within it. Looks up the term's file via the term map — built the same way as load_terms, but only that one file is read; transitive @TermName dependencies are not followed. Starting from the full file content, repeatedly narrows it by calling _extract_named_block once per remaining path segment, in order. Returns {name, path, ref, content} where content is the fully-narrowed block (or the whole file content if `ref` has no path segments beyond the term name), or None if the term is not in the term map or any path segment does not resolve."
+        arguments:
+          - name: project_path
+            description: path to a @DuckspecProject .yaml file; used to build the term map
+          - name: ref
+            description: "reference in the form `TermName#segment#segment...` (e.g. `DuckspecProject#validate` or `DuckToolsApp#resolver#load_project`); leading `@` on the term name is optional"
   - name: workspace
     type: @ConfigFile
     format: YAML
@@ -47,20 +106,41 @@ components:
   - name: cli
     type: @Application
     functions:
-      - name: load
-        description: "Command `ducktools load <project_path> [--all]`; calls resolver#load_project; prints each term as: `--- @TermName [file_path] ---\\n<yaml content>`"
+      - name: load-project
+        description: "Command `ducktools load-project <project_path>`; calls resolver#load_project; prints the root project file content followed by Terms, Recipes, and Rules markdown tables"
+        arguments:
+          - name: project_path
+            description: path to a @DuckspecProject .yaml file
+      - name: list-terms
+        description: "Command `ducktools list-terms <project_path> [--all]`; calls resolver#list_terms; prints a markdown table with columns Term, File, and Description"
         arguments:
           - name: project_path
             description: path to a @DuckspecProject .yaml file
           - name: --all
-            description: pass to resolver#load_project as include_all=true
-      - name: list
-        description: "Command `ducktools list <project_path> [--all]`; calls resolver#list_project; prints a markdown table of TermName and file path"
+            description: pass to resolver#list_terms as include_all=true
+      - name: load-terms
+        description: "Command `ducktools load-terms <project_path> <TermName> [TermName ...]`; calls resolver#load_terms; prints each term as `--- @TermName [file_path] ---\\n<yaml content>`"
         arguments:
           - name: project_path
             description: path to a @DuckspecProject .yaml file
+          - name: term_names
+            description: one or more term names (without @) to load with their transitive dependencies
+      - name: grep
+        description: "Command `ducktools grep <project_path> <query> [--all]`; calls resolver#grep_terms; prints a markdown table of matching Term, File, and matching lines"
+        arguments:
+          - name: project_path
+            description: path to a @DuckspecProject .yaml file
+          - name: query
+            description: substring to search for (case-insensitive)
           - name: --all
-            description: pass to resolver#list_project as include_all=true
+            description: pass to resolver#grep_terms as include_all=true
+      - name: resolve-path
+        description: "Command `ducktools resolve-path <project_path> <ref>`; calls resolver#resolve_path; prints `--- <ref> [file_path] ---\\n<content>`, or `not found: <ref>` if resolution failed"
+        arguments:
+          - name: project_path
+            description: path to a @DuckspecProject .yaml file
+          - name: ref
+            description: "reference in the form `TermName#segment#segment...`"
       - name: serve
         description: "Command `ducktools serve <project_path>`; starts the MCP server in stdio mode; project_path is accepted by the CLI but currently unused — the server accepts any project_path per MCP request via the tools/call arguments"
         arguments:
@@ -70,16 +150,37 @@ components:
     type: @Server
     functions:
       - name: load_project
-        description: "MCP tool `load_project`; calls resolver#load_project; returns formatted term content as a string"
+        description: "MCP tool `load_project`; calls resolver#load_project; returns the root project file content followed by Terms, Recipes, and Rules markdown tables. Primary entry point — call this first when starting work on a project."
+        arguments:
+          - name: project_path
+            description: path to a @DuckspecProject .yaml file
+      - name: list_terms
+        description: "MCP tool `list_terms`; calls resolver#list_terms; returns a markdown table with columns Term, File, and Description"
         arguments:
           - name: project_path
             description: path to a @DuckspecProject .yaml file
           - name: all
-            description: pass to resolver#load_project as include_all=true; default false
-      - name: list_project
-        description: "MCP tool `list_project`; calls resolver#list_project; returns term map as a list of {name, path} objects"
+            description: pass to resolver#list_terms as include_all=true; default false
+      - name: load_terms
+        description: "MCP tool `load_terms`; calls resolver#load_terms; returns formatted term blocks `--- @TermName [path] ---\\n<content>` for the requested terms and their transitive dependencies"
         arguments:
           - name: project_path
             description: path to a @DuckspecProject .yaml file
+          - name: term_names
+            description: space-separated list of term names (without @) to load
+      - name: grep_terms
+        description: "MCP tool `grep_terms`; calls resolver#grep_terms; returns a markdown table of matching Term, File, and matching lines"
+        arguments:
+          - name: project_path
+            description: path to a @DuckspecProject .yaml file
+          - name: query
+            description: substring to search for (case-insensitive)
           - name: all
-            description: pass to resolver#list_project as include_all=true; default false
+            description: pass to resolver#grep_terms as include_all=true; default false
+      - name: resolve_path
+        description: "MCP tool `resolve_path`; calls resolver#resolve_path; returns the narrowed block content for the given `Term#path` reference, or a not-found message"
+        arguments:
+          - name: project_path
+            description: path to a @DuckspecProject .yaml file
+          - name: ref
+            description: "reference in the form `TermName#segment#segment...`"
