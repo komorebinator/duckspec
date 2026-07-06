@@ -67,6 +67,43 @@ def cmd_resolve_path(project_path: str, ref: str) -> None:
     print(result['content'])
 
 
+def cmd_create_workspace(name: str) -> None:
+    resolver.create_workspace(name)
+    print(f'created workspace "{name}"')
+
+
+def cmd_use_workspace(name: str) -> None:
+    if resolver.use_workspace(name):
+        print(f'active workspace: {name}')
+    else:
+        print(f'no such workspace: {name}')
+
+
+def cmd_list_workspaces() -> None:
+    result = resolver.list_workspaces()
+    active = result['active_workspace']
+    for name, workspace in result['workspaces'].items():
+        marker = '*' if name == active else ' '
+        print(f"{marker} {name}")
+        for repository, path in workspace.get('projects', {}).items():
+            print(f"    {repository} -> {path}")
+
+
+def cmd_add_project(project_path: str, workspace_name: str | None = None) -> None:
+    repository = resolver.add_project(project_path, workspace_name)
+    if repository is None:
+        print(f'could not register {project_path} — missing `repository` field or no active workspace')
+    else:
+        print(f'registered {repository} -> {project_path}')
+
+
+def cmd_remove_project(repository: str, workspace_name: str | None = None) -> None:
+    if resolver.remove_project(repository, workspace_name):
+        print(f'removed {repository}')
+    else:
+        print(f'not found: {repository}')
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog='ducktools')
     sub = parser.add_subparsers(dest='command', required=True)
@@ -90,7 +127,21 @@ def main() -> None:
     p.add_argument('project_path')
     p.add_argument('ref')
 
-    sub.add_parser('serve').add_argument('project_path')
+    sub.add_parser('serve').add_argument('project_path', nargs='?')
+
+    sub.add_parser('create-workspace').add_argument('name')
+
+    sub.add_parser('use-workspace').add_argument('name')
+
+    sub.add_parser('list-workspaces')
+
+    p = sub.add_parser('add-project')
+    p.add_argument('project_path')
+    p.add_argument('--workspace', dest='workspace_name')
+
+    p = sub.add_parser('remove-project')
+    p.add_argument('repository')
+    p.add_argument('--workspace', dest='workspace_name')
 
     args = parser.parse_args()
 
@@ -107,3 +158,13 @@ def main() -> None:
     elif args.command == 'serve':
         from .mcp_server import run_server
         run_server()
+    elif args.command == 'create-workspace':
+        cmd_create_workspace(args.name)
+    elif args.command == 'use-workspace':
+        cmd_use_workspace(args.name)
+    elif args.command == 'list-workspaces':
+        cmd_list_workspaces()
+    elif args.command == 'add-project':
+        cmd_add_project(args.project_path, args.workspace_name)
+    elif args.command == 'remove-project':
+        cmd_remove_project(args.repository, args.workspace_name)

@@ -40,12 +40,6 @@ guidelines:
   - A gap requiring a new @Term exists when the closest available @DesignPattern would lose significant architectural information — using it feels like a stretch that hides the real concept rather than describing it.
   - Avoid using the word "extends" in a description in its everyday English sense when it could be confused with the formal `extends:` field — prefer synonyms like "built on", "managed by", "implements" to avoid implying a false inheritance relationship or referencing a term that does not exist.
 lists:
-  - name: installation-methods
-    items:
-      - name: submodule
-        description: run `git submodule add git@github.com:komorebinator/duckspec.git duckspec` in the target project root
-      - name: copy
-        description: ask the user for the path to the @Duckspec source (a local clone or download); copy the entire source directory into `duckspec/` in the target project root, overwriting any existing files
   - name: file-categories
     items:
       - name: code
@@ -90,32 +84,43 @@ recipes:
       - Check that the URL of the current git repository matches `repository`; if not, abort — releases must be run from the official @Duckspec repository
       - Invoke @DuckspecProject#release(bump=<bump>)
   - name: install
-    description: Installs @Duckspec into a @Project
-    arguments:
-      - name: method
-        description: installation method; from installation-methods list; default is submodule
+    description: Bootstraps the shared @Duckspec/@DuckTools installation for this executor, then offers to bring in an existing project or start a new one — never sets a specific project's own metadata itself; that's @Duckspec#create_project/#import_project's job
     instructions:
-      - Ask the user for `method` if not provided; suggest submodule as default; execute the chosen method from installation-methods
-      - The framework is now installed at `duckspec/`; the main term file is at `duckspec/Duckspec.yaml`; from this point on read all files from local paths only — do not fetch anything from the internet
-      - Scan the root directory for a description file (e.g. README.md); if it exists and already contains a link to an @DuckspecProject term file, stop — the @DuckspecProject is already set up; otherwise Invoke @Duckspec#create_project()
-      - Ask the user which delivery workflow this project uses — present the available @DuckWorkflow subtypes (@GitHubWorkflow, @GerritWorkflow, @GitWorkflow) with a one-line description of each; add the chosen subtype to the project's `software:` list
-      - Invoke @DuckTools#install(project_path=<path to the @DuckspecProject file created in the previous step>)
+      - "Read `~/.duckspec/settings.json` (treat a missing file as `{}`). If `ducktools.src` or `ducktools.bin` is unset or points to a missing file: ask the user which folder to clone the framework into (suggest a directory alongside their other projects)"
+      - "Fetch @DuckToolsApp#install-script's raw content without executing it, and read it in full. Check for anything unexpected — network access beyond the documented `git clone`, obfuscated code, writes outside the clone path / the chosen bin directory / `~/.duckspec`. If anything looks concerning, explain the specific concern in plain terms and get the user's explicit go-ahead before continuing; otherwise proceed without asking"
+      - Run @DuckToolsApp#install-script with the chosen folder as its one argument
+      - Verify it worked — confirm the wrapper file it reports exists and is executable, and that invoking it (e.g. its list-workspaces command) runs without error
+      - "If this executor supports MCP: offer to register the ducktools MCP server, preferring a user-level/global registration over a per-project one wherever the executor's own tooling allows it — the exact registration mechanism is executor-specific, use whatever this assistant provides"
+      - "Verify the MCP connection by invoking its `load_project` (or equivalent) tool against the just-cloned `Duckspec.yaml`; confirm real content comes back, then use that same content to briefly summarize Duckspec's goals and top guidelines/ai_instructions for the user — enough to orient them, not the full rules table"
+      - "Ask whether to bring in an existing project or start a new one; Invoke @Duckspec#import_project() or @Duckspec#create_project() accordingly"
   - name: update
-    description: Updates @Duckspec to the latest version in a @Project where it is already installed
+    description: Updates @Duckspec to the latest version — a single `git pull` in the shared clone, immediately available to every project that references it
     instructions:
-      - Check whether `duckspec/` is a git submodule by inspecting `.gitmodules`; if found, use the submodule method from installation-methods; otherwise use the copy method
-      - Execute the chosen method
+      - Read `ducktools.src` from `~/.duckspec/settings.json`; if unset, tell the user @Duckspec is not installed via the workspace model and stop
+      - Run `git pull` in the clone's repository root (the parent of `ducktools.src`)
       - Invoke @DuckspecProject#validate()
   - name: create_project
-    description: Creates a minimal @DuckspecProject term file, then optionally imports term definitions from the project source
+    description: Creates a minimal @DuckspecProject term file — only what's required plus whatever context supplies. Repository, workflow, workspace registration, and everything else are deferred to @DuckspecProject#assess_coverage, which has real project context to fill them in correctly instead of guessing now.
+    arguments:
+      - name: context_path
+        description: optional path to existing source the project is being created for (e.g. passed by @Duckspec#import_project); used only to help infer name/description/README, not to set `settings.src` — that's the caller's job
     instructions:
-      - Invoke @DuckToolsApp#resolver#load_project(project_path=<path to this file>)
-      - Ask the user in which folder the @DuckspecProject term file should be stored; it must not be inside the `duckspec/` folder — that is reserved for the framework
-      - Infer the project name and description from context (repository name, README, etc.); ask the user to confirm or correct them
+      - Ask the user in which folder the @DuckspecProject term file should be stored, if not already implied by `context_path`
+      - Infer the project name and description from context (`context_path`'s folder name, an existing README, etc.); ask the user to confirm or correct them
+      - "Ask the user for `goals` — what this project is trying to achieve. This is the one required field that can never be inferred, so always ask, even when everything else came from context."
       - Set `settings.terms_folder` to a subfolder named after the project, located next to the @DuckspecProject term file (e.g. if the file is `myapp/MyApp.yaml`, set `settings.terms_folder` to `MyApp/`)
       - If a README or other description file exists, set `settings.readme` to its path (relative to the @DuckspecProject term file)
-      - Create the @DuckspecProject term file named `<ProjectName>.yaml` (matching the `name:` field) in the folder chosen in the first step, with only the fields that are known — name, description, settings, and `uses` set to the relative path from the @DuckspecProject file to `duckspec/Duckspec.yaml`; leave all other slots empty
+      - "Create the @DuckspecProject term file named `<ProjectName>.yaml` (matching the `name:` field), with only `name`, `description`, `goals`, `settings`, and `uses` set to `https://github.com/komorebinator/duckspec`; leave `repository`, `workflow`, `versioning`, and `software` unset entirely"
       - Create the terms folder on disk at the path set in `settings.terms_folder`
-      - Invoke @DuckspecProject#update_readme()
-      - Invoke @DuckToolsApp#resolver#load_project(project_path=<path to the created @DuckspecProject file>)
-      - Ask the user whether to assess coverage of the project source; if yes, Invoke @DuckspecProject#assess_coverage()
+      - Invoke @DuckspecProject#create_readme() if no readme exists yet, else @DuckspecProject#update_readme()
+      - "Report the created file's path back to the caller. This project is not yet registered in any workspace — it has no `repository` for @Workspace#add_project to key on. @DuckspecProject#assess_coverage registers it once one is found."
+  - name: import_project
+    description: Brings an existing codebase under Duckspec management — creates a minimal project pointed at it via @Duckspec#create_project, then runs a full coverage analysis to fill in the rest
+    arguments:
+      - name: source_path
+        description: path to the existing project's source folder
+    instructions:
+      - Ask the user for `source_path` if not provided
+      - Invoke @Duckspec#create_project(context_path=<source_path>)
+      - "Set `settings.src` on the created project to `source_path`, expressed relative to the @DuckspecProject file's location (skip this if it already resolves to the default `..`)"
+      - Invoke @DuckspecProject#assess_coverage() on the created project

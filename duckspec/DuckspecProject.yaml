@@ -6,7 +6,7 @@ guidelines:
   - All entries in `uses` are loaded unconditionally when this project is loaded.
   - A @DuckspecProject may reference another @DuckspecProject in a different directory via `uses` with a relative path (e.g. `../OtherProject.yaml`); circular references are safe — the resolver deduplicates by resolved path.
   - Place sub-project files inside the parent project's directory, not alongside it (e.g. `Parent/Child.yaml`, not `Child.yaml` next to `Parent.yaml`).
-  - A @DuckspecProject may reference an external @DuckspecProject by its `repository` URL (e.g. `https://github.com/user/repo`); the resolver looks up the URL in `~/.duckspec/workspace.yaml` to find the local path. If no workspace entry exists, the entry is skipped with a warning.
+  - "A @DuckspecProject may reference an external @DuckspecProject by its `repository` URL (e.g. `https://github.com/user/repo`); the resolver looks up the URL in the active @Workspace's `projects` map, read from `~/.duckspec/settings.json`, to find the local path. If no entry exists there, the entry is skipped with a warning."
 ai_instructions:
   - When first opening an @DuckspecProject, invoke all recipes listed in `startup` before doing anything else.
   - For any @Term not covered after loading, read its file individually on demand. If only one named element is needed (a single recipe, function, or component) rather than the whole term, prefer @DuckToolsApp#resolver#resolve_path(ref=<TermName>#<path>) over loading the entire term — it resolves directly to the target element without pulling in transitive dependencies that would otherwise be discarded unread.
@@ -21,7 +21,7 @@ contains:
   - name: startup
     description: list of @Recipe names to invoke automatically before any other work when first opening the @DuckspecProject
   - name: uses
-    description: list of paths or repository URLs to other @DuckspecProject files this project uses; entries may be relative paths (e.g. `../OtherProject.yaml`) or repository URLs (e.g. `https://github.com/user/repo`) resolved via `~/.duckspec/workspace.yaml`; all are loaded unconditionally when this project is loaded
+    description: list of paths or repository URLs to other @DuckspecProject files this project uses; entries may be relative paths (e.g. `../OtherProject.yaml`) or repository URLs (e.g. `https://github.com/user/repo`) resolved via the active @Workspace in `~/.duckspec/settings.json`; all are loaded unconditionally when this project is loaded
   - name: workflow
     description: delivery workflow for this project; `type:` references a @DuckWorkflow subtype (e.g. `@GitHubWorkflow`); all other fields are property overrides — omit any that should be inferred from context
   - name: versioning
@@ -30,6 +30,7 @@ recipes:
   - name: load
     description: Loads an overview of this @DuckspecProject into context — root file content, term list with descriptions, available recipes, and all active rules (guidelines and ai_instructions); then loads specific terms on demand as work requires
     instructions:
+      - "If this project's own `repository` is not a key in the active @Workspace's `projects` (per `~/.duckspec/settings.json`): ask the user whether to switch to a workspace that already has it (Invoke @DuckTools#use_workspace), or register it in the current one (Invoke @Workspace#add_project)"
       - Invoke @DuckToolsApp#resolver#load_project(project_path=<path to this @DuckspecProject file>)
       - Load additional terms on demand via @DuckToolsApp#resolver#load_terms(project_path=<path>, term_names=<names>)
   - name: check_guidelines
@@ -91,10 +92,11 @@ recipes:
       - If the file at `settings.readme` does not exist, Invoke @DuckspecProject#create_readme()
       - If the file exists, apply only the necessary edits to bring its name, description, and goals in sync with the @DuckspecProject definition; leave all other content untouched
   - name: assess_coverage
-    description: Analyzes source files and generates or updates @Term definitions detailed enough that running `build` on the result would recreate the project faithfully. Idempotent — can be run multiple times to refine or update existing terms.
+    description: Analyzes source files and generates or updates @Term definitions detailed enough that running `build` on the result would recreate the project faithfully; also detects and fills in project-level metadata (`repository`, `workflow`) when not yet set, registering the project in the active workspace once a repository is known. Idempotent — can be run multiple times to refine or update existing terms.
     instructions:
       - Invoke @DuckToolsApp#resolver#list_terms(project_path=<path>, all=true) to get all term names; then invoke @DuckToolsApp#resolver#load_terms(project_path=<path>, term_names=<all names from previous step>) to load their content; if the output was truncated and saved to a file, read that file completely before proceeding
       - Read `src` from settings.src; if not set, default to `..` relative to this @DuckspecProject file's location; confirm the resolved path with the user before proceeding
+      - "If `repository` is not already set: attempt `git remote get-url origin` inside `src`; if it resolves, normalize it to an `https://` URL and ask the user to confirm before setting `repository`. If confirmed, derive `workflow.type` from the host — `@GitHubWorkflow` for github.com, `@GerritWorkflow` for a recognized Gerrit host, `@GitWorkflow` otherwise — and ask the user to confirm the derived workflow before setting it. If no remote is found, leave both unset and continue — nothing below depends on them. Either way, once `repository` is set (just now, or already): Invoke @Workspace#add_project(project_path=<path to this file>) on the active workspace, so this project becomes cross-referenceable."
       - Scan all files in `src` recursively; skip subfolders that contain a @DuckspecProject installation (Duckspec.yaml present); assign each file to exactly one category from file-categories
       - Classify each code file using the most specific pattern from code-patterns; use the same priority order as the list; note every file where the closest available pattern is a stretch — where using it would hide the real concept rather than describe it
       - For each noted gap, draft a proposed @Term (name, description, extends, properties, contains) and classify its scope using the framework guidelines: global (@Duckspec framework) if the concept is standard CS vocabulary, stack-agnostic, and universally understandable; project-local otherwise; then present all proposed terms as a multi-select checklist — each item shows the term name, a one-line description, and the proposed scope (global → PR to duckspec / local → project terms_folder) — and ask the user to select which terms to create; skip unselected terms entirely; for selected global terms: write the term files and create a pull request to the duckspec repository via `gh pr create --repo komorebinator/duckspec` with a description explaining what each term represents and why it belongs in the framework; for selected local terms: write the term files to the appropriate sub-project `settings.terms_folder`

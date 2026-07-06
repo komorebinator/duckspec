@@ -84,6 +84,57 @@ _TOOLS = [
             'required': ['project_path', 'ref'],
         },
     },
+    {
+        'name': 'create_workspace',
+        'description': 'Add a new named, empty workspace to the shared ~/.duckspec/settings.json registry',
+        'inputSchema': {
+            'type': 'object',
+            'properties': {
+                'name': {'type': 'string', 'description': 'unique name for the new workspace'},
+            },
+            'required': ['name'],
+        },
+    },
+    {
+        'name': 'use_workspace',
+        'description': 'Switch the active workspace — the one whose projects are used to resolve repository URL references',
+        'inputSchema': {
+            'type': 'object',
+            'properties': {
+                'name': {'type': 'string', 'description': 'name of an existing workspace to activate'},
+            },
+            'required': ['name'],
+        },
+    },
+    {
+        'name': 'list_workspaces',
+        'description': 'List every registered workspace, its projects, and which one is active',
+        'inputSchema': {'type': 'object', 'properties': {}},
+    },
+    {
+        'name': 'add_project',
+        'description': "Register a project (by its own `repository` field) in a workspace",
+        'inputSchema': {
+            'type': 'object',
+            'properties': {
+                **_PROJECT_PATH_PROP,
+                'workspace': {'type': 'string', 'description': 'workspace to add to; defaults to the active workspace'},
+            },
+            'required': ['project_path'],
+        },
+    },
+    {
+        'name': 'remove_project',
+        'description': 'Remove a project from a workspace by its repository URL',
+        'inputSchema': {
+            'type': 'object',
+            'properties': {
+                'repository': {'type': 'string', 'description': 'repository URL of the project to remove'},
+                'workspace': {'type': 'string', 'description': 'workspace to remove from; defaults to the active workspace'},
+            },
+            'required': ['repository'],
+        },
+    },
 ]
 
 
@@ -120,7 +171,40 @@ def _format_term_blocks(terms: list[dict]) -> str:
     )
 
 
+def _format_workspaces(result: dict) -> str:
+    lines = []
+    for wname, workspace in result['workspaces'].items():
+        marker = '*' if wname == result['active_workspace'] else ' '
+        lines.append(f"{marker} {wname}")
+        for repository, path in workspace.get('projects', {}).items():
+            lines.append(f"    {repository} -> {path}")
+    return '\n'.join(lines) if lines else '(no workspaces registered)'
+
+
 def _call(name: str, arguments: dict) -> str:
+    if name == 'create_workspace':
+        resolver.create_workspace(arguments['name'])
+        return f"created workspace \"{arguments['name']}\""
+
+    if name == 'use_workspace':
+        if resolver.use_workspace(arguments['name']):
+            return f"active workspace: {arguments['name']}"
+        return f"no such workspace: {arguments['name']}"
+
+    if name == 'list_workspaces':
+        return _format_workspaces(resolver.list_workspaces())
+
+    if name == 'add_project':
+        repository = resolver.add_project(arguments['project_path'], arguments.get('workspace'))
+        if repository is None:
+            return f"could not register {arguments['project_path']} — missing `repository` field or no active workspace"
+        return f"registered {repository} -> {arguments['project_path']}"
+
+    if name == 'remove_project':
+        if resolver.remove_project(arguments['repository'], arguments.get('workspace')):
+            return f"removed {arguments['repository']}"
+        return f"not found: {arguments['repository']}"
+
     path = arguments['project_path']
     include_all = bool(arguments.get('all', False))
 

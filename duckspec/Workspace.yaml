@@ -1,0 +1,26 @@
+name: Workspace
+description: A named group of @DuckspecProject files that reference each other without any local vendored copy — resolved by repository URL against a shared registry rather than relative paths.
+extends: @Settings
+properties:
+  - name: name
+    required: true
+    description: unique identifier for this workspace within the registry
+  - name: projects
+    required: true
+    description: map of repository URL to the local path of that project's @DuckspecProject file
+recipes:
+  - name: add_project
+    description: Registers a project in this workspace, keyed by its own repository URL
+    arguments:
+      - name: project_path
+        description: path to the @DuckspecProject file to register
+    instructions:
+      - Read `repository` from the file at project_path; if absent, ask the user for the repository URL
+      - Write `{repository: project_path}` into this workspace's `projects` in `~/.duckspec/settings.json`
+  - name: remove_project
+    description: Removes a project from this workspace
+    arguments:
+      - name: repository
+        description: repository URL of the project to remove
+    instructions:
+      - Delete the entry for `repository` from this workspace's `projects` in `~/.duckspec/settings.json`

@@ -1,3 +1,4 @@
+import json
 import re
 from pathlib import Path
 from typing import Iterator
@@ -6,13 +7,13 @@ _TERM_REF = re.compile(r'@([A-Z][A-Za-z]+)')
 _TERMS_FOLDER = re.compile(r'^\s*terms_folder:\s*(\S+)', re.MULTILINE)
 _USES_BLOCK = re.compile(r'^uses:\n((?:[ \t]+-[ \t]+\S+\n?)+)', re.MULTILINE)
 _LIST_ITEM = re.compile(r'-\s+(\S+)')
-_WORKSPACE_ENTRY = re.compile(r'^\s+(https?://\S+):\s*(\S+)', re.MULTILINE)
+_REPOSITORY = re.compile(r'^repository:\s*(\S+)', re.MULTILINE)
 _DESCRIPTION = re.compile(r'^description:\s*(.+)$', re.MULTILINE)
 _RECIPES_BLOCK = re.compile(r'^recipes:\n((?:[ \t].+\n?)*)', re.MULTILINE)
 _GUIDELINES_BLOCK = re.compile(r'^guidelines:\n((?:[ \t].+\n?)*)', re.MULTILINE)
 _AI_INSTRUCTIONS_BLOCK = re.compile(r'^ai_instructions:\n((?:[ \t].+\n?)*)', re.MULTILINE)
 
-_WORKSPACE_PATH = Path.home() / '.duckspec' / 'workspace.yaml'
+_SETTINGS_PATH = Path.home() / '.duckspec' / 'settings.json'
 
 
 def _parse_list_block(content: str, pattern: re.Pattern) -> list[str]:
@@ -69,14 +70,30 @@ def _extract_named_block(content: str, name: str) -> str | None:
     return '\n'.join(lines[start:end]).rstrip()
 
 
-def _load_workspace() -> dict[str, Path]:
-    if not _WORKSPACE_PATH.is_file():
-        return {}
+def _load_settings() -> dict:
+    if not _SETTINGS_PATH.is_file():
+        return {'active_workspace': None, 'workspaces': {}, 'ducktools': {}}
     try:
-        text = _WORKSPACE_PATH.read_text()
-        return {url: Path(p) for url, p in _WORKSPACE_ENTRY.findall(text)}
+        settings = json.loads(_SETTINGS_PATH.read_text())
     except Exception:
+        return {'active_workspace': None, 'workspaces': {}, 'ducktools': {}}
+    settings.setdefault('active_workspace', None)
+    settings.setdefault('workspaces', {})
+    settings.setdefault('ducktools', {})
+    return settings
+
+
+def _save_settings(settings: dict) -> None:
+    _SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    _SETTINGS_PATH.write_text(json.dumps(settings, indent=2) + '\n')
+
+
+def _active_projects(settings: dict) -> dict[str, Path]:
+    active = settings.get('active_workspace')
+    workspace = settings.get('workspaces', {}).get(active)
+    if workspace is None:
         return {}
+    return {url: Path(p) for url, p in workspace.get('projects', {}).items()}
 
 
 def _resolve_entry(sub: str, base: Path, workspace: dict[str, Path]) -> Path | None:
@@ -89,9 +106,6 @@ def _resolve_entry(sub: str, base: Path, workspace: dict[str, Path]) -> Path | N
 
 
 class Resolver:
-    def __init__(self) -> None:
-        self._workspace = _load_workspace()
-
     def _collect(self, project_path: Path) -> tuple[list[Path], list[Path]]:
         """Returns (term_folders, project_files) discovered recursively."""
         folders: list[Path] = []
@@ -116,7 +130,7 @@ class Resolver:
             m = _USES_BLOCK.search(text)
             if m:
                 for sub in _LIST_ITEM.findall(m.group(1)):
-                    sub_path = _resolve_entry(sub, path.parent, self._workspace)
+                    sub_path = _resolve_entry(sub, path.parent, _active_projects(_load_settings()))
                     if sub_path is not None:
                         project_files.append(sub_path)
                         queue.append(sub_path)
@@ -154,7 +168,7 @@ class Resolver:
             m = _USES_BLOCK.search(content)
             if m:
                 for sub in _LIST_ITEM.findall(m.group(1)):
-                    sub_path = _resolve_entry(sub, path.parent, self._workspace)
+                    sub_path = _resolve_entry(sub, path.parent, _active_projects(_load_settings()))
                     if sub_path is None:
                         continue
                     name = sub_path.stem
@@ -287,6 +301,55 @@ class Resolver:
             content = block
 
         return {'name': term_name, 'path': str(term_path), 'ref': ref, 'content': content}
+
+    def create_workspace(self, name: str, activate: bool = True) -> None:
+        settings = _load_settings()
+        settings['workspaces'].setdefault(name, {'projects': {}})
+        if activate or settings.get('active_workspace') is None:
+            settings['active_workspace'] = name
+        _save_settings(settings)
+
+    def use_workspace(self, name: str) -> bool:
+        settings = _load_settings()
+        if name not in settings['workspaces']:
+            return False
+        settings['active_workspace'] = name
+        _save_settings(settings)
+        return True
+
+    def list_workspaces(self) -> dict:
+        settings = _load_settings()
+        return {'active_workspace': settings.get('active_workspace'), 'workspaces': settings.get('workspaces', {})}
+
+    def add_project(self, project_path: str, workspace_name: str | None = None) -> str | None:
+        """Registers project_path under its own `repository` in workspace_name (or the active workspace). Returns the repository URL used, or None if the project has no `repository` field."""
+        try:
+            content = Path(project_path).read_text()
+        except Exception:
+            content = ''
+        m = _REPOSITORY.search(content)
+        if not m:
+            return None
+        repository = m.group(1)
+
+        settings = _load_settings()
+        name = workspace_name or settings.get('active_workspace')
+        if name is None:
+            return None
+        settings['workspaces'].setdefault(name, {'projects': {}})
+        settings['workspaces'][name].setdefault('projects', {})[repository] = str(Path(project_path).resolve())
+        _save_settings(settings)
+        return repository
+
+    def remove_project(self, repository: str, workspace_name: str | None = None) -> bool:
+        settings = _load_settings()
+        name = workspace_name or settings.get('active_workspace')
+        workspace = settings.get('workspaces', {}).get(name)
+        if workspace is None or repository not in workspace.get('projects', {}):
+            return False
+        del workspace['projects'][repository]
+        _save_settings(settings)
+        return True
 
 
 resolver = Resolver()

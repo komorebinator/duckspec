@@ -24,6 +24,10 @@ tests:
     description: resolves a Term#path reference to a single nested element's raw block, without loading the whole term or its transitive dependencies
     command: "python3 -m ducktools resolve-path Duckspec.yaml DuckspecProject#validate"
     expect: output contains the `- name: validate` block and its `instructions:`, and does not contain unrelated recipes such as `create_readme`
+  - name: list-workspaces
+    description: lists registered workspaces and their projects, read-only
+    command: "python3 -m ducktools list-workspaces"
+    expect: exits successfully; prints `(no workspaces registered)` if ~/.duckspec/settings.json has no workspaces, otherwise one line per workspace with its `repository -> path` entries indented beneath
 components:
   - name: resolver
     type: @Singleton
@@ -40,15 +44,49 @@ components:
         arguments:
           - name: content
             description: raw text content of a term .yaml file
-      - name: _load_workspace
-        description: "Reads `~/.duckspec/workspace.yaml` and returns a dict mapping repository URLs to local @DuckspecProject file paths. Parses with regex (`^\\s+(https?://\\S+):\\s*(\\S+)`). Returns an empty dict if the file does not exist or cannot be read."
+      - name: _load_settings
+        description: "Reads `~/.duckspec/settings.json` (stdlib `json`, no YAML parser needed — this file is tool-managed, never hand-authored). Returns `{active_workspace: str|None, workspaces: dict, ducktools: dict}`; missing keys are defaulted to empty/None so callers never need to guard. Returns the same default shape if the file is absent or unparseable."
+      - name: _save_settings
+        description: "Writes the given settings dict back to `~/.duckspec/settings.json` as indented JSON, creating the parent `~/.duckspec/` directory if needed."
+        arguments:
+          - name: settings
+            description: the full settings dict, as returned by _load_settings
+      - name: _active_projects
+        description: "Extracts the active workspace's `projects` map from a settings dict (as returned by _load_settings) and returns it as `dict[str, Path]`. Returns an empty dict if there is no active workspace or it has no `projects` entry."
+        arguments:
+          - name: settings
+            description: settings dict, as returned by _load_settings
       - name: _resolve_entry
-        description: "Resolves a single `uses:` entry to a local Path. If `sub` starts with `http://` or `https://`, looks it up in the workspace dict; prints a warning and returns None if not found. Otherwise resolves `sub` relative to `base` (the directory of the current file). Returns None if the entry cannot be resolved."
+        description: "Resolves a single `uses:` entry to a local Path. If `sub` starts with `http://` or `https://`, looks it up in the workspace dict (the active workspace's projects, read fresh via _load_settings/_active_projects on every call — never cached, so use_workspace/add_project take effect immediately); prints a warning and returns None if not found. Otherwise resolves `sub` relative to `base` (the directory of the current file). Returns None if the entry cannot be resolved."
         arguments:
           - name: sub
             description: raw string from the `uses:` list — either a relative path or a repository URL
           - name: base
             description: directory of the file containing the `uses:` entry
+      - name: _collect
+        description: "BFS from `project_path`, deduped by resolved path. For each visited file: if it declares `terms_folder:`, records the resolved directory (if it exists) as a term folder; if it has a `uses:` block, resolves each entry via _resolve_entry (against the active workspace's projects) into `project_files` and queues the resolved files for further traversal. Returns `(term_folders, project_files)` — the raw ingredients _build_term_map combines into the name→path map."
+        arguments:
+          - name: project_path
+            description: path to a @DuckspecProject .yaml file
+      - name: _build_term_map
+        description: "Calls _collect, then builds the name→path map: `project_files` (from `uses:`) are added first via setdefault, so they win on conflict; then every `.yaml` file in each term folder is added in sorted order, printing a warning (not an error) if a name collides with a different file already in the map."
+        arguments:
+          - name: project_path
+            description: path to a @DuckspecProject .yaml file
+      - name: _reachable
+        description: "BFS from `project_path` computing the subset of `term_map` actually reachable — distinct from _collect/_build_term_map's raw discovery. For each visited file's content: resolves every `uses:` entry the same way as _collect and queues newly found files; separately, scans the entire content for any `@TermName` mention — not only inside a `uses:`/`software:` list, anywhere in prose (a guideline, a description, an instruction) — and for each name present in `term_map`, adds it to the reachable set and queues its file too. This mention-based half is why a term becomes reachable simply by being referenced in passing, without being formally declared in any structured list. Used by _walk_terms unless include_all is set, in which case the full term_map is used instead and this function is skipped entirely."
+        arguments:
+          - name: project_path
+            description: path to a @DuckspecProject .yaml file
+          - name: term_map
+            description: name→path map, as returned by _build_term_map
+      - name: _reachable_from
+        description: "The same `@TermName`-mention BFS as the second half of _reachable, but seeded from an explicit list of files instead of walking `uses:` from a project root — no `uses:` resolution happens here at all, purely reference-chasing from the given seeds. Used by load_terms to find the transitive closure of a specific set of requested term names."
+        arguments:
+          - name: seeds
+            description: list of file paths to start the BFS from
+          - name: term_map
+            description: name→path map, as returned by _build_term_map
       - name: _walk_terms
         description: "Generator that builds the term map and reachable set, then yields (name, path, content) for each reachable term, reading each file exactly once. All content-extraction methods use this as their single traversal primitive to avoid re-reading files. If include_all is true, yields all terms in the term map instead of only reachable ones."
         arguments:
@@ -98,11 +136,39 @@ components:
             description: path to a @DuckspecProject .yaml file; used to build the term map
           - name: ref
             description: "reference in the form `TermName#segment#segment...` (e.g. `DuckspecProject#validate` or `DuckToolsApp#resolver#load_project`); leading `@` on the term name is optional"
-  - name: workspace
+      - name: create_workspace
+        description: "Adds `name` to `workspaces` in the settings file with an empty `projects` map (no-op if it already exists). Sets `active_workspace` to `name` if `activate` is true or there was no active workspace yet."
+        arguments:
+          - name: name
+            description: unique name for the new workspace
+          - name: activate
+            description: if true, also make this the active workspace; default true
+      - name: use_workspace
+        description: "Sets `active_workspace` to `name` and saves. Returns false without writing if `name` is not a key under `workspaces`; true otherwise."
+        arguments:
+          - name: name
+            description: name of an existing workspace to activate
+      - name: list_workspaces
+        description: "Returns `{active_workspace, workspaces}` straight from the settings file, for the caller to format."
+      - name: add_project
+        description: "Reads `repository:` from the file at `project_path` via regex; returns None (no write) if absent. Otherwise resolves the target workspace (the given `workspace_name`, or the active workspace if omitted; returns None if neither resolves), creates it if missing, and sets `projects[repository] = str(project_path.resolve())`. Returns the repository URL used."
+        arguments:
+          - name: project_path
+            description: path to the @DuckspecProject file to register
+          - name: workspace_name
+            description: workspace to add to; defaults to the active workspace
+      - name: remove_project
+        description: "Deletes `repository` from the resolved workspace's `projects` (given `workspace_name`, or the active workspace). Returns false without writing if the workspace or the entry does not exist; true otherwise."
+        arguments:
+          - name: repository
+            description: repository URL of the project to remove
+          - name: workspace_name
+            description: workspace to remove from; defaults to the active workspace
+  - name: settings
     type: @ConfigFile
-    format: YAML
-    src: ~/.duckspec/workspace.yaml
-    description: "Optional user-local file mapping repository URLs to local @DuckspecProject file paths. Created manually by the developer; gitignored. Format: a `projects` key containing a mapping of `<repository URL>: <absolute path to the @DuckspecProject .yaml file>`. Loaded once at resolver startup; if absent, URL-based `uses:` entries are skipped with a warning."
+    format: JSON
+    src: ~/.duckspec/settings.json
+    description: "Tool-managed registry, never hand-edited: `{active_workspace: str, workspaces: {name: {projects: {repository_url: local_path}}}, ducktools: {src, bin}}`. `workspaces` groups @DuckspecProject files that reference each other by repository URL, resolved via the currently active one; `ducktools.src` is the canonical framework clone's `ducktools/` directory, and `ducktools.bin` is the path to the small stdlib wrapper script that puts the `ducktools` command on PATH — no pip, no venv, no build step (see @Duckspec#install). Read fresh on every resolution, not cached; created on first write by create_workspace/add_project."
   - name: cli
     type: @Application
     functions:
@@ -142,10 +208,36 @@ components:
           - name: ref
             description: "reference in the form `TermName#segment#segment...`"
       - name: serve
-        description: "Command `ducktools serve <project_path>`; starts the MCP server in stdio mode; project_path is accepted by the CLI but currently unused — the server accepts any project_path per MCP request via the tools/call arguments"
+        description: "Command `ducktools serve [project_path]`; starts the MCP server in stdio mode; project_path is optional and unused — the server accepts any project_path per MCP request via the tools/call arguments"
         arguments:
           - name: project_path
-            description: path to a @DuckspecProject .yaml file
+            description: unused; accepted for backward compatibility with existing .mcp.json registrations
+      - name: create-workspace
+        description: "Command `ducktools create-workspace <name>`; calls resolver#create_workspace"
+        arguments:
+          - name: name
+            description: unique name for the new workspace
+      - name: use-workspace
+        description: "Command `ducktools use-workspace <name>`; calls resolver#use_workspace; prints the new active workspace or `no such workspace: <name>`"
+        arguments:
+          - name: name
+            description: name of an existing workspace to activate
+      - name: list-workspaces
+        description: "Command `ducktools list-workspaces`; calls resolver#list_workspaces; prints each workspace name (active one marked with `*`) followed by its `repository -> path` entries"
+      - name: add-project
+        description: "Command `ducktools add-project <project_path> [--workspace NAME]`; calls resolver#add_project"
+        arguments:
+          - name: project_path
+            description: path to the @DuckspecProject file to register
+          - name: --workspace
+            description: workspace to add to; defaults to the active workspace
+      - name: remove-project
+        description: "Command `ducktools remove-project <repository> [--workspace NAME]`; calls resolver#remove_project"
+        arguments:
+          - name: repository
+            description: repository URL of the project to remove
+          - name: --workspace
+            description: workspace to remove from; defaults to the active workspace
   - name: mcp_server
     type: @Server
     functions:
@@ -184,3 +276,34 @@ components:
             description: path to a @DuckspecProject .yaml file
           - name: ref
             description: "reference in the form `TermName#segment#segment...`"
+      - name: create_workspace
+        description: "MCP tool `create_workspace`; calls resolver#create_workspace"
+        arguments:
+          - name: name
+            description: unique name for the new workspace
+      - name: use_workspace
+        description: "MCP tool `use_workspace`; calls resolver#use_workspace; returns the new active workspace or a not-found message"
+        arguments:
+          - name: name
+            description: name of an existing workspace to activate
+      - name: list_workspaces
+        description: "MCP tool `list_workspaces`; calls resolver#list_workspaces; returns each workspace name (active one marked with `*`) followed by its `repository -> path` entries"
+      - name: add_project
+        description: "MCP tool `add_project`; calls resolver#add_project"
+        arguments:
+          - name: project_path
+            description: path to the @DuckspecProject file to register
+          - name: workspace
+            description: workspace to add to; defaults to the active workspace
+      - name: remove_project
+        description: "MCP tool `remove_project`; calls resolver#remove_project"
+        arguments:
+          - name: repository
+            description: repository URL of the project to remove
+          - name: workspace
+            description: workspace to remove from; defaults to the active workspace
+  - name: install-script
+    type: @ShellScript
+    interpreter: bash
+    src: ../install.sh
+    description: "Classic, non-interactive, platform-agnostic installer — the scripted equivalent of the bootstrap portion of @Duckspec#install. Takes one argument, the path to clone the framework into (clones only if that path does not already exist; reuses it otherwise — idempotent). Picks the wrapper's install directory by checking which conventional bin dir is already on `$PATH` — tries `~/.local/bin`, `~/bin`, `/opt/homebrew/bin`, `/usr/local/bin` in that order (covers Linux and both Intel/Apple Silicon Homebrew layouts without any OS detection) — falling back to `~/.local/bin` if none match, and warning (non-fatally) if that fallback isn't on PATH either. Writes the same stdlib wrapper script described in @Duckspec#install there and updates `ducktools.src`/`ducktools.bin` in `~/.duckspec/settings.json` — reusing resolver#_load_settings/_save_settings via an inline `python3` call rather than reimplementing JSON handling in bash, so the schema can never drift between the two. Creates a `default` workspace and activates it only if no workspace exists yet; never touches an existing one. No `git`/`python3` are new requirements — both are already implied by working with this framework at all."

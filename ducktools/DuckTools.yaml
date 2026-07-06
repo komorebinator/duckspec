@@ -13,11 +13,11 @@ lists:
   - name: installation-methods
     items:
       - name: mcp
-        description: register ducktools as an MCP server in the model's tool configuration; the server is started with `python3 -m ducktools serve <project_path>` from the ducktools/src directory
+        description: "register ducktools as an MCP server in the model's tool configuration; the server is started with `ducktools serve` — no project_path or PYTHONPATH needed, `ducktools` is a real on-PATH binary (see @Duckspec#install) and every MCP call carries its own project_path argument"
       - name: memory
         description: write `../AGENTS.md` into any persistent memory location available to the current model
       - name: claude
-        description: register via mcp method first, then append a project entry to ~/.claude/CLAUDE.md noting the project path and that MCP tools (load_project, list_terms, load_terms, grep_terms) are available; create the file if it does not exist
+        description: register via mcp method first, then append a project entry to ~/.claude/CLAUDE.md noting the project path and that MCP tools (load_project, list_terms, load_terms, grep_terms, resolve_path) are available; create the file if it does not exist
 guidelines:
   - Zero external dependencies; only Python stdlib is allowed for all features including the MCP server.
   - "@DuckspecProject files and @Term files are read as plain text; field extraction is done with regex, not a YAML parser."
@@ -35,7 +35,7 @@ recipes:
       - name: project_path
         description: path to a @DuckspecProject .yaml file
     instructions:
-      - Run `PYTHONPATH=<path to ducktools/src> python3 -m ducktools <command> <project_path>`
+      - "If `ducktools.bin` is set in `~/.duckspec/settings.json`, run `ducktools <command> <project_path>` directly. Otherwise run `PYTHONPATH=<ducktools.src from settings, or the local ducktools/src> python3 -m ducktools <command> <project_path>`."
   - name: install
     description: Installs DuckTools so it is available in future sessions
     arguments:
@@ -45,6 +45,28 @@ recipes:
         description: path to the @DuckspecProject .yaml file to register
     instructions:
       - Ask the user for `method` if not provided; execute the chosen method from installation-methods
+  - name: create_workspace
+    description: Adds a new named, empty workspace to the shared registry
+    arguments:
+      - name: name
+        description: unique name for the new workspace
+    instructions:
+      - Read `~/.duckspec/settings.json` (create it with empty `workspaces` and no `active_workspace` if it does not exist)
+      - Add `name` under `workspaces` with an empty `projects` map; if this is the first workspace or the user confirms, set `active_workspace` to `name`
+      - Write the settings file back
+  - name: use_workspace
+    description: Switches the active workspace — the one whose `projects` registry is used to resolve `repository` URL references
+    arguments:
+      - name: name
+        description: name of an existing workspace to activate
+    instructions:
+      - Read `~/.duckspec/settings.json`; if `name` is not a key under `workspaces`, tell the user and stop
+      - Set `active_workspace` to `name` and write the file back
+  - name: list_workspaces
+    description: Displays every registered workspace, its projects, and which one is active
+    instructions:
+      - Read `~/.duckspec/settings.json`
+      - Output each workspace name (marking the active one), followed by its `projects` as a `repository → path` list
 settings:
   terms_folder: ducktools
 software:
