@@ -10,10 +10,27 @@ def _print_terms_table(terms: list[dict]) -> None:
         print(f"| @{t['name']} | {t['path']} | {t.get('description', '')} |")
 
 
+def _format_rules_tree(term_name: str, tree: dict) -> str:
+    lines = [f'## Rules for @{term_name}']
+    if not tree['own'] and not tree['inherited']:
+        lines.append('(none)')
+        return '\n'.join(lines)
+    if tree['own']:
+        lines.append('own:')
+        lines += [f"  - {r['type']}: {r['text']}" for r in tree['own']]
+    for group in tree['inherited']:
+        lines.append(f"inherited from @{group['term']}:")
+        lines += [f"  - {r['type']}: {r['text']}" for r in group['rules']]
+    return '\n'.join(lines)
+
+
 def _print_term_blocks(terms: list[dict]) -> None:
     for t in terms:
         print(f"--- @{t['name']} [{t['path']}] ---")
         print(t['content'])
+        if 'rules' in t:
+            print()
+            print(_format_rules_tree(t['name'], t['rules']))
 
 
 def _print_recipes_table(recipes: list[dict]) -> None:
@@ -30,6 +47,13 @@ def _print_rules_table(rules: list[dict]) -> None:
         print(f"| @{r['term']} | {r['type']} | {r['text']} |")
 
 
+def _print_references_table(references: list[dict]) -> None:
+    print('| Term | Repository | Description |')
+    print('|------|------------|-------------|')
+    for r in references:
+        print(f"| @{r['term']} | {r['repository']} | {r.get('description', '')} |")
+
+
 def cmd_load_project(project_path: str) -> None:
     result = resolver.load_project(project_path)
     print(result['root_content'])
@@ -37,7 +61,9 @@ def cmd_load_project(project_path: str) -> None:
     _print_terms_table(result['terms'])
     print('\n## Recipes\n')
     _print_recipes_table(result['recipes'])
-    print('\n## Rules\n')
+    print('\n## References\n')
+    _print_references_table(result['references'])
+    print('\n## Rules (project-wide)\n')
     _print_rules_table(result['rules'])
 
 
@@ -79,14 +105,21 @@ def cmd_use_workspace(name: str) -> None:
         print(f'no such workspace: {name}')
 
 
-def cmd_list_workspaces() -> None:
-    result = resolver.list_workspaces()
+def cmd_list_projects() -> None:
+    result = resolver.list_projects()
     active = result['active_workspace']
     for name, workspace in result['workspaces'].items():
-        marker = '*' if name == active else ' '
-        print(f"{marker} {name}")
-        for repository, path in workspace.get('projects', {}).items():
-            print(f"    {repository} -> {path}")
+        marker = ' (active)' if name == active else ''
+        print(f"\n## {name}{marker}\n")
+        projects = workspace.get('projects', [])
+        if not projects:
+            print('(empty)')
+            continue
+        print('| Project | Repository | Path | Description |')
+        print('|---------|------------|------|-------------|')
+        for proj in projects:
+            label = f"@{proj['name']}" if proj['name'] else '(unreadable — stale path?)'
+            print(f"| {label} | {proj['repository']} | {proj['path']} | {proj.get('description', '')} |")
 
 
 def cmd_add_project(project_path: str, workspace_name: str | None = None) -> None:
@@ -133,7 +166,7 @@ def main() -> None:
 
     sub.add_parser('use-workspace').add_argument('name')
 
-    sub.add_parser('list-workspaces')
+    sub.add_parser('list-projects')
 
     p = sub.add_parser('add-project')
     p.add_argument('project_path')
@@ -162,8 +195,8 @@ def main() -> None:
         cmd_create_workspace(args.name)
     elif args.command == 'use-workspace':
         cmd_use_workspace(args.name)
-    elif args.command == 'list-workspaces':
-        cmd_list_workspaces()
+    elif args.command == 'list-projects':
+        cmd_list_projects()
     elif args.command == 'add-project':
         cmd_add_project(args.project_path, args.workspace_name)
     elif args.command == 'remove-project':

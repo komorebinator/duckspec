@@ -62,11 +62,11 @@ recipes:
     instructions:
       - Read `~/.duckspec/settings.json`; if `name` is not a key under `workspaces`, tell the user and stop
       - Set `active_workspace` to `name` and write the file back
-  - name: list_workspaces
-    description: Displays every registered workspace, its projects, and which one is active
+  - name: list_projects
+    description: Displays every project registered across all workspaces, grouped by workspace, marking which one is active
     instructions:
       - Read `~/.duckspec/settings.json`
-      - Output each workspace name (marking the active one), followed by its `projects` as a `repository → path` list
+      - For each workspace (marking the active one): for each registered project, read its file and output `@Name — description` followed by its `repository → path`
 settings:
   terms_folder: ducktools
 software:

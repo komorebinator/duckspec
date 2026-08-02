@@ -12,7 +12,7 @@ uses:
   - duckspec/DuckArch.yaml
   - duckspec/DuckVersion.yaml
   - ducktools/DuckTools.yaml
-version: 0.8.1
+version: 0.9.0
 repository: https://github.com/komorebinator/duckspec
 settings:
   terms_folder: duckspec
@@ -26,8 +26,9 @@ ai_instructions:
   - Never commit or push directly. When the user requests to send, submit, push, or publish changes with an imperative statement ("submit", "push", "send"), always invoke @DuckspecProject#submit() instead. When the user requests a release ("release", "release it"), always invoke @DuckspecProject#release(). Completing a task, permissive phrasing ("we can push", "it's fine to commit"), or confirmation that changes look good do NOT count as a request.
   - Never manually edit the `version` field in any @DuckspecProject file. Version changes must always go through the @DuckspecProject#release recipe, which handles validation and the correct bump calculation.
   - Never save information to external memory. Instead, suggest changes to the @DuckspecProject configuration or term files.
-  - This is the core @Duckspec framework term set. When working with any @DuckspecProject that uses @Duckspec, load this project before any other work.
+  - "When the user's request concerns something not covered by the currently loaded project(s) — a sub-project, an extension, a component referenced only by name or by a `references:` entry — check @DuckToolsApp#resolver#list_projects() for a matching registered project before assuming it's out of scope or asking the user for a path. If found, invoke @DuckToolsApp#resolver#load_project() on it explicitly. This is model-side behavior only — the resolver itself never auto-loads it as a side effect of loading another project."
 guidelines:
+  - "Every change starts in the spec, not the code. Capture the requirement — a new behavior, a fix, a rename — in the relevant @Term first, refining its existing description/properties/functions rather than replacing them, so the spec keeps accumulating the complete, current picture across every task instead of losing what earlier tasks already established. Only once the spec reflects the change, invoke @Software#build to bring the code in line with it — code is produced by build, not maintained in parallel to it. @DuckspecProject#learn and #assess_coverage exist to reconcile gaps discovered after the fact; they are recovery tools for catching up, not the default path for planned changes."
   - All documentation must be written in English.
   - Prefer `@TermName#path#to#element` references over concrete CLI commands, MCP tool names, or other interface-specific syntax in descriptions, recipes, and guidelines; this keeps documentation interface-agnostic and lets the executor choose the appropriate interface. Use concrete syntax only when no term reference exists or when the exact detail is essential.
   - Avoid abbreviations in @Term names; prefer full words (e.g. `Workflow` not `WF`, `Configuration` not `Cfg`, `Repository` not `Repo`).
@@ -89,7 +90,7 @@ recipes:
       - "Read `~/.duckspec/settings.json` (treat a missing file as `{}`). If `ducktools.src` or `ducktools.bin` is unset or points to a missing file: ask the user which folder to clone the framework into (suggest a directory alongside their other projects)"
       - "Fetch @DuckToolsApp#install-script's raw content without executing it, and read it in full. Check for anything unexpected — network access beyond the documented `git clone`, obfuscated code, writes outside the clone path / the chosen bin directory / `~/.duckspec`. If anything looks concerning, explain the specific concern in plain terms and get the user's explicit go-ahead before continuing; otherwise proceed without asking"
       - Run @DuckToolsApp#install-script with the chosen folder as its one argument
-      - Verify it worked — confirm the wrapper file it reports exists and is executable, and that invoking it (e.g. its list-workspaces command) runs without error
+      - Verify it worked — confirm the wrapper file it reports exists and is executable, and that invoking it (e.g. its list-projects command) runs without error
       - "If this executor supports MCP: offer to register the ducktools MCP server, preferring a user-level/global registration over a per-project one wherever the executor's own tooling allows it — the exact registration mechanism is executor-specific, use whatever this assistant provides"
       - "Verify the MCP connection by invoking its `load_project` (or equivalent) tool against the just-cloned `Duckspec.yaml`; confirm real content comes back, then use that same content to briefly summarize Duckspec's goals and top guidelines/ai_instructions for the user — enough to orient them, not the full rules table"
       - "Ask whether to bring in an existing project or start a new one; Invoke @Duckspec#import_project() or @Duckspec#create_project() accordingly"
@@ -113,6 +114,7 @@ recipes:
       - "Create the @DuckspecProject term file named `<ProjectName>.yaml` (matching the `name:` field), with only `name`, `description`, `goals`, `settings`, and `uses` set to `https://github.com/komorebinator/duckspec`; leave `repository`, `workflow`, `versioning`, and `software` unset entirely"
       - Create the terms folder on disk at the path set in `settings.terms_folder`
       - Invoke @DuckspecProject#create_readme() if no readme exists yet, else @DuckspecProject#update_readme()
+      - Invoke @DuckspecProject#update_agents() — so AGENTS.md exists from the moment the project does, before @DuckspecProject#assess_coverage ever runs against it
       - "Report the created file's path back to the caller. This project is not yet registered in any workspace — it has no `repository` for @Workspace#add_project to key on. @DuckspecProject#assess_coverage registers it once one is found."
   - name: import_project
     description: Brings an existing codebase under Duckspec management — creates a minimal project pointed at it via @Duckspec#create_project, then runs a full coverage analysis to fill in the rest

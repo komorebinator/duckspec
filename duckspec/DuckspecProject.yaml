@@ -7,6 +7,7 @@ guidelines:
   - A @DuckspecProject may reference another @DuckspecProject in a different directory via `uses` with a relative path (e.g. `../OtherProject.yaml`); circular references are safe — the resolver deduplicates by resolved path.
   - Place sub-project files inside the parent project's directory, not alongside it (e.g. `Parent/Child.yaml`, not `Child.yaml` next to `Parent.yaml`).
   - "A @DuckspecProject may reference an external @DuckspecProject by its `repository` URL (e.g. `https://github.com/user/repo`); the resolver looks up the URL in the active @Workspace's `projects` map, read from `~/.duckspec/settings.json`, to find the local path. If no entry exists there, the entry is skipped with a warning."
+  - "`uses` and `references` express opposite things and must not be conflated. Use `uses` only when this project's own content genuinely needs the other project's terms to be understood — it is loaded unconditionally, in full. Use `references` when the connection is purely informational (e.g. an external component this project installs, targets, or is installed by) — it is never loaded, only shown, so mentioning another project by identity never forces its content into context. A project that is merely installed or consumed, without its terms being needed to understand this one, belongs in `references`, not `uses` or `software`."
 ai_instructions:
   - When first opening an @DuckspecProject, invoke all recipes listed in `startup` before doing anything else.
   - For any @Term not covered after loading, read its file individually on demand. If only one named element is needed (a single recipe, function, or component) rather than the whole term, prefer @DuckToolsApp#resolver#resolve_path(ref=<TermName>#<path>) over loading the entire term — it resolves directly to the target element without pulling in transitive dependencies that would otherwise be discarded unread.
@@ -22,28 +23,29 @@ contains:
     description: list of @Recipe names to invoke automatically before any other work when first opening the @DuckspecProject
   - name: uses
     description: list of paths or repository URLs to other @DuckspecProject files this project uses; entries may be relative paths (e.g. `../OtherProject.yaml`) or repository URLs (e.g. `https://github.com/user/repo`) resolved via the active @Workspace in `~/.duckspec/settings.json`; all are loaded unconditionally when this project is loaded
+  - name: references
+    description: list of `{repository, description}` entries naming other projects this one is connected to by identity only (installs, targets, is installed by) — never resolved or loaded by the tool; surfaced verbatim in a References table by @DuckspecProject#load so the connection stays visible without pulling that project's content into context
   - name: workflow
     description: delivery workflow for this project; `type:` references a @DuckWorkflow subtype (e.g. `@GitHubWorkflow`); all other fields are property overrides — omit any that should be inferred from context
   - name: versioning
     description: versioning strategy for this project; `type:` references a @VersioningStrategy subtype (e.g. `@SemVer`); all other fields are property overrides
 recipes:
   - name: load
-    description: Loads an overview of this @DuckspecProject into context — root file content, term list with descriptions, available recipes, and all active rules (guidelines and ai_instructions); then loads specific terms on demand as work requires
+    description: Loads an overview of this @DuckspecProject into context — root file content, term list with descriptions, available recipes, and project-wide rules (guidelines and ai_instructions from the root's own `extends` chain and direct `uses`); then loads specific terms on demand as work requires, each bringing its own rules along with it
     instructions:
       - "If this project's own `repository` is not a key in the active @Workspace's `projects` (per `~/.duckspec/settings.json`): ask the user whether to switch to a workspace that already has it (Invoke @DuckTools#use_workspace), or register it in the current one (Invoke @Workspace#add_project)"
       - Invoke @DuckToolsApp#resolver#load_project(project_path=<path to this @DuckspecProject file>)
       - Load additional terms on demand via @DuckToolsApp#resolver#load_terms(project_path=<path>, term_names=<names>)
   - name: check_guidelines
-    description: Checks a single term file against all guidelines and ai_instructions applicable to it, derived from its full inheritance chain
+    description: Checks a single term file against all guidelines and ai_instructions applicable to it — project-wide rules plus its own inheritance chain
     arguments:
       - name: file_path
         description: path to the .yaml term file to check
     instructions:
-      - Identify the term defined in file_path from the already-loaded term data; if not found in context, read the file directly
-      - Build the full inheritance chain by following `extends` recursively through loaded terms until reaching a term with no `extends`
-      - Collect applicable rules from two sources: (1) guidelines and ai_instructions from the term itself and every ancestor in the inheritance chain; (2) all rules from the Rules table already loaded into context via @DuckspecProject#load — these are project-wide rules that apply to every term regardless of inheritance; annotate each rule with its source @Term and deduplicate
+      - Identify the term name from file_path; Invoke @DuckToolsApp#resolver#load_terms(project_path=<path>, term_names=<term name>) to get its content along with an attached `rules` tree — its own guidelines/ai_instructions plus each `extends` ancestor's own, already resolved, no need to walk `extends` by hand
+      - Combine the attached `rules` tree with the project-wide rules already loaded into context via @DuckspecProject#load; deduplicate by rule text
       - For each collected rule: evaluate whether the term's content complies; record each violation with the rule text, source @Term, and a description of the non-compliance
-      - Output a report: file path, term name, inheritance chain, and list of violations (or "no violations" if compliant)
+      - Output a report: file path, term name, inheritance chain (from the `rules` tree's `inherited` entries), and list of violations (or "no violations" if compliant)
   - name: validate
     description: Validates all loaded @Term files against the @DuckspecProject guidelines and runs software tests
     instructions:
@@ -51,7 +53,8 @@ recipes:
       - "For each term file in the loaded output: check that all required @Property fields are present; check that all @TermName references exist in the term map, excluding placeholder examples that illustrate the `#`-path reference syntax itself (e.g. generic names like `@TermName` or `@MyTerm` used in guideline/recipe documentation about the syntax, not as an actual reference to a specific term); check that all `Invoke @TermName#recipe_name()` references resolve to an existing @Recipe; record any structural violations"
       - For each term file in the loaded output: Invoke @DuckspecProject#check_guidelines(file_path=<path>)
       - "For each @Software reachable transitively via `uses:` and `software:` from this project — including sub-projects referenced by relative path or by `repository` URL alike, regardless of which repository they live in: Invoke @Software#test(); a @Software with no `tests:` of its own has nothing to run and is reported as such, so no separate exclusion list is needed"
-      - Report a summary of all violations and test results; fix where possible, ask the user where the correct resolution is ambiguous
+      - Invoke @DuckspecProject#verify_source() — the structural and guideline checks above confirm the spec is well-formed; this confirms it's still accurate against the actual code, so drift doesn't reach submit/release unnoticed
+      - Report a summary of all violations, test results, and verify_source findings; fix where possible, ask the user where the correct resolution is ambiguous
   - name: create_term
     description: Creates a new @Term file in the @DuckspecProject's terms folder
     arguments:
@@ -81,9 +84,10 @@ recipes:
       - Output a markdown table with columns: Source (@TermName link style), Type (Guideline or AI Instruction), Rule (the text)
       - One row per entry, grouped by source term, guidelines before ai_instructions within each group
   - name: update_agents
-    description: Creates or updates AGENTS.md with the command to load this @DuckspecProject
+    description: Creates or updates AGENTS.md with a short guide to this project and to DuckTools — that it's built with @Duckspec, how to load it, and how to see every other project registered in the workspace
     instructions:
-      - Write or overwrite `AGENTS.md` next to this @DuckspecProject file instructing the reader to invoke @DuckToolsApp#resolver#load_project(project_path=<path>) via whichever interface is available (MCP tool or CLI); keep it as brief as possible
+      - "Write or overwrite the file at `settings.agents` (default `AGENTS.md`, next to this @DuckspecProject file) with, in order: (1) an H1 with this project's name; (2) one short paragraph stating the project is built with @Duckspec, that its structure/guidelines/conventions live in @Term files rather than this document, and that DuckTools reads them via an MCP server or the `ducktools` CLI, both exposing the same operations; (3) the command to load this project, in both MCP and CLI form, via @DuckToolsApp#resolver#load_project(project_path=<absolute path to this file>) — the first thing to run before any work; (4) the command to see every project registered across all workspaces, in both MCP and CLI form, via @DuckToolsApp#resolver#list_projects()"
+      - Keep it brief — do not enumerate other DuckTools operations; load_project's own output (its recipes and term list) is where the rest surfaces once the project is actually loaded
   - name: update_readme
     description: Updates the root description file to reflect the current @DuckspecProject definition
     instructions:
@@ -116,7 +120,8 @@ recipes:
       - Verify coverage — for every file in code, config, and asset categories confirm it has a dedicated named entry; a file is NOT covered if it appears only inside another component's description text; list all remaining gaps
       - Output a coverage report as a markdown table in the conversation: total files scanned, covered files (path → term name), skipped files (path → reason), and any remaining gaps
       - Review type precision: for every existing @SoftwareComponent in the covered terms, check whether a more specific @DesignPattern is now available in the term map that better describes the component than its current type; propose re-typing and ask the user to confirm before changing
-      - Verify fidelity: for at least one non-trivial component, actually invoke @Software#build() against an empty/scratch location (not the real `src`) from the spec alone, then diff the result against the real source — do not just mentally simulate it; reconstructing each component's `fields:` as real field/property declarations. Treat naming/formatting/control-flow-shape differences as expected and not worth fixing. Treat these as real gaps and fix the spec when found: (1) a defensive guard or precondition check on an external API call (null/undefined checks, type checks on returned data, range checks) that the description's algorithm steps don't mention — these are exactly the details prose summaries tend to drop; (2) a pervasive cross-cutting convention (logging, a particular event-ordering rule, a naming pattern) that the source applies broadly but no single @Function description states — these belong in `guidelines:`, not in every function individually. If the result differs from the source in any other meaningful way (missing state, wrong shape, wrong algorithm step), add the missing detail.
+      - Invoke @DuckspecProject#verify_source() as a first, cheap pass — catches outright contradictions (renamed/missing functions, stale descriptions) before the deeper, more expensive fidelity check below
+      - Verify fidelity (a deeper check than verify_source's read-only comparison — this one regenerates and diffs, so it also catches omissions verify_source can't see): for at least one non-trivial component, actually invoke @Software#build() against an empty/scratch location (not the real `src`) from the spec alone, then diff the result against the real source — do not just mentally simulate it; reconstructing each component's `fields:` as real field/property declarations. Treat naming/formatting/control-flow-shape differences as expected and not worth fixing. Treat these as real gaps and fix the spec when found: (1) a defensive guard or precondition check on an external API call (null/undefined checks, type checks on returned data, range checks) that the description's algorithm steps don't mention — these are exactly the details prose summaries tend to drop; (2) a pervasive cross-cutting convention (logging, a particular event-ordering rule, a naming pattern) that the source applies broadly but no single @Function description states — these belong in `guidelines:`, not in every function individually. If the result differs from the source in any other meaningful way (missing state, wrong shape, wrong algorithm step), add the missing detail.
   - name: learn
     description: Captures durable knowledge from the current session into spec files — updates existing descriptions, properties, or function documentation when non-obvious facts were confirmed. Does not create new terms; use assess_coverage for that.
     instructions:
@@ -146,6 +151,6 @@ recipes:
       - Read `versioning` from this project; if not set, ask the user to configure it and stop
       - Invoke @VersioningStrategy#next_version(bump=<bump>) to obtain the new version string
       - Update the `version` field in this @DuckspecProject file to the new version string
-      - Invoke @DuckspecProject#submit()
+      - Invoke @DuckspecProject#validate() — @DuckWorkflow#release below already submits the changes itself as part of its own delivery procedure, so this only confirms they're valid first rather than submitting them a second time
       - Read `workflow` from this project; if not set, ask the user to configure it and stop
       - Invoke @DuckWorkflow#release(version=<new_version>)

@@ -5,9 +5,9 @@ platform: Python
 src: ../src/
 tests:
   - name: load-project
-    description: loads the root project file content and lists all reachable terms, recipes, and rules (guidelines + ai_instructions)
+    description: loads the root project file content and lists all reachable terms, recipes, cross-project references, and project-wide rules (guidelines + ai_instructions)
     command: "python3 -m ducktools load-project Duckspec.yaml"
-    expect: output contains the root file content followed by Terms, Recipes, and Rules markdown tables
+    expect: output contains the root file content followed by Terms, Recipes, References, and Rules (project-wide) markdown tables
   - name: list-terms
     description: lists reachable term names, file paths, and descriptions
     command: "python3 -m ducktools list-terms Duckspec.yaml"
@@ -24,10 +24,10 @@ tests:
     description: resolves a Term#path reference to a single nested element's raw block, without loading the whole term or its transitive dependencies
     command: "python3 -m ducktools resolve-path Duckspec.yaml DuckspecProject#validate"
     expect: output contains the `- name: validate` block and its `instructions:`, and does not contain unrelated recipes such as `create_readme`
-  - name: list-workspaces
-    description: lists registered workspaces and their projects, read-only
-    command: "python3 -m ducktools list-workspaces"
-    expect: exits successfully; prints `(no workspaces registered)` if ~/.duckspec/settings.json has no workspaces, otherwise one line per workspace with its `repository -> path` entries indented beneath
+  - name: list-projects
+    description: lists every registered project grouped by workspace, as a markdown table, read-only
+    command: "python3 -m ducktools list-projects"
+    expect: exits successfully; prints `(no workspaces registered)` if ~/.duckspec/settings.json has no workspaces, otherwise a `## workspace-name` heading per workspace (active one marked) followed by a Project/Repository/Path/Description table, or `(empty)` if that workspace has no projects
 components:
   - name: resolver
     type: @Singleton
@@ -39,8 +39,34 @@ components:
             description: raw text content of a term .yaml file
           - name: pattern
             description: compiled regex matching the target block (e.g. _GUIDELINES_BLOCK or _AI_INSTRUCTIONS_BLOCK)
+      - name: _parse_dict_list_block
+        description: "Module-level pure function. Parses a `<key>:\\n  - <key_field>: ...\\n    description: ...` block into a list of `{key_field: value, description: value}` dicts, splitting on item boundaries. Shared by _parse_recipes (key_field='name', block=_RECIPES_BLOCK) and _parse_references (key_field='repository', block=_REFERENCES_BLOCK) so the two identically-shaped list-of-dicts formats aren't parsed twice. Returns an empty list if the block is absent."
+        arguments:
+          - name: content
+            description: raw text content of a term .yaml file
+          - name: pattern
+            description: compiled regex matching the target block (_RECIPES_BLOCK or _REFERENCES_BLOCK)
+          - name: key_field
+            description: "name of the first sub-field per item — 'name' for recipes, 'repository' for references"
       - name: _parse_recipes
-        description: "Module-level pure function. Finds the `recipes:` block in `content`, splits on item boundaries, and returns a list of {name, description} dicts. Returns an empty list if the block is absent."
+        description: "Module-level pure function. Thin wrapper — calls _parse_dict_list_block(content, _RECIPES_BLOCK, 'name')."
+        arguments:
+          - name: content
+            description: raw text content of a term .yaml file
+      - name: _parse_extends
+        description: "Module-level pure function. Returns the value of this term's `extends:` field with any leading `@` stripped, or None if absent."
+        arguments:
+          - name: content
+            description: raw text content of a term .yaml file
+      - name: _own_rules
+        description: "Module-level pure function. Extracts this one term's own `guidelines:` and `ai_instructions:` (via _parse_list_block), tagged with `term_name` and type 'Guideline'/'AI Instruction'. Does not walk `extends` — inheritance is the caller's job (see _rules_tree, _project_wide_rules)."
+        arguments:
+          - name: content
+            description: raw text content of a term .yaml file
+          - name: term_name
+            description: name to tag each returned rule with
+      - name: _parse_references
+        description: "Module-level pure function. Thin wrapper — calls _parse_dict_list_block(content, _REFERENCES_BLOCK, 'repository'). `references:` entries are never resolved to a file or loaded — they're pure data (a repository URL + a description) surfaced as-is, the counterpart to `uses:` for connections that are informational only."
         arguments:
           - name: content
             description: raw text content of a term .yaml file
@@ -57,7 +83,7 @@ components:
           - name: settings
             description: settings dict, as returned by _load_settings
       - name: _resolve_entry
-        description: "Resolves a single `uses:` entry to a local Path. If `sub` starts with `http://` or `https://`, looks it up in the workspace dict (the active workspace's projects, read fresh via _load_settings/_active_projects on every call — never cached, so use_workspace/add_project take effect immediately); prints a warning and returns None if not found. Otherwise resolves `sub` relative to `base` (the directory of the current file). Returns None if the entry cannot be resolved."
+        description: "Resolves a single `uses:` entry to a local Path. If `sub` starts with `http://` or `https://`, looks it up in the workspace dict (the active workspace's projects, read fresh via _load_settings/_active_projects on every call — never cached, so use_workspace/add_project take effect immediately); prints a warning and returns None if not found. Otherwise resolves `sub` relative to `base` (the directory of the current file) and normalizes it via `.resolve()`, so a `../`-containing entry (e.g. a sub-project's `uses:` circularly referencing back to its own parent) yields the canonical absolute path rather than a literal `ducktools/../Duckspec.yaml`-style string. Returns None if the entry cannot be resolved."
         arguments:
           - name: sub
             description: raw string from the `uses:` list — either a relative path or a repository URL
@@ -80,6 +106,31 @@ components:
             description: path to a @DuckspecProject .yaml file
           - name: term_map
             description: name→path map, as returned by _build_term_map
+      - name: _extends_chain_from
+        description: "Walks a term's `extends:` chain upward starting from an already-known (name, content) pair, stopping at a name with no `extends`, a name not in `term_map`, or a cycle. Returns `[(name, content), ...]` starting with the given term itself. The caller supplies the starting content directly (rather than looking it up via term_map) so this also works for a root project file, which is often not itself a key in its own term_map."
+        arguments:
+          - name: start_name
+            description: name of the term to start from
+          - name: start_content
+            description: that term's already-read content
+          - name: term_map
+            description: name→path map, as returned by _build_term_map
+      - name: _rules_tree
+        description: "Own + inherited rules for one term, kept separate rather than flattened. Looks up term_name in term_map, walks its extends chain via _extends_chain_from, and returns `{own: [...], inherited: [{term, rules}, ...]}` — own is term_name's own _own_rules, inherited is one entry per ancestor that has any (ancestors with none are omitted). Returns `{own: [], inherited: []}` if term_name isn't in term_map or its file can't be read."
+        arguments:
+          - name: term_name
+            description: name of the term to compute the tree for
+          - name: term_map
+            description: name→path map, as returned by _build_term_map
+      - name: _project_wide_rules
+        description: "Rules that apply regardless of which term is currently in play: the root project's own extends chain (via _extends_chain_from) plus the _own_rules of every file directly named in the root's `uses:` block — one hop only, not those files' own further reachable terms. Deliberately narrower than collecting rules from every reachable term; term-scoped rules (a single extension's implementation guidelines, say) now travel with that term instead, attached by load_terms, so they surface when the term is actually loaded rather than on every load_project call."
+        arguments:
+          - name: root
+            description: resolved path to the root @DuckspecProject file
+          - name: root_content
+            description: that file's already-read content
+          - name: term_map
+            description: name→path map, as returned by _build_term_map
       - name: _reachable_from
         description: "The same `@TermName`-mention BFS as the second half of _reachable, but seeded from an explicit list of files instead of walking `uses:` from a project root — no `uses:` resolution happens here at all, purely reference-chasing from the given seeds. Used by load_terms to find the transitive closure of a specific set of requested term names."
         arguments:
@@ -95,7 +146,7 @@ components:
           - name: include_all
             description: if true, yield all terms in the term map; default false
       - name: load_project
-        description: "Reads the root project file content, then calls _walk_terms() for a single-pass extraction of descriptions, recipes, guidelines, and ai_instructions from all reachable terms. Returns a dict {root_content: str, terms: list[{name, path, description}], recipes: list[{term, name, description}], rules: list[{term, type, text}]} where type is 'Guideline' or 'AI Instruction'. Intended as the primary entry point for AI assistants: gives an overview of the project without loading all term content."
+        description: "Reads the root project file content, then calls _walk_terms() for a single-pass extraction of descriptions, recipes, and references from all reachable terms — but not rules: those come from _project_wide_rules (root's own extends chain + direct `uses:` only), not from every reachable term, to keep a term's own detailed guidelines out of context until that term is actually loaded. Returns a dict {root_content: str, terms: list[{name, path, description}], recipes: list[{term, name, description}], references: list[{term, repository, description}], rules: list[{term, type, text}]} where type is 'Guideline' or 'AI Instruction'. Intended as the primary entry point for AI assistants: gives an overview of the project without loading all term content."
         arguments:
           - name: project_path
             description: path to a @DuckspecProject .yaml file
@@ -107,7 +158,7 @@ components:
           - name: include_all
             description: if true, return all terms in the term map regardless of @TermName mentions; default false
       - name: load_terms
-        description: "Builds the term map from the project, then runs BFS seeded with the files corresponding to the given term_names instead of the project root. Returns a list of {name, path, content} sorted by name, covering only the requested terms and their transitive @TermName dependencies. Unrecognised names are silently skipped."
+        description: "Builds the term map from the project, then runs BFS seeded with the files corresponding to the given term_names instead of the project root. Returns a list of {name, path, content} sorted by name, covering only the requested terms and their transitive @TermName dependencies. Unrecognised names are silently skipped. Only entries whose name is one of the explicitly requested term_names (not every transitive dependency pulled in for context) also get a `rules` key — the {own, inherited} tree from _rules_tree — so a term's full guidelines/ai_instructions surface exactly when it's deliberately loaded, not merely because it showed up as someone else's dependency."
         arguments:
           - name: project_path
             description: path to a @DuckspecProject .yaml file; used to build the term map
@@ -148,8 +199,8 @@ components:
         arguments:
           - name: name
             description: name of an existing workspace to activate
-      - name: list_workspaces
-        description: "Returns `{active_workspace, workspaces}` straight from the settings file, for the caller to format."
+      - name: list_projects
+        description: "Reads the settings file, then for every workspace reads each registered project's own file to extract `name:`/`description:` via regex. Returns `{active_workspace, workspaces: {name: {projects: [{repository, path, name, description}]}}}`. A project whose file is missing or unreadable still lists (`name: None`) rather than being dropped, so a stale registry entry stays visible instead of hidden."
       - name: add_project
         description: "Reads `repository:` from the file at `project_path` via regex; returns None (no write) if absent. Otherwise resolves the target workspace (the given `workspace_name`, or the active workspace if omitted; returns None if neither resolves), creates it if missing, and sets `projects[repository] = str(project_path.resolve())`. Returns the repository URL used."
         arguments:
@@ -173,7 +224,7 @@ components:
     type: @Application
     functions:
       - name: load-project
-        description: "Command `ducktools load-project <project_path>`; calls resolver#load_project; prints the root project file content followed by Terms, Recipes, and Rules markdown tables"
+        description: "Command `ducktools load-project <project_path>`; calls resolver#load_project; prints the root project file content followed by Terms, Recipes, References, and Rules (project-wide) markdown tables"
         arguments:
           - name: project_path
             description: path to a @DuckspecProject .yaml file
@@ -185,7 +236,7 @@ components:
           - name: --all
             description: pass to resolver#list_terms as include_all=true
       - name: load-terms
-        description: "Command `ducktools load-terms <project_path> <TermName> [TermName ...]`; calls resolver#load_terms; prints each term as `--- @TermName [file_path] ---\\n<yaml content>`"
+        description: "Command `ducktools load-terms <project_path> <TermName> [TermName ...]`; calls resolver#load_terms; prints each term as `--- @TermName [file_path] ---\\n<yaml content>`, followed by a `## Rules for @TermName` own/inherited breakdown for each explicitly requested term (not its transitive dependencies)"
         arguments:
           - name: project_path
             description: path to a @DuckspecProject .yaml file
@@ -222,8 +273,8 @@ components:
         arguments:
           - name: name
             description: name of an existing workspace to activate
-      - name: list-workspaces
-        description: "Command `ducktools list-workspaces`; calls resolver#list_workspaces; prints each workspace name (active one marked with `*`) followed by its `repository -> path` entries"
+      - name: list-projects
+        description: "Command `ducktools list-projects`; calls resolver#list_projects; prints a `## workspace-name` heading per workspace (active one suffixed ` (active)`) followed by a markdown table (Project/Repository/Path/Description) of its projects, or `(empty)` if it has none"
       - name: add-project
         description: "Command `ducktools add-project <project_path> [--workspace NAME]`; calls resolver#add_project"
         arguments:
@@ -242,7 +293,7 @@ components:
     type: @Server
     functions:
       - name: load_project
-        description: "MCP tool `load_project`; calls resolver#load_project; returns the root project file content followed by Terms, Recipes, and Rules markdown tables. Primary entry point — call this first when starting work on a project."
+        description: "MCP tool `load_project`; calls resolver#load_project; returns the root project file content followed by Terms, Recipes, References, and Rules (project-wide) markdown tables. Primary entry point — call this first when starting work on a project."
         arguments:
           - name: project_path
             description: path to a @DuckspecProject .yaml file
@@ -254,7 +305,7 @@ components:
           - name: all
             description: pass to resolver#list_terms as include_all=true; default false
       - name: load_terms
-        description: "MCP tool `load_terms`; calls resolver#load_terms; returns formatted term blocks `--- @TermName [path] ---\\n<content>` for the requested terms and their transitive dependencies"
+        description: "MCP tool `load_terms`; calls resolver#load_terms; returns formatted term blocks `--- @TermName [path] ---\\n<content>` for the requested terms and their transitive dependencies, with a `## Rules for @TermName` own/inherited breakdown appended for each explicitly requested term"
         arguments:
           - name: project_path
             description: path to a @DuckspecProject .yaml file
@@ -286,8 +337,8 @@ components:
         arguments:
           - name: name
             description: name of an existing workspace to activate
-      - name: list_workspaces
-        description: "MCP tool `list_workspaces`; calls resolver#list_workspaces; returns each workspace name (active one marked with `*`) followed by its `repository -> path` entries"
+      - name: list_projects
+        description: "MCP tool `list_projects`; calls resolver#list_projects; returns a `## workspace-name` heading per workspace (active one suffixed ` (active)`) followed by a markdown table (Project/Repository/Path/Description) of its projects, or `(empty)` if it has none"
       - name: add_project
         description: "MCP tool `add_project`; calls resolver#add_project"
         arguments:

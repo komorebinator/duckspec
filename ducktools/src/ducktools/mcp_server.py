@@ -107,8 +107,8 @@ _TOOLS = [
         },
     },
     {
-        'name': 'list_workspaces',
-        'description': 'List every registered workspace, its projects, and which one is active',
+        'name': 'list_projects',
+        'description': 'List every project registered across all workspaces (not just the active one), as a markdown table with Project/Repository/Path/Description columns',
         'inputSchema': {'type': 'object', 'properties': {}},
     },
     {
@@ -164,21 +164,50 @@ def _format_rules_table(rules: list[dict]) -> str:
     return '\n'.join(rows)
 
 
+def _format_references_table(references: list[dict]) -> str:
+    rows = ['| Term | Repository | Description |', '|------|------------|-------------|']
+    rows += [f"| @{r['term']} | {r['repository']} | {r.get('description', '')} |" for r in references]
+    return '\n'.join(rows)
+
+
+def _format_rules_tree(term_name: str, tree: dict) -> str:
+    lines = [f'## Rules for @{term_name}']
+    if not tree['own'] and not tree['inherited']:
+        lines.append('(none)')
+        return '\n'.join(lines)
+    if tree['own']:
+        lines.append('own:')
+        lines += [f"  - {r['type']}: {r['text']}" for r in tree['own']]
+    for group in tree['inherited']:
+        lines.append(f"inherited from @{group['term']}:")
+        lines += [f"  - {r['type']}: {r['text']}" for r in group['rules']]
+    return '\n'.join(lines)
+
+
 def _format_term_blocks(terms: list[dict]) -> str:
-    return '\n\n'.join(
-        f"--- @{t['name']} [{t['path']}] ---\n{t['content']}"
-        for t in terms
-    )
+    blocks = []
+    for t in terms:
+        block = f"--- @{t['name']} [{t['path']}] ---\n{t['content']}"
+        if 'rules' in t:
+            block += '\n\n' + _format_rules_tree(t['name'], t['rules'])
+        blocks.append(block)
+    return '\n\n'.join(blocks)
 
 
-def _format_workspaces(result: dict) -> str:
-    lines = []
+def _format_projects(result: dict) -> str:
+    blocks = []
     for wname, workspace in result['workspaces'].items():
-        marker = '*' if wname == result['active_workspace'] else ' '
-        lines.append(f"{marker} {wname}")
-        for repository, path in workspace.get('projects', {}).items():
-            lines.append(f"    {repository} -> {path}")
-    return '\n'.join(lines) if lines else '(no workspaces registered)'
+        marker = ' (active)' if wname == result['active_workspace'] else ''
+        projects = workspace.get('projects', [])
+        if not projects:
+            blocks.append(f"## {wname}{marker}\n\n(empty)")
+            continue
+        rows = ['| Project | Repository | Path | Description |', '|---------|------------|------|-------------|']
+        for proj in projects:
+            label = f"@{proj['name']}" if proj['name'] else '(unreadable — stale path?)'
+            rows.append(f"| {label} | {proj['repository']} | {proj['path']} | {proj.get('description', '')} |")
+        blocks.append(f"## {wname}{marker}\n\n" + '\n'.join(rows))
+    return '\n\n'.join(blocks) if blocks else '(no workspaces registered)'
 
 
 def _call(name: str, arguments: dict) -> str:
@@ -191,8 +220,8 @@ def _call(name: str, arguments: dict) -> str:
             return f"active workspace: {arguments['name']}"
         return f"no such workspace: {arguments['name']}"
 
-    if name == 'list_workspaces':
-        return _format_workspaces(resolver.list_workspaces())
+    if name == 'list_projects':
+        return _format_projects(resolver.list_projects())
 
     if name == 'add_project':
         repository = resolver.add_project(arguments['project_path'], arguments.get('workspace'))
@@ -212,8 +241,12 @@ def _call(name: str, arguments: dict) -> str:
         result = resolver.load_project(path)
         terms_table = _format_terms_table(result['terms'])
         recipes_table = _format_recipes_table(result['recipes'])
+        references_table = _format_references_table(result['references'])
         rules_table = _format_rules_table(result['rules'])
-        return f"{result['root_content']}\n\n## Terms\n\n{terms_table}\n\n## Recipes\n\n{recipes_table}\n\n## Rules\n\n{rules_table}"
+        return (
+            f"{result['root_content']}\n\n## Terms\n\n{terms_table}\n\n## Recipes\n\n{recipes_table}"
+            f"\n\n## References\n\n{references_table}\n\n## Rules (project-wide)\n\n{rules_table}"
+        )
 
     if name == 'list_terms':
         terms = resolver.list_terms(path, include_all=include_all)
