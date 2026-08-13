@@ -112,6 +112,29 @@ _COMMAND_GROUPS = [
         ('remove', 'remove <project> <ref>',
          'Remove the addressed element and everything nested under it',
          [('project', _PROJECT_ARG), ('ref', _REF_ARG)]),
+        ('add-rule', 'add-rule <project> <Term> <block> <text>',
+         'Append a rule to a term\'s guidelines, ai_instructions or goals',
+         [('project', _PROJECT_ARG), ('Term', 'the term to add the rule to'),
+          ('block', 'guidelines, ai_instructions or goals'), ('text', 'the rule text')]),
+        ('remove-rule', 'remove-rule <project> <Term> <block> <match>',
+         'Remove one rule from a rule block; refuses when the match is ambiguous',
+         [('project', _PROJECT_ARG), ('Term', 'the term to remove the rule from'),
+          ('block', 'guidelines, ai_instructions or goals'), ('match', 'substring identifying the rule')]),
+        ('move-rule', 'move-rule <project> <Term> <from> <to> <match>',
+         'Move a rule verbatim between rule blocks — e.g. an ai_instruction that is really a guideline',
+         [('project', _PROJECT_ARG), ('Term', 'the term holding the rule'),
+          ('from', 'block the rule sits in'), ('to', 'block to move it to'),
+          ('match', 'substring identifying the rule')]),
+        ('create-term', 'create-term <project> <Term> <description> [--extends T]',
+         'Create a term file; the filename is derived from the name, since it is the identity',
+         [('project', _PROJECT_ARG), ('Term', 'CamelCase name, becoming the filename'),
+          ('description', 'what the term represents'), ('--extends', 'parent term; defaults to Term')]),
+        ('rename-term', 'rename-term <project> <Old> <New>',
+         'Rename a term file and rewrite every reference to it across the project',
+         [('project', _PROJECT_ARG), ('Old', 'current term name'), ('New', 'new term name')]),
+        ('remove-term', 'remove-term <project> <Term>',
+         'Delete a term file, refusing while anything still references it',
+         [('project', _PROJECT_ARG), ('Term', 'the term to delete')]),
     ]),
     ('workspace', [
         ('list-projects', 'list-projects',
@@ -276,6 +299,14 @@ def cmd_remove_element(project_path: str, ref: str) -> None:
     print(resolver.remove_element(project_path, ref))
 
 
+def cmd_add_rule(pp, t, b, x): print(resolver.add_rule(pp, t, b, x))
+def cmd_remove_rule(pp, t, b, m): print(resolver.remove_rule(pp, t, b, m))
+def cmd_move_rule(pp, t, f, to, m): print(resolver.move_rule(pp, t, f, to, m))
+def cmd_create_term(pp, t, d, e): print(resolver.create_term(pp, t, d, e))
+def cmd_rename_term(pp, o, n): print(resolver.rename_term(pp, o, n))
+def cmd_remove_term(pp, t): print(resolver.remove_term(pp, t))
+
+
 def cmd_create_workspace(name: str) -> None:
     resolver.create_workspace(name)
     print(f'created workspace "{name}"')
@@ -375,6 +406,13 @@ def main() -> None:
     p = sub.add_parser('remove')
     p.add_argument('project_path'); p.add_argument('ref')
 
+    p = sub.add_parser('add-rule'); [p.add_argument(a) for a in ('project_path','term_name','block','text')]
+    p = sub.add_parser('remove-rule'); [p.add_argument(a) for a in ('project_path','term_name','block','match')]
+    p = sub.add_parser('move-rule'); [p.add_argument(a) for a in ('project_path','term_name','from_block','to_block','match')]
+    p = sub.add_parser('create-term'); [p.add_argument(a) for a in ('project_path','term_name','description')]; p.add_argument('--extends', default='Term')
+    p = sub.add_parser('rename-term'); [p.add_argument(a) for a in ('project_path','old_name','new_name')]
+    p = sub.add_parser('remove-term'); [p.add_argument(a) for a in ('project_path','term_name')]
+
     sub.add_parser('serve').add_argument('project_path', nargs='?')
 
     sub.add_parser('create-workspace').add_argument('name')
@@ -419,6 +457,18 @@ def main() -> None:
         cmd_set_field(args.project_path, args.ref, args.field, args.value)
     elif args.command == 'remove':
         cmd_remove_element(args.project_path, args.ref)
+    elif args.command == 'add-rule':
+        cmd_add_rule(args.project_path, args.term_name, args.block, args.text)
+    elif args.command == 'remove-rule':
+        cmd_remove_rule(args.project_path, args.term_name, args.block, args.match)
+    elif args.command == 'move-rule':
+        cmd_move_rule(args.project_path, args.term_name, args.from_block, args.to_block, args.match)
+    elif args.command == 'create-term':
+        cmd_create_term(args.project_path, args.term_name, args.description, args.extends)
+    elif args.command == 'rename-term':
+        cmd_rename_term(args.project_path, args.old_name, args.new_name)
+    elif args.command == 'remove-term':
+        cmd_remove_term(args.project_path, args.term_name)
     elif args.command == 'serve':
         from .mcp_server import run_server
         run_server()

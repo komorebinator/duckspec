@@ -31,6 +31,10 @@ tests:
     description: runs the mechanical consistency pass over @Duckspec's own spec — the framework validating itself
     command: "python3 -m ducktools verify-project Duckspec.yaml"
     expect: exits 0 and prints `no findings` — the framework's own spec is internally consistent
+  - id: wiring
+    description: every public resolver method is reachable from both front ends — a method can exist, be documented, and still be unreachable from outside, which no spec/code comparison catches because both sides look complete
+    command: "python3 ducktools/check_wiring.py"
+    expect: prints `no orphans` and exits 0; on failure names each front end and the methods it does not call
 components:
   - id: resolver
     type: @Singleton
@@ -721,6 +725,11 @@ components:
             description: repository URL of the project to remove
           - id: workspace
             description: workspace to remove from; defaults to the active workspace
+  - id: check-wiring
+    type: @Script
+    interpreter: python3
+    src: ducktools/check_wiring.py
+    description: "Compares the public methods of resolver.py against the ones cli.py and mcp_server.py actually call, and fails naming the orphans. Exists because comparing the spec with the code confirms a method is *described*, not that it is *reachable*: six operations shipped in 0.10.1 and 0.10.2 fully documented and callable from neither front end."
   - id: install-script
     type: @ShellScript
     interpreter: bash

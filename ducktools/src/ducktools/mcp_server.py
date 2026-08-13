@@ -148,6 +148,42 @@ _TOOLS = [
             'required': ['project_path', 'ref']},
     },
     {
+        'name': "add_rule",
+        'description': "Append a rule to a term's guidelines, ai_instructions or goals; these hold bare strings that set_field cannot reach",
+        'inputSchema': {'type': 'object', 'properties': {**_PROJECT_PATH_PROP, 'term_name': {'type': 'string'}, 'block': {'type': 'string'}, 'text': {'type': 'string'}},
+            'required': ['project_path', 'term_name', 'block', 'text']},
+    },
+    {
+        'name': "remove_rule",
+        'description': "Remove the rule matching a substring from a term's rule block; refuses when more than one matches",
+        'inputSchema': {'type': 'object', 'properties': {**_PROJECT_PATH_PROP, 'term_name': {'type': 'string'}, 'block': {'type': 'string'}, 'match': {'type': 'string'}},
+            'required': ['project_path', 'term_name', 'block', 'match']},
+    },
+    {
+        'name': "move_rule",
+        'description': "Move a rule verbatim between a term's rule blocks, e.g. reclassifying an ai_instruction as a guideline",
+        'inputSchema': {'type': 'object', 'properties': {**_PROJECT_PATH_PROP, 'term_name': {'type': 'string'}, 'from_block': {'type': 'string'}, 'to_block': {'type': 'string'}, 'match': {'type': 'string'}},
+            'required': ['project_path', 'term_name', 'from_block', 'to_block', 'match']},
+    },
+    {
+        'name': "create_term",
+        'description': "Create a term file in the project terms folder; the filename is derived from the name, since it is the identity",
+        'inputSchema': {'type': 'object', 'properties': {**_PROJECT_PATH_PROP, 'term_name': {'type': 'string'}, 'description': {'type': 'string'}, 'extends': {'type': 'string'}},
+            'required': ['project_path', 'term_name', 'description']},
+    },
+    {
+        'name': "rename_term",
+        'description': "Rename a term file and rewrite every reference to it across the project",
+        'inputSchema': {'type': 'object', 'properties': {**_PROJECT_PATH_PROP, 'old_name': {'type': 'string'}, 'new_name': {'type': 'string'}},
+            'required': ['project_path', 'old_name', 'new_name']},
+    },
+    {
+        'name': "remove_term",
+        'description': "Delete a term file, refusing while anything still references it",
+        'inputSchema': {'type': 'object', 'properties': {**_PROJECT_PATH_PROP, 'term_name': {'type': 'string'}},
+            'required': ['project_path', 'term_name']},
+    },
+    {
         'name': 'create_workspace',
         'description': 'Add a new named, empty workspace to the shared ~/.duckspec/settings.json registry',
         'inputSchema': {
@@ -332,6 +368,24 @@ def _call(name: str, arguments: dict) -> str:
 
     if name == 'remove_element':
         return resolver.remove_element(path, arguments['ref'])
+
+    if name == "add_rule":
+        return resolver.add_rule(path, arguments["term_name"], arguments["block"], arguments["text"])
+
+    if name == "remove_rule":
+        return resolver.remove_rule(path, arguments["term_name"], arguments["block"], arguments["match"])
+
+    if name == "move_rule":
+        return resolver.move_rule(path, arguments["term_name"], arguments["from_block"], arguments["to_block"], arguments["match"])
+
+    if name == "create_term":
+        return resolver.create_term(path, arguments["term_name"], arguments["description"], arguments.get('extends', 'Term'))
+
+    if name == "rename_term":
+        return resolver.rename_term(path, arguments["old_name"], arguments["new_name"])
+
+    if name == "remove_term":
+        return resolver.remove_term(path, arguments["term_name"])
 
     if name == 'term_uses':
         r = resolver.term_uses(path, arguments['term_name'])
