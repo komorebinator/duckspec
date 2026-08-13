@@ -87,7 +87,8 @@ components:
 ## Commands
 
 Every command takes a project: either a path to its `.yaml`, or the identifier of a project
-registered in your workspace — so they work from any directory.
+registered in your workspace — so they work from any directory. `ducktools help` prints this
+reference from the tool itself, and `ducktools help <command>` details one command's arguments.
 
 **Reading**
 

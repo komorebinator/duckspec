@@ -54,6 +54,127 @@ def _print_references_table(references: list[dict]) -> None:
         print(f"| @{r['term']} | {r['repository']} | {r.get('description', '')} |")
 
 
+_PROJECT_ARG = 'a .yaml file path, or the identifier of a project registered in the active workspace'
+_REF_ARG = 'a `TermName#segment#segment...` path; refused when it matches more than one element'
+
+# group -> (name, usage, purpose, [(argument, description), ...])
+_COMMAND_GROUPS = [
+    ('reading', [
+        ('load-project', 'load-project <project>',
+         'Root file, term list, recipes, and project-wide rules — start here',
+         [('project', _PROJECT_ARG)]),
+        ('list-terms', 'list-terms <project> [--all]',
+         'Every reachable term with its description',
+         [('project', _PROJECT_ARG),
+          ('--all', 'include terms in the map that nothing reaches')]),
+        ('load-terms', 'load-terms <project> <Term> [Term ...]',
+         'Named terms with their transitive dependencies and applicable rules',
+         [('project', _PROJECT_ARG),
+          ('Term', 'one or more term names, written without the leading @')]),
+        ('resolve-path', 'resolve-path <project> <ref>',
+         'One nested element, without its term or that term\'s dependencies',
+         [('project', _PROJECT_ARG), ('ref', _REF_ARG)]),
+        ('grep', 'grep <project> <query> [--all]',
+         'Search across term content by keyword',
+         [('project', _PROJECT_ARG),
+          ('query', 'substring to search for, case-insensitive'),
+          ('--all', 'search the whole term map, not only reachable terms')]),
+    ]),
+    ('structure', [
+        ('schema', 'schema <project> <Term>',
+         'Every member of a term, tagged with the ancestor declaring it',
+         [('project', _PROJECT_ARG), ('Term', 'the term whose effective schema to resolve')]),
+        ('uses', 'uses <project> <Term>',
+         'What extends it, types by it, and references it — check before changing a term',
+         [('project', _PROJECT_ARG), ('Term', 'the term to find references to')]),
+        ('query', 'query <project> [--rootless] [--extending T] [--declaring M] [--folder F]',
+         'Terms matching structural filters',
+         [('project', _PROJECT_ARG),
+          ('--rootless', 'only terms declaring no `extends`'),
+          ('--extending', 'only terms whose `extends` chain includes this term'),
+          ('--declaring', 'only terms declaring a member of this id'),
+          ('--folder', 'only terms whose path contains this fragment')]),
+        ('entries', 'entries <project> <Term>#<slot>',
+         'The ids and fields of one slot\'s entries',
+         [('project', _PROJECT_ARG), ('ref', 'a reference of the form `TermName#slot`')]),
+    ]),
+    ('checking', [
+        ('verify-project', 'verify-project <project> [--unreachable]',
+         'Report dangling refs, bad `extends`, shadowed members; exits 1 on any error',
+         [('project', _PROJECT_ARG),
+          ('--unreachable', 'also report terms nothing reaches')]),
+    ]),
+    ('editing', [
+        ('set', 'set <project> <ref> <field> <value>',
+         'Set a field on the addressed element, replacing it if already present',
+         [('project', _PROJECT_ARG), ('ref', _REF_ARG),
+          ('field', 'the field to set'), ('value', 'the value to set it to')]),
+        ('remove', 'remove <project> <ref>',
+         'Remove the addressed element and everything nested under it',
+         [('project', _PROJECT_ARG), ('ref', _REF_ARG)]),
+    ]),
+    ('workspace', [
+        ('list-projects', 'list-projects',
+         'Every registered project across all workspaces, marking the active one', []),
+        ('add-project', 'add-project <project_path> [--workspace NAME]',
+         'Register a project, keyed by its own `repository` URL',
+         [('project_path', 'path to the project .yaml file to register'),
+          ('--workspace', 'workspace to add to; defaults to the active one')]),
+        ('remove-project', 'remove-project <repository> [--workspace NAME]',
+         'Unregister a project by its repository URL',
+         [('repository', 'repository URL of the project to remove'),
+          ('--workspace', 'workspace to remove from; defaults to the active one')]),
+        ('create-workspace', 'create-workspace <name>',
+         'Create a new, empty workspace and make it active',
+         [('name', 'unique name for the new workspace')]),
+        ('use-workspace', 'use-workspace <name>',
+         'Switch the active workspace — the one URL references resolve against',
+         [('name', 'name of an existing workspace to activate')]),
+    ]),
+    ('other', [
+        ('serve', 'serve',
+         'Start the MCP server on stdio; each request carries its own project', []),
+        ('help', 'help [command]',
+         'This reference, or one command in detail',
+         [('command', 'optional command to describe; omitted prints the full reference')]),
+    ]),
+]
+
+
+def _find_command(name: str) -> tuple | None:
+    for _, commands in _COMMAND_GROUPS:
+        for command in commands:
+            if command[0] == name:
+                return command
+    return None
+
+
+def cmd_help(command: str | None = None) -> None:
+    if command:
+        found = _find_command(command)
+        if found is not None:
+            _, usage, purpose, arguments = found
+            print(f'usage: ducktools {usage}\n')
+            print(f'{purpose}\n')
+            if arguments:
+                print('| Argument | Description |')
+                print('|----------|-------------|')
+                for argument, description in arguments:
+                    print(f'| {argument} | {description} |')
+            return
+        print(f'no such command: {command}\n')
+
+    print('usage: ducktools <command> [arguments]\n')
+    print(f'<project> is {_PROJECT_ARG}.')
+    print('Run `ducktools help <command>` for one command\'s arguments.')
+    for group, commands in _COMMAND_GROUPS:
+        print(f'\n## {group}\n')
+        print('| Command | Purpose |')
+        print('|---------|---------|')
+        for _, usage, purpose, _args in commands:
+            print(f'| {usage} | {purpose} |')
+
+
 def cmd_load_project(project_path: str) -> None:
     result = resolver.load_project(project_path)
     print(result['root_content'])
@@ -203,6 +324,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(prog='ducktools')
     sub = parser.add_subparsers(dest='command', required=True)
 
+    sub.add_parser('help').add_argument('topic', nargs='?')
+
     sub.add_parser('load-project').add_argument('project_path')
 
     p = sub.add_parser('list-terms')
@@ -270,7 +393,9 @@ def main() -> None:
 
     args = parser.parse_args()
 
-    if args.command == 'load-project':
+    if args.command == 'help':
+        cmd_help(args.topic)
+    elif args.command == 'load-project':
         cmd_load_project(args.project_path)
     elif args.command == 'list-terms':
         cmd_list_terms(args.project_path, include_all=args.include_all)

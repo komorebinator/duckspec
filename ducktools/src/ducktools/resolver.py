@@ -512,7 +512,9 @@ class Resolver:
         project_path = _resolve_project(project_path)
         q = query.lower()
         results = []
-        for name, p, content in self._walk_terms(project_path, include_all):
+        root = Path(project_path).resolve()
+        for name, p, content in [(root.stem, root, root.read_text())] + list(
+                self._walk_terms(project_path, include_all)):
             matching = [line.strip() for line in content.splitlines() if q in line.lower()]
             if matching:
                 results.append({'name': name, 'path': str(p), 'lines': matching})
@@ -846,6 +848,129 @@ class Resolver:
         del lines[start:end]
         path.write_text(''.join(lines))
         return f'{path}: removed {end - start} line(s)'
+
+    def _rule_block(self, lines: list[str], block: str) -> tuple[int, int] | None:
+        for i, line in enumerate(lines):
+            if re.match(rf'^{block}:\s*$', line):
+                end = len(lines)
+                for j in range(i + 1, len(lines)):
+                    if lines[j].strip() and not lines[j].startswith((' ', '\t')):
+                        end = j
+                        break
+                return i, end
+        return None
+
+    def _term_file(self, project_path: str, term_name: str) -> Path | None:
+        term_map = self._build_term_map(Path(_resolve_project(project_path)).resolve())
+        return term_map.get(term_name)
+
+    def add_rule(self, project_path: str, term_name: str, block: str, text: str) -> str:
+        path = self._term_file(project_path, term_name)
+        if path is None:
+            return f'unknown term: @{term_name}'
+        lines = path.read_text().splitlines(keepends=True)
+        body = f'  - "{text}"\n' if any(c in text for c in ':#') else f'  - {text}\n'
+        found = self._rule_block(lines, block)
+        if found:
+            lines.insert(found[1], body)
+        else:
+            anchor = next((i for i, l in enumerate(lines) if l.startswith(('properties:', 'recipes:'))), len(lines))
+            lines[anchor:anchor] = [f'{block}:\n', body]
+        path.write_text(''.join(lines))
+        return f'{path}: added to {block}'
+
+    def _find_rule(self, lines: list[str], block: str, match: str):
+        found = self._rule_block(lines, block)
+        if not found:
+            return f'no {block}: block'
+        start, end = found
+        hits = [i for i in range(start + 1, end)
+                if lines[i].lstrip().startswith('- ') and match in lines[i]]
+        if not hits:
+            return f'no rule matching {match!r} in {block}'
+        if len(hits) > 1:
+            return f'{len(hits)} rules match {match!r} in {block} — narrow it'
+        i = hits[0]
+        j = i + 1
+        while j < end and lines[j].strip() and not lines[j].lstrip().startswith('- '):
+            j += 1
+        return start, end, i, j
+
+    def remove_rule(self, project_path: str, term_name: str, block: str, match: str) -> str:
+        path = self._term_file(project_path, term_name)
+        if path is None:
+            return f'unknown term: @{term_name}'
+        lines = path.read_text().splitlines(keepends=True)
+        found = self._find_rule(lines, block, match)
+        if isinstance(found, str):
+            return found
+        start, end, i, j = found
+        del lines[i:j]
+        if end - start == j - i + 1:          # the block held only that rule
+            del lines[start]
+        path.write_text(''.join(lines))
+        return f'{path}: removed from {block}'
+
+    def move_rule(self, project_path: str, term_name: str, from_block: str, to_block: str, match: str) -> str:
+        path = self._term_file(project_path, term_name)
+        if path is None:
+            return f'unknown term: @{term_name}'
+        lines = path.read_text().splitlines(keepends=True)
+        found = self._find_rule(lines, from_block, match)
+        if isinstance(found, str):
+            return found
+        _, _, i, j = found
+        text = ''.join(lines[i:j]).rstrip('\n').lstrip()[2:].strip()
+        removed = self.remove_rule(project_path, term_name, from_block, match)
+        if not removed.endswith(f'removed from {from_block}'):
+            return removed
+        return self.add_rule(project_path, term_name, to_block, text.strip('"'))
+
+    def create_term(self, project_path: str, term_name: str, description: str,
+                    extends: str = 'Term') -> str:
+        root = Path(_resolve_project(project_path)).resolve()
+        m = _TERMS_FOLDER.search(root.read_text())
+        if not m:
+            return 'project declares no terms_folder'
+        folder = root.parent / m.group(1)
+        folder.mkdir(parents=True, exist_ok=True)
+        path = folder / f'{term_name}.yaml'
+        if path.exists():
+            return f'already exists: {path}'
+        path.write_text(f'description: {description}\nextends: @{extends}\n')
+        return f'{path}: created'
+
+    def rename_term(self, project_path: str, old_name: str, new_name: str) -> str:
+        resolved = _resolve_project(project_path)
+        term_map = self._build_term_map(Path(resolved).resolve())
+        if old_name not in term_map:
+            return f'unknown term: @{old_name}'
+        if new_name in term_map:
+            return f'already taken: @{new_name}'
+        old_path = term_map[old_name]
+        touched = 0
+        for name, path in term_map.items():
+            try:
+                content = path.read_text()
+            except Exception:
+                continue
+            updated = re.sub(rf'@{re.escape(old_name)}\b', f'@{new_name}', content)
+            if updated != content:
+                path.write_text(updated)
+                touched += 1
+        old_path.rename(old_path.with_name(f'{new_name}.yaml'))
+        return f'@{old_name} -> @{new_name}; {touched} file(s) updated'
+
+    def remove_term(self, project_path: str, term_name: str) -> str:
+        uses = self.term_uses(project_path, term_name)
+        blocking = uses['extended_by'] + uses['typed_by'] + uses['referenced_by']
+        if blocking:
+            return f'refused: still referenced by ' + ', '.join('@' + n for n in sorted(set(blocking)))
+        path = self._term_file(project_path, term_name)
+        if path is None:
+            return f'unknown term: @{term_name}'
+        path.unlink()
+        return f'{path}: removed'
 
     def create_workspace(self, name: str, activate: bool = True) -> None:
         settings = _load_settings()

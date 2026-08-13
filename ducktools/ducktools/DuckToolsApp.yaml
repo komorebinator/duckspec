@@ -343,6 +343,91 @@ components:
             description: a @DuckspecProject .yaml file or a registered project identifier
           - id: ref
             description: "`TermName#segment#segment...` — a bare term name is refused, since deleting a whole term file is not this operation's job"
+      - id: _rule_block
+        description: "Line range of a named rule block (`guidelines:`, `ai_instructions:`, `goals:`) in a term file, or None. Rule blocks hold bare strings, so none of the entry-oriented helpers locate them."
+        arguments:
+          - id: lines
+            description: the file's lines
+          - id: block
+            description: block name to locate
+      - id: _find_rule
+        description: "Line range of the single rule matching a substring inside a block, or an error string. Refuses on more than one match, so a rule is never edited by position when the caller meant another one."
+        arguments:
+          - id: lines
+            description: the file's lines
+          - id: block
+            description: block to search
+          - id: match
+            description: substring identifying the rule
+      - id: _term_file
+        description: "Path of one term's file, or None when the project's term map does not hold it. The lookup every rule and lifecycle operation starts from."
+        arguments:
+          - id: project_path
+            description: a @DuckspecProject .yaml file or a registered project identifier
+          - id: term_name
+            description: the term to locate
+      - id: add_rule
+        description: "Appends a rule to a term's `guidelines:`, `ai_instructions:` or `goals:`, creating the block when absent. These hold bare strings rather than named entries, so set_field and remove_element cannot reach them."
+        arguments:
+          - id: project_path
+            description: a @DuckspecProject .yaml file or a registered project identifier
+          - id: term_name
+            description: the term to add the rule to
+          - id: block
+            description: guidelines, ai_instructions or goals
+          - id: text
+            description: the rule text, quoted automatically when it would otherwise break the YAML
+      - id: remove_rule
+        description: "Removes the rule matching a substring from one of a term's rule blocks, deleting the block when it empties. Refuses when the substring matches more than one rule rather than removing whichever came first."
+        arguments:
+          - id: project_path
+            description: a @DuckspecProject .yaml file or a registered project identifier
+          - id: term_name
+            description: the term to remove the rule from
+          - id: block
+            description: guidelines, ai_instructions or goals
+          - id: match
+            description: substring identifying the rule
+      - id: move_rule
+        description: "Moves a rule verbatim from one of a term's blocks to another. Reclassifying a rule — the test is whether it describes the format or directs the model — is a routine correction that by hand risks dropping or duplicating the text."
+        arguments:
+          - id: project_path
+            description: a @DuckspecProject .yaml file or a registered project identifier
+          - id: term_name
+            description: the term holding the rule
+          - id: from_block
+            description: block the rule currently sits in
+          - id: to_block
+            description: block to move it to
+          - id: match
+            description: substring identifying the rule
+      - id: create_term
+        description: "Creates a term file in the project's terms folder with a description and a parent. The filename is the identity, so it is derived from the name rather than left to drift apart from it."
+        arguments:
+          - id: project_path
+            description: a @DuckspecProject .yaml file or a registered project identifier
+          - id: term_name
+            description: CamelCase name, which becomes both the filename and the identity
+          - id: description
+            description: what the term represents
+          - id: extends
+            description: parent term name; defaults to Term
+      - id: rename_term
+        description: "Renames a term file and rewrites every `@<OldName>` reference across the project. Identity lives in the filename, so a rename is project-wide rather than a file operation; done by hand it leaves dangling references that surface only on the next check."
+        arguments:
+          - id: project_path
+            description: a @DuckspecProject .yaml file or a registered project identifier
+          - id: old_name
+            description: current term name
+          - id: new_name
+            description: new term name
+      - id: remove_term
+        description: "Deletes a term file, refusing while anything still references it. That check is the difference from deleting the file: the checker would report the dangling references afterwards, but the deletion would already have happened."
+        arguments:
+          - id: project_path
+            description: a @DuckspecProject .yaml file or a registered project identifier
+          - id: term_name
+            description: the term to delete
       - id: create_workspace
         description: "Adds `name` to `workspaces` in the settings file with an empty `projects` map (no-op if it already exists). Sets `active_workspace` to `name` if `activate` is true or there was no active workspace yet."
         arguments:
@@ -380,6 +465,11 @@ components:
     type: @Application
     description: Command-line front end. Parses argv with argparse, dispatches to the matching resolver method, and prints the result as markdown tables or raw term blocks. Only verify-project carries an exit status (1 when any finding is an error) so it can serve as a CI or pre-commit gate; every other command exits 0.
     functions:
+      - id: help
+        description: "Command `ducktools help [command]`; prints the command reference held in cli itself. With no argument: a note that every project-taking command accepts either a path to a .yaml file or a registered project identifier, then a Command/Purpose markdown table per group (reading, structure, checking, editing, workspace, other). With a command name: that command's usage line, its purpose, and an Argument/Description table. An unknown name prints `no such command: <name>` and falls back to the full reference. Reads no project file and no settings, so it answers before anything is registered."
+        arguments:
+          - id: command
+            description: optional command to describe in detail; omitted prints the full reference
       - id: load-project
         description: "Command `ducktools load-project <project_path>`; calls resolver#load_project; prints the root project file content followed by Terms, Recipes, References, and Rules (project-wide) markdown tables"
         arguments:
