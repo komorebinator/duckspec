@@ -84,6 +84,60 @@ components:
 - Provide tools for describing and navigating project structure
 - Simplify repetitive development tasks
 
+## Commands
+
+Every command takes a project: either a path to its `.yaml`, or the identifier of a project
+registered in your workspace — so they work from any directory.
+
+**Reading**
+
+```sh
+ducktools load-project Duckspec              # start here: root file, term list, recipes, rules
+ducktools list-terms Duckspec                # every reachable term with its description
+ducktools load-terms Duckspec DuckToolsApp   # one term and its transitive dependencies
+ducktools resolve-path Duckspec DuckspecProject#validate   # one element, nothing else
+ducktools grep Duckspec resolver             # search across term content
+```
+
+**Understanding structure**
+
+```sh
+ducktools schema Duckspec PublicKey          # every member, tagged with the ancestor declaring it
+ducktools uses Duckspec File                 # who extends it, types by it, references it
+ducktools query Duckspec --rootless          # terms declaring no extends
+ducktools query Duckspec --extending Software
+ducktools entries Duckspec DuckToolsApp#tests
+```
+
+**Checking**
+
+```sh
+ducktools verify-project Duckspec            # exits 1 on any error — usable as a CI gate
+```
+
+Finds dangling and ambiguous references, unknown or cyclic `extends`, duplicate or unparseable
+terms, members shadowing an inherited one, and entries setting fields no type declares. It checks
+that what is written is true and consistent — not that everything was written.
+
+**Editing**
+
+```sh
+ducktools set Duckspec ElementState#when description "..."
+ducktools remove Duckspec ElementState#when#probe
+```
+
+Both address the element by `#`-path and refuse an ambiguous one, so an edit cannot land on
+whichever element happened to come first.
+
+**Workspace**
+
+```sh
+ducktools list-projects
+ducktools add-project ./MyProject.yaml
+ducktools create-workspace side-project
+ducktools use-workspace side-project
+```
+
 ## Installation
 
 Copy and send to your AI assistant:

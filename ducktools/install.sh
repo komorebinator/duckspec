@@ -69,4 +69,4 @@ case ":$PATH:" in
   *) echo "warning: $BIN_DIR is not on PATH — add it to your shell profile to use 'ducktools' directly" >&2 ;;
 esac
 
-echo "done — run 'ducktools list-workspaces' to verify"
+echo "done — run 'ducktools list-projects' to verify"
