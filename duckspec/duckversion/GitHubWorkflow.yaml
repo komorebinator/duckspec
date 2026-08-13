@@ -31,7 +31,7 @@ recipes:
       - Approve via `gh pr review <number> --approve --repo <repo>`
       - Merge via `gh pr merge <number> --repo <repo> --<merge_strategy>`
   - id: release
-    description: Publishes a GitHub Release with auto-generated release notes
+    description: Publishes a GitHub Release, using the version's changelog entry as its notes and falling back to auto-generated ones when no entry exists
     arguments:
       - id: version
         description: the new version string (e.g. 1.2.3)
@@ -39,4 +39,4 @@ recipes:
       - Resolve repo and main_branch as in @GitHubWorkflow#submit
       - Invoke @GitHubWorkflow#submit()
       - Create and push a git tag — `git tag <version> && git push origin <version>`
-      - Run `gh release create <version> --generate-notes --target <main_branch> --repo <repo>`
+      - Run `gh release create <version> --target <main_branch> --repo <repo>`, passing `--notes-file <settings.changelog>/<version>.md` when that entry exists and `--generate-notes` when it does not

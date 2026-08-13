@@ -1,6 +1,7 @@
 description: A @Project managed with @Duckspec.
 extends: @Project
 guidelines:
+  - "A changelog entry records what changed between two versions and why, and what a consuming project must do to move onto the new one. It is written for someone arriving at the new version, so it holds no temporal content: no account of how the work went, what was tried first, what broke on the way, or what remains unfinished. Anything a reader needs in order to use the current version belongs in the @Term files instead — a changelog that explains how something works is documentation filed in the wrong place, and it will rot there. One file per released version, named after it."
   - All file paths in @DuckspecProject files are relative to the file in which they appear.
   - All entries in `uses` are loaded unconditionally when this project is loaded.
   - A @DuckspecProject may reference another @DuckspecProject in a different directory via `uses` with a relative path (e.g. `../OtherProject.yaml`); circular references are safe — the resolver deduplicates by resolved path.
@@ -44,7 +45,7 @@ recipes:
     description: Validates all loaded @Term files against the @DuckspecProject guidelines and runs software tests
     instructions:
       - Invoke @DuckspecProject#load()
-      - "Invoke @DuckToolsApp#resolver#verify_project() and record every finding it returns — missing required properties, dangling @<TermName> and Term#path references, broken `extends`, name/filename mismatches, duplicate or unparseable terms. Do not re-check any of this by reading files: it is settled mechanically, exhaustively, and identically on every run, which is exactly what a model does worst. Every finding is a real defect — the check has no exemptions — so resolve each one rather than triaging it away."
+      - "Invoke @DuckToolsApp#resolver#verify_project() and record every finding it returns — dangling and ambiguous references, broken `extends`, duplicate or unparseable terms, members shadowing an inherited one, entries setting fields no type declares. Do not re-check any of this by reading files: it is settled mechanically, exhaustively, and identically on every run, which is exactly what a model does worst. Every finding is a real defect — the check has no exemptions — so resolve each one rather than triaging it away."
       - For each term file in the loaded output: Invoke @DuckspecProject#check_guidelines(file_path=<path>)
       - "For each @Software reachable transitively via `uses:` and `software:` from this project — including sub-projects referenced by relative path or by `repository` URL alike, regardless of which repository they live in: Invoke @Software#test(); a @Software with no `tests:` of its own has nothing to run and is reported as such, so no separate exclusion list is needed"
       - Invoke @DuckspecProject#verify_source() — the structural and guideline checks above confirm the spec is well-formed; this confirms it's still accurate against the actual code, so drift doesn't reach submit/release unnoticed
@@ -137,7 +138,7 @@ recipes:
       - Read `workflow` from this project; if not set, ask the user to configure it and stop
       - Invoke @DuckWorkflow#submit() using the workflow type and any configured property overrides
   - id: release
-    description: Calculates the next version via the configured @VersioningStrategy, submits all changes, and publishes a release via the configured @DuckWorkflow
+    description: Calculates the next version via the configured @VersioningStrategy, writes the changelog entry for it, submits all changes, and publishes a release via the configured @DuckWorkflow
     arguments:
       - id: bump
         description: hint passed to the versioning strategy (e.g. patch/minor/major for @SemVer); interpretation depends on the configured strategy
@@ -145,6 +146,18 @@ recipes:
       - Read `versioning` from this project; if not set, ask the user to configure it and stop
       - Invoke @VersioningStrategy#next_version(bump=<bump>) to obtain the new version string
       - Update the `version` field in this @DuckspecProject file to the new version string
+      - "Write the changelog entry into `settings.changelog` as `<version>.md`: what changed since the previous version and why, and what a consuming project must do to move onto it. Draft it from the diff since the previous version tag rather than from recollection of the work. If an entry for unreleased changes is already accumulating there, rename it to the new version and bring it up to date instead of starting over."
+      - Invoke @DuckspecProject#validate() — @DuckWorkflow#release below already submits the changes itself as part of its own delivery procedure, so this only confirms they are valid first rather than submitting them a second time
+      - Read `workflow` from this project; if not set, ask the user to configure it and stop
+      - Invoke @DuckWorkflow#release(version=<new_version>)
+  - id: bump
+        description: hint passed to the versioning strategy (e.g. patch/minor/major for @SemVer); interpretation depends on the configured strategy
+    instructions:
+      - Read `versioning` from this project; if not set, ask the user to configure it and stop
+      - Invoke @VersioningStrategy#next_version(bump=<bump>) to obtain the new version string
+      - Update the `version` field in this @DuckspecProject file to the new version string
+      - "Write the changelog entry for the new version into `settings.changelog` as `<version>.md`, covering what changed since the previous version and why, and what a consuming project must do to move onto it. Draft it from the diff since the previous version tag, not from recollection of the work. If an entry for unreleased changes is already accumulating there, rename it to the new version and bring it up to date rather than starting again."
+      - Invoke @DuckWorkflow#release(version=<new_version>) — the workflow attaches the entry to the published release where the platform supports it
       - Invoke @DuckspecProject#validate() — @DuckWorkflow#release below already submits the changes itself as part of its own delivery procedure, so this only confirms they're valid first rather than submitting them a second time
       - Read `workflow` from this project; if not set, ask the user to configure it and stop
       - Invoke @DuckWorkflow#release(version=<new_version>)

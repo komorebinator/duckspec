@@ -1,4 +1,4 @@
-description: Semantic versioning (major.minor.patch). Patch for bug fixes and small changes; minor for new terms or features; major for breaking changes. The suggested bump is inferred from git log unless overridden.
+description: Semantic versioning (major.minor.patch). Patch for bug fixes and small changes; minor for new terms or features; major for breaking changes. Below 1.0.0 the project is still experimental and the scale shifts down one: a breaking change bumps the minor, and major stays reserved for declaring the project stable. The suggested bump is inferred from git log unless overridden.
 extends: @VersioningStrategy
 recipes:
   - id: next_version

@@ -3,5 +3,7 @@ extends: @Settings
 properties:
   - id: readme
     description: path to the root description file of the @Project (e.g. README.md); relative to the @DuckspecProject term file's location
+  - id: changelog
+    description: path to the folder holding changelog entries, one file per released version named after it (e.g. `1.0.0.md`); relative to the @DuckspecProject term file's location
   - id: src
     description: path to the source root of the project; relative to the @DuckspecProject term file's location; defaults to `..` (the repository root)
