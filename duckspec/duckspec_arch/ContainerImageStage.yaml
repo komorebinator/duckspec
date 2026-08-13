@@ -1,0 +1,5 @@
+description: One named stage of a @ContainerImage build — a layer built on a base image, which later stages or the final image can build on in turn.
+extends: @Term
+properties:
+  - id: from
+    description: image this stage builds on — another stage of the same @ContainerImage, a published image reference, or `scratch`

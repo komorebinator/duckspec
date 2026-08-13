@@ -216,6 +216,47 @@ def _slot_items(content: str, slot: str) -> Iterator[tuple[str, str, int]]:
                 current.append(item_line)
 
 
+def _slot_mapping(content: str, slot: str) -> Iterator[tuple[list[str], str, int]]:
+    """Yields (keys, own_type, key_indent) for every occurrence of `<slot>:` whose body is a block
+    of `key: value` lines rather than `- ` entries — the mapping counterpart of _slot_items. A body
+    that starts with `- ` belongs to that walk instead, so a slot is read as one shape or the other
+    and never as both. `type:` is returned separately rather than among the keys: it names which
+    term the mapping is, so reporting it as a field would flag every typed mapping. Without this,
+    `settings:`, `workflow:` and `versioning:` are exempt from the field check by accident — the
+    entry walk finds no `- ` in them and so reports nothing either way."""
+    lines = content.splitlines()
+    header = re.compile(r'^(\s*)' + re.escape(slot) + r':\s*$')
+    for i, header_line in enumerate(lines):
+        m = header.match(header_line)
+        if m is None:
+            continue
+        slot_indent = len(m.group(1))
+        end = len(lines)
+        for j in range(i + 1, len(lines)):
+            if not lines[j].strip():
+                continue
+            if len(lines[j]) - len(lines[j].lstrip()) <= slot_indent:
+                end = j
+                break
+        block = [line for line in lines[i + 1:end] if line.strip()]
+        if not block or block[0].lstrip().startswith('- '):
+            continue
+        key_indent = len(block[0]) - len(block[0].lstrip())
+        key = re.compile(r'^' + ' ' * key_indent + r'([a-z_][a-z_0-9]*):(.*)$')
+        keys, own_type = [], ''
+        for line in block:
+            m = key.match(line)
+            if m is None:
+                continue
+            if m.group(1) == 'type':
+                own = re.match(r'\s*@(\w+)\s*$', m.group(2))
+                own_type = own.group(1) if own else ''
+            else:
+                keys.append(m.group(1))
+        if keys or own_type:
+            yield keys, own_type, key_indent
+
+
 def _load_settings() -> dict:
     if not _SETTINGS_PATH.is_file():
         return {'active_workspace': None, 'workspaces': {}, 'ducktools': {}}
@@ -708,6 +749,14 @@ class Resolver:
                                 f"{slot} entry '{item_id}' sets '{key}', which no type it has "
                                 f"declares (@{element}"
                                 + (f" + @{own.group(1)}" if own else "") + ")")
+                for keys, own_type, _ in _slot_mapping(content, slot):
+                    fields = allowed | (self._schema(own_type, term_map, cache) if own_type else set())
+                    for key in keys:
+                        if key not in fields:
+                            add('error', 'unknown-field', name, path,
+                                f"{slot} sets '{key}', which no type it has "
+                                f"declares (@{element}"
+                                + (f" + @{own_type}" if own_type else "") + ")")
 
         if unreachable:
             for name, path in sorted(term_map.items()):

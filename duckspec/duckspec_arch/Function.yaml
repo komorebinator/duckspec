@@ -4,6 +4,7 @@ guidelines:
   - A @Function description carries the algorithm: the logic, the edge cases, and the expected behaviour. A restatement of the name is not a description.
 properties:
   - id: arguments
-    description: list of arguments the @Function accepts; each argument has a name and a description
+    type: @Property
+    description: list of arguments the @Function accepts
   - id: signal
     description: "@Signal this @Function connects to; use name#signal_name for a local @SoftwareComponent or @<TermName>#signal_name for an external one; if set, the @Function is automatically called when the @Signal fires"

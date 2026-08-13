@@ -15,14 +15,17 @@ properties:
   - id: goals
     description: list of @Goal the @DuckspecProject pursues — the only thing about a project under development that can never be inferred from its source, so it is asked for explicitly at creation time rather than deferred to assess_coverage
   - id: settings
-    description: @DuckspecProject configuration; see @DuckspecProjectSettings
+    type: @DuckspecProjectSettings
+    description: @DuckspecProject configuration
   - id: startup
     description: list of @Recipe names to invoke automatically before any other work when first opening the @DuckspecProject
   - id: references
     description: list of `{repository, description}` entries naming other projects this one is connected to by identity only (installs, targets, is installed by) — never resolved or loaded by the tool; surfaced verbatim in a References table by @DuckspecProject#load so the connection stays visible without pulling that project's content into context
   - id: workflow
+    type: @DuckWorkflow
     description: delivery workflow for this project; `type:` references a @DuckWorkflow subtype (e.g. `@GitHubWorkflow`); all other fields are property overrides — omit any that should be inferred from context
   - id: versioning
+    type: @VersioningStrategy
     description: versioning strategy for this project; `type:` references a @VersioningStrategy subtype (e.g. `@SemVer`); all other fields are property overrides
 recipes:
   - id: load

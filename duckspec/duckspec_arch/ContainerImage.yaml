@@ -6,6 +6,8 @@ properties:
   - id: tags
     description: list of tags applied to the pushed image (e.g. latest, stable, DD.MM.YYYY)
   - id: stages
-    description: ordered list of build stages; each stage has a name, a base image it builds FROM, and the components it installs or configures
+    type: @ContainerImageStage
+    description: ordered list of build stages
   - id: build_args
+    type: @Property
     description: build-time ARG values that parameterize the build (e.g. FEDORA_MAJOR_VERSION, IMAGE_NAME)

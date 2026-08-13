@@ -8,6 +8,7 @@ properties:
   - id: result
     description: the expected output or artifact produced when this @Recipe completes successfully
   - id: arguments
-    description: list of arguments the @Recipe accepts; each argument has a name and a description
+    type: @Property
+    description: list of arguments the @Recipe accepts
   - id: instructions
     description: ordered list of instructions for the model to execute
