@@ -1,9 +1,8 @@
-name: LongText
 description: A multi-line text input field.
 extends: @UserInterfaceElement
 properties:
-  - name: placeholder
+  - id: placeholder
     description: hint text displayed inside the field when empty
-  - name: mandatory
+  - id: mandatory
     description: whether a value must be provided; defaults to false
     default: false

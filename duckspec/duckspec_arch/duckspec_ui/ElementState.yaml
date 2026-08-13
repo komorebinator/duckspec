@@ -1,0 +1,10 @@
+description: A named condition under which a @UserInterfaceElement takes different property values from the ones set on the element itself.
+extends: @Term
+guidelines:
+  - "A state assigns values, it does not declare fields: the property must already be declared by the owning element, and `property_changes` only says what it becomes while the condition holds. This is what keeps value properties holding values — `disabled: true` under a named condition, never `disabled: (when the list is empty)` on the element itself."
+  - Name the state for the situation, not for its effect — `unavailable` and `loading` say why the element differs, `greyed-out` and `hidden` only repeat what the overridden property already says.
+properties:
+  - id: when
+    description: the condition that puts the element in this state, written against the owning component's own @Field entries or the result of a named @Function
+  - id: property_changes
+    description: properties taking a different value while the condition holds, as a mapping of property name to value; the element keeps the values set on it directly for everything not listed here

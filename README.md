@@ -22,55 +22,56 @@ A spec-driven development framework for building complex projects with AI.
 
 ## Example
 
+`WeatherWidget.yaml` — the filename is the term's identity; `@WeatherWidget` resolves against it.
+
 ```yaml
-name: WeatherWidget
 description: Minimal web app showing current weather at the user's location via IP geolocation.
 extends: @Software
 platform: Python
 components:
-  - name: server
+  - id: server
     type: @Server
     src: server.py
     description: Python HTTP server; serves ui.html at GET / and exposes GET /weather
     functions:
-      - name: get_weather
+      - id: get_weather
         description: >
           Gets the client IP from the request; calls http://ip-api.com/json/<ip> to resolve latitude, longitude, and city;
           calls https://api.open-meteo.com/v1/forecast?latitude=<lat>&longitude=<lon>&current=temperature_2m,weathercode;
           maps weathercode to a condition string
           (0=Clear, 1-3=Partly cloudy, 45-48=Fog, 51-67=Rain, 71-77=Snow, 80-82=Showers, 95-99=Thunderstorm);
           returns {"temperature": <°C float>, "condition": <string>, "city": <string>}
-  - name: ui
+  - id: ui
     type: @UserInterface
     src: ui.html
     views:
-      - name: main
+      - id: main
         type: @View
         components:
-          - name: refresh_button
+          - id: refresh_button
             type: @Button
             label: Refresh
             signals:
-              - name: clicked
+              - id: clicked
                 description: Emitted when the user clicks the button
-          - name: weather_display
+          - id: weather_display
             type: @View
             description: Hidden until first data load
             components:
-              - name: city_label
+              - id: city_label
                 type: @Label
                 description: Displays the city name
-              - name: temperature_label
+              - id: temperature_label
                 type: @Label
                 description: Displays the temperature in °C
-              - name: condition_label
+              - id: condition_label
                 type: @Label
                 description: Displays the weather condition string
     functions:
-      - name: request_weather
+      - id: request_weather
         signal: refresh_button#clicked
         description: Calls server#get_weather via GET /weather; on success calls show_weather; on error displays "Failed to load weather"
-      - name: show_weather
+      - id: show_weather
         description: Populates weather_display with city, temperature, and condition from the server response
 ```
 

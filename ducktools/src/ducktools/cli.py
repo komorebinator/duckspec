@@ -93,6 +93,68 @@ def cmd_resolve_path(project_path: str, ref: str) -> None:
     print(result['content'])
 
 
+def cmd_verify_project(project_path: str, unreachable: bool = False) -> int:
+    findings = resolver.verify_project(project_path, unreachable=unreachable)
+    if not findings:
+        print('no findings')
+        return 0
+    print('| Severity | Check | Term | Location | Message |')
+    print('|----------|-------|------|----------|---------|')
+    for f in findings:
+        location = f"{f['path']}:{f['line']}" if 'line' in f else f['path']
+        print(f"| {f['severity']} | {f['check']} | @{f['term']} | {location} | {f['message']} |")
+    errors = sum(1 for f in findings if f['severity'] == 'error')
+    print(f"\n{errors} error(s), {len(findings) - errors} warning(s)")
+    return 1 if errors else 0
+
+
+def cmd_uses(project_path: str, term_name: str) -> None:
+    r = resolver.term_uses(project_path, term_name)
+    for label, key in (('extended by', 'extended_by'), ('typed by', 'typed_by'), ('referenced by', 'referenced_by')):
+        names = r[key]
+        print(f"{label}: {', '.join('@' + n for n in names) if names else '(none)'}")
+
+
+def cmd_schema(project_path: str, term_name: str) -> None:
+    rows = resolver.term_schema(project_path, term_name)
+    if not rows:
+        print('(no members, or unknown term)')
+        return
+    print('| Member | Declared by |')
+    print('|--------|-------------|')
+    for r in rows:
+        print(f"| {r['member']} | @{r['declared_by']} |")
+
+
+def cmd_query(project_path: str, rootless: bool, extending: str | None,
+              declaring: str | None, folder: str | None) -> None:
+    names = resolver.query_terms(project_path, rootless=rootless, extending=extending,
+                                 declaring=declaring, folder=folder)
+    for n in names:
+        print(f'@{n}')
+    print(f'\n{len(names)} term(s)')
+
+
+def cmd_entries(project_path: str, ref: str) -> None:
+    term_name, _, slot = ref.partition('#')
+    rows = resolver.slot_entries(project_path, term_name.lstrip('@'), slot)
+    if not rows:
+        print('(no entries)')
+        return
+    print('| Id | Fields |')
+    print('|----|--------|')
+    for r in rows:
+        print(f"| {r['id']} | {', '.join(r['fields'])} |")
+
+
+def cmd_set_field(project_path: str, ref: str, field: str, value: str) -> None:
+    print(resolver.set_field(project_path, ref, field, value))
+
+
+def cmd_remove_element(project_path: str, ref: str) -> None:
+    print(resolver.remove_element(project_path, ref))
+
+
 def cmd_create_workspace(name: str) -> None:
     resolver.create_workspace(name)
     print(f'created workspace "{name}"')
@@ -160,6 +222,36 @@ def main() -> None:
     p.add_argument('project_path')
     p.add_argument('ref')
 
+    p = sub.add_parser('verify-project')
+    p.add_argument('project_path')
+    p.add_argument('--unreachable', action='store_true')
+
+    p = sub.add_parser('uses')
+    p.add_argument('project_path')
+    p.add_argument('term_name')
+
+    p = sub.add_parser('schema')
+    p.add_argument('project_path')
+    p.add_argument('term_name')
+
+    p = sub.add_parser('query')
+    p.add_argument('project_path')
+    p.add_argument('--rootless', action='store_true')
+    p.add_argument('--extending')
+    p.add_argument('--declaring')
+    p.add_argument('--folder')
+
+    p = sub.add_parser('entries')
+    p.add_argument('project_path')
+    p.add_argument('ref')
+
+    p = sub.add_parser('set')
+    p.add_argument('project_path'); p.add_argument('ref')
+    p.add_argument('field'); p.add_argument('value')
+
+    p = sub.add_parser('remove')
+    p.add_argument('project_path'); p.add_argument('ref')
+
     sub.add_parser('serve').add_argument('project_path', nargs='?')
 
     sub.add_parser('create-workspace').add_argument('name')
@@ -188,6 +280,20 @@ def main() -> None:
         cmd_grep(args.project_path, args.query, include_all=args.include_all)
     elif args.command == 'resolve-path':
         cmd_resolve_path(args.project_path, args.ref)
+    elif args.command == 'verify-project':
+        raise SystemExit(cmd_verify_project(args.project_path, unreachable=args.unreachable))
+    elif args.command == 'uses':
+        cmd_uses(args.project_path, args.term_name)
+    elif args.command == 'schema':
+        cmd_schema(args.project_path, args.term_name)
+    elif args.command == 'query':
+        cmd_query(args.project_path, args.rootless, args.extending, args.declaring, args.folder)
+    elif args.command == 'entries':
+        cmd_entries(args.project_path, args.ref)
+    elif args.command == 'set':
+        cmd_set_field(args.project_path, args.ref, args.field, args.value)
+    elif args.command == 'remove':
+        cmd_remove_element(args.project_path, args.ref)
     elif args.command == 'serve':
         from .mcp_server import run_server
         run_server()

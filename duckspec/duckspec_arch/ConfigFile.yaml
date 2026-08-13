@@ -1,6 +1,5 @@
-name: ConfigFile
 description: A declarative configuration or data file read by software at runtime or build time. Contains no executable logic — only structured data, settings, or rules.
 extends: @File
 properties:
-  - name: scope
+  - id: scope
     description: who reads this file and when (e.g. system, user, build tool, runtime)

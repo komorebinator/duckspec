@@ -1,7 +1,6 @@
-name: RadioButton
 description: A single-selection element used within a group of mutually exclusive options.
 extends: @UserInterfaceElement
 properties:
-  - name: mandatory
+  - id: mandatory
     description: whether a selection is required; defaults to false
     default: false

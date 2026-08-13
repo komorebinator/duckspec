@@ -1,14 +1,15 @@
-name: Project
 description: Base term for project definitions.
+extends: @Term
 guidelines:
-  - Entries in `software:` must be @TermName references only (e.g. `- @ImageManager`). Never use `extends:` in a `software:` list entry. Every software piece must be defined as its own named @Term.
-contains:
-  - name: goals
-    required: true
-    description: list of @Goal the @Project pursues — the only thing about a @Project that can never be inferred from its source, so it is asked for explicitly at creation time rather than deferred to assess_coverage
-  - name: guidelines
-    description: list of @Guideline the @Project defines
-  - name: software
-    description: list of @Software terms the @Project contains; each entry must be a @TermName reference (e.g. `- @ImageManager`); inline definitions are not allowed — every software piece must be defined as its own term
-  - name: uses
+  - Entries in `software:` must be @<TermName> references only (e.g. `- @DuckToolsApp`). Never use `extends:` in a `software:` list entry. Every software piece must be defined as its own named @Term.
+properties:
+  - id: terms_folder
+    description: relative path to the folder holding this @Project's @Term files, relative to the @Project term file's own location. A top-level field rather than a settings entry, because it is what makes the project's terms discoverable at all. Optional: a project that defines no terms of its own simply omits it.
+  - id: repository
+    description: URL of the project's source repository
+  - id: version
+    description: current version string
+  - id: software
+    description: list of @Software terms the @Project contains; each entry must be a @<TermName> reference (e.g. `- @DuckToolsApp`); inline definitions are not allowed — every software piece must be defined as its own term
+  - id: uses
     description: list of @Project this @Project uses or depends on

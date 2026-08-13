@@ -1,9 +1,10 @@
-name: DuckCrypto
 description: Cryptographic asset terms for the @Duckspec framework — keys, certificates, signatures, digests, and keyrings.
 extends: @DuckspecProject
+terms_folder: duckcrypto
+goals:
+  - Name the cryptographic assets a build or deployment handles — keys, certificates, signatures, digests — so signing and verification become specified steps rather than described ones
+  - Distinguish assets that must stay secret from those meant to be distributed, so a leak is visible in the specification itself
 startup:
   - load
 uses:
   - ../DuckArch.yaml
-settings:
-  terms_folder: duckcrypto

@@ -1,9 +1,10 @@
-name: DuckFilesystem
 description: Filesystem artifact terms for the @Duckspec framework — files, directories, and image assets installed at build or deploy time.
 extends: @DuckspecProject
+terms_folder: duckspec_filesystem
+goals:
+  - Describe files and folders installed at build or deploy time as artifacts with a purpose, not as paths inside a script
+  - Separate static installed content from the code that installs it, so a change of packaging does not rewrite the description
 startup:
   - load
 uses:
   - ../DuckArch.yaml
-settings:
-  terms_folder: duckspec_filesystem

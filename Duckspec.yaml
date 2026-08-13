@@ -1,6 +1,6 @@
-name: Duckspec
 description: A spec-driven development framework for building complex projects with AI.
 extends: @DuckspecProject
+terms_folder: duckspec
 goals:
   - Standardize how requirements and @Term definitions are written across projects
   - Reduce the noise models introduce into the development process
@@ -15,7 +15,6 @@ uses:
 version: 0.9.0
 repository: https://github.com/komorebinator/duckspec
 settings:
-  terms_folder: duckspec
   readme: README.md
 workflow:
   type: @GitHubWorkflow
@@ -30,61 +29,62 @@ ai_instructions:
 guidelines:
   - "Every change starts in the spec, not the code. Capture the requirement — a new behavior, a fix, a rename — in the relevant @Term first, refining its existing description/properties/functions rather than replacing them, so the spec keeps accumulating the complete, current picture across every task instead of losing what earlier tasks already established. Only once the spec reflects the change, invoke @Software#build to bring the code in line with it — code is produced by build, not maintained in parallel to it. @DuckspecProject#learn and #assess_coverage exist to reconcile gaps discovered after the fact; they are recovery tools for catching up, not the default path for planned changes."
   - All documentation must be written in English.
-  - Prefer `@TermName#path#to#element` references over concrete CLI commands, MCP tool names, or other interface-specific syntax in descriptions, recipes, and guidelines; this keeps documentation interface-agnostic and lets the executor choose the appropriate interface. Use concrete syntax only when no term reference exists or when the exact detail is essential.
+  - Prefer `@<TermName>#path#to#element` references over concrete CLI commands, MCP tool names, or other interface-specific syntax in descriptions, recipes, and guidelines; this keeps documentation interface-agnostic and lets the executor choose the appropriate interface. Use concrete syntax only when no term reference exists or when the exact detail is essential.
   - Avoid abbreviations in @Term names; prefer full words (e.g. `Workflow` not `WF`, `Configuration` not `Cfg`, `Repository` not `Repo`).
   - Each `.yaml` file defines exactly one term following the @Term format.
-  - "@Term names must be written in CamelCase with no spaces. The filename must match the @Term name (e.g. `UserInterface.yaml` for `name: UserInterface`)."
+  - "A @Term is identified by its filename, written in CamelCase with no spaces (e.g. `UserInterface.yaml` is @UserInterface). That filename is what `@<TermName>` references resolve against; the `name:` field inside the file is a short human-readable label, not the identity."
   - Commit messages must be short and free of unnecessary detail.
-  - All `Invoke @TermName#recipe_name()` references must resolve to an existing @Recipe defined on that @Term or inherited by it.
+  - All `Invoke @<TermName>#<recipe_name>()` references must resolve to an existing @Recipe defined on that @Term or inherited by it.
+  - "Every `@<Name>` mention in a @Term file must resolve to a term reachable in the project — define it locally, or bring the project that owns it in via `uses:`. There is no exemption for examples: an unresolvable name in documentation is as much a defect as one in a real reference, because a reader cannot tell the two apart. When documenting the reference syntax itself, write generic stand-ins in angle brackets (`@<TermName>`, `@<recipe_name>`) — the same substitution notation recipes already use for arguments, and deliberately outside the reference grammar so it never reads as a reference. Prefer a real term over a stand-in wherever one fits the example."
   - Sub-project @Term names must follow the pattern `Duck` + what it does (e.g. `DuckArch`, `DuckUI`); the word "spec" must not appear in sub-project names.
   - A new @Term belongs in the @Duckspec framework (global) if and only if all three hold — (1) the concept exists in standard CS/software engineering vocabulary without platform qualification and can be explained without mentioning any specific technology; (2) it would be useful in projects written in different languages and built on different stacks; (3) its name and definition are immediately understandable to a developer unfamiliar with this project's tech stack. If any of these fails, the term belongs in the project's own terms_folder.
   - A gap requiring a new @Term exists when the closest available @DesignPattern would lose significant architectural information — using it feels like a stretch that hides the real concept rather than describing it.
   - Avoid using the word "extends" in a description in its everyday English sense when it could be confused with the formal `extends:` field — prefer synonyms like "built on", "managed by", "implements" to avoid implying a false inheritance relationship or referencing a term that does not exist.
 lists:
-  - name: file-categories
+  - id: file-categories
     items:
-      - name: code
+      - id: code
         description: executable logic; maps to a @DesignPattern
-      - name: config
+      - id: config
         description: declarative configuration or data file (JSON, YAML, TOML, INI, .desktop, systemd unit, GSchema override, polkit rule, etc.); maps to @ConfigFile
-      - name: asset
+      - id: asset
         description: images, icons, fonts, compiled binaries — record path and purpose only
-      - name: meta
+      - id: meta
         description: .gitignore, LICENSE, lockfiles, README already in settings.readme — record existence, skip
-  - name: code-patterns
+  - id: code-patterns
     items:
-      - name: ShellScript
+      - id: ShellScript
         description: bash/sh/zsh scripts
-      - name: Application
+      - id: Application
         description: program entry points
-      - name: View
+      - id: View
         description: windows, screens, dialogs, and modal overlays
-      - name: Page
+      - id: Page
         description: named pages within a stack or tab view
-      - name: UserInterface
+      - id: UserInterface
         description: a module that owns and composes multiple @View instances
-      - name: Extension
+      - id: Extension
         description: plugins and add-ons
-      - name: Pipeline
+      - id: Pipeline
         description: CI/CD workflows triggered by events (push, cron, webhook)
-      - name: ContainerImage
+      - id: ContainerImage
         description: Dockerfiles or Containerfiles
-      - name: Singleton
+      - id: Singleton
         description: shared service or utility modules
-      - name: Server
+      - id: Server
         description: daemons
-      - name: Script
+      - id: Script
         description: other scripting files
 recipes:
-  - name: release
+  - id: release
     description: Releases a new version of the @Duckspec framework
     arguments:
-      - name: bump
+      - id: bump
         description: version component to bump; see @DuckspecProject#release
     instructions:
       - Check that the URL of the current git repository matches `repository`; if not, abort — releases must be run from the official @Duckspec repository
       - Invoke @DuckspecProject#release(bump=<bump>)
-  - name: install
+  - id: install
     description: Bootstraps the shared @Duckspec/@DuckTools installation for this executor, then offers to bring in an existing project or start a new one — never sets a specific project's own metadata itself; that's @Duckspec#create_project/#import_project's job
     instructions:
       - "Read `~/.duckspec/settings.json` (treat a missing file as `{}`). If `ducktools.src` or `ducktools.bin` is unset or points to a missing file: ask the user which folder to clone the framework into (suggest a directory alongside their other projects)"
@@ -94,32 +94,33 @@ recipes:
       - "If this executor supports MCP: offer to register the ducktools MCP server, preferring a user-level/global registration over a per-project one wherever the executor's own tooling allows it — the exact registration mechanism is executor-specific, use whatever this assistant provides"
       - "Verify the MCP connection by invoking its `load_project` (or equivalent) tool against the just-cloned `Duckspec.yaml`; confirm real content comes back, then use that same content to briefly summarize Duckspec's goals and top guidelines/ai_instructions for the user — enough to orient them, not the full rules table"
       - "Ask whether to bring in an existing project or start a new one; Invoke @Duckspec#import_project() or @Duckspec#create_project() accordingly"
-  - name: update
+  - id: update
     description: Updates @Duckspec to the latest version — a single `git pull` in the shared clone, immediately available to every project that references it
     instructions:
       - Read `ducktools.src` from `~/.duckspec/settings.json`; if unset, tell the user @Duckspec is not installed via the workspace model and stop
       - Run `git pull` in the clone's repository root (the parent of `ducktools.src`)
       - Invoke @DuckspecProject#validate()
-  - name: create_project
+  - id: create_project
     description: Creates a minimal @DuckspecProject term file — only what's required plus whatever context supplies. Repository, workflow, workspace registration, and everything else are deferred to @DuckspecProject#assess_coverage, which has real project context to fill them in correctly instead of guessing now.
     arguments:
-      - name: context_path
-        description: optional path to existing source the project is being created for (e.g. passed by @Duckspec#import_project); used only to help infer name/description/README, not to set `settings.src` — that's the caller's job
+      - id: context_path
+        description: optional path to existing source the project is being created for (e.g. passed by @Duckspec#import_project); used only to help infer the identifier, description and README, not to set `settings.src` — that's the caller's job
     instructions:
       - Ask the user in which folder the @DuckspecProject term file should be stored, if not already implied by `context_path`
-      - Infer the project name and description from context (`context_path`'s folder name, an existing README, etc.); ask the user to confirm or correct them
+      - "Infer the project's identifier and description from context (`context_path`'s folder name, an existing README, etc.); ask the user to confirm or correct them. The identifier is CamelCase and becomes the filename, which is the project's identity."
+      - "Ask the user for `name` — a short human-readable name for the project, the one a person would say out loud. It is not required and nothing breaks without it, but a project is exactly the case where a display name earns its place over the identifier: `Borshevik Linux` against `Borshevik`, `Duckspec Framework` against `Duckspec`. Skip it only if the user says the identifier already reads the way they want."
       - "Ask the user for `goals` — what this project is trying to achieve. This is the one required field that can never be inferred, so always ask, even when everything else came from context."
-      - Set `settings.terms_folder` to a subfolder named after the project, located next to the @DuckspecProject term file (e.g. if the file is `myapp/MyApp.yaml`, set `settings.terms_folder` to `MyApp/`)
+      - Set `terms_folder` to a subfolder named after the project, located next to the @DuckspecProject term file (e.g. if the file is `myapp/MyApp.yaml`, set `terms_folder` to `MyApp/`)
       - If a README or other description file exists, set `settings.readme` to its path (relative to the @DuckspecProject term file)
-      - "Create the @DuckspecProject term file named `<ProjectName>.yaml` (matching the `name:` field), with only `name`, `description`, `goals`, `settings`, and `uses` set to `https://github.com/komorebinator/duckspec`; leave `repository`, `workflow`, `versioning`, and `software` unset entirely"
-      - Create the terms folder on disk at the path set in `settings.terms_folder`
+      - "Create the @DuckspecProject term file named `<ProjectName>.yaml` — the filename is the project's identity — with only `name` (when the user gave one), `description`, `goals`, `terms_folder`, and `uses` set to `https://github.com/komorebinator/duckspec`; leave `repository`, `workflow`, `versioning`, and `software` unset entirely"
+      - Create the terms folder on disk at the path set in `terms_folder`
       - Invoke @DuckspecProject#create_readme() if no readme exists yet, else @DuckspecProject#update_readme()
       - Invoke @DuckspecProject#update_agents() — so AGENTS.md exists from the moment the project does, before @DuckspecProject#assess_coverage ever runs against it
       - "Report the created file's path back to the caller. This project is not yet registered in any workspace — it has no `repository` for @Workspace#add_project to key on. @DuckspecProject#assess_coverage registers it once one is found."
-  - name: import_project
+  - id: import_project
     description: Brings an existing codebase under Duckspec management — creates a minimal project pointed at it via @Duckspec#create_project, then runs a full coverage analysis to fill in the rest
     arguments:
-      - name: source_path
+      - id: source_path
         description: path to the existing project's source folder
     instructions:
       - Ask the user for `source_path` if not provided

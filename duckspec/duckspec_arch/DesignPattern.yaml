@@ -1,18 +1,22 @@
-name: DesignPattern
 description: A named architectural pattern describing a runtime component's structure and behavior.
+extends: @Term
 properties:
-  - name: src
+  - id: src
     description: path to the source folder or file for this component
-contains:
-  - name: fields
+  - id: fields
+    type: @Field
     description: list of @Field the component declares — instance state, module-level constants, or external state it attaches to objects it does not own
-  - name: functions
+  - id: functions
+    type: @Function
     description: list of @Function the component exposes or handles
-  - name: signals
+  - id: signals
+    type: @Signal
     description: list of @Signal the component emits
-  - name: components
+  - id: components
+    type: @SoftwareComponent
     description: list of nested @SoftwareComponent instances owned by this component
-  - name: patches
+  - id: patches
+    type: @Patch
     description: list of @Patch instances that modify this component's source files at build time; when a @Patch is nested here, its target is implicit
 guidelines:
   - Prefer `fields:` entries over narrative prose for state. Any instance property, module-level constant, or state attached to an object the component does not own belongs in `fields:` (structured name/type/default; see @Field for how scope follows from nesting and name prefix), not buried in a `description` paragraph — this is what lets the state model be reconstructed precisely on rebuild instead of being reverse-engineered from prose each time.

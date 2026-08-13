@@ -1,7 +1,9 @@
-name: DuckUI
 description: User interface terms for the @Duckspec framework.
 extends: @DuckspecProject
+terms_folder: duckspec_ui
+goals:
+  - Describe an interface precisely enough to build it without naming a single widget toolkit
+  - Cover the controls a real form needs — text, choice, number, date, toggle — so a specification never falls back on prose for an ordinary input
+  - Let one description render to GTK, web, or mobile, so an interface survives a change of frontend stack
 startup:
   - load
-settings:
-  terms_folder: duckspec_ui

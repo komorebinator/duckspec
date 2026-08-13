@@ -1,9 +1,11 @@
-name: DuckVersion
 description: Version control workflow terms for @Duckspec — defines how changes are delivered and released across different VCS and review systems.
 extends: @DuckspecProject
+terms_folder: duckversion
+goals:
+  - Describe how a change reaches users — review, merge, tag, publish — independently of which VCS or review system is in use
+  - Let a project move between GitHub, Gerrit, or plain git by changing one declaration instead of every recipe that mentions delivery
+  - Keep version calculation a property of the project rather than a step someone has to remember to perform
 startup:
   - load
 uses:
   - ../DuckArch.yaml
-settings:
-  terms_folder: duckversion

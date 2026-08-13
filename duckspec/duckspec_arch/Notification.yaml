@@ -1,13 +1,11 @@
-name: Notification
 description: A message delivered to the user outside the application's own UI surface. Platform-agnostic — covers desktop notifications, mobile push, email, and similar delivery channels.
 extends: @DesignPattern
 properties:
-  - name: channel
+  - id: channel
     description: delivery mechanism (e.g. desktop, push, email, SMS, webhook)
-  - name: title
+  - id: title
     description: short headline of the notification
-  - name: body
+  - id: body
     description: the full notification text
-contains:
-  - name: actions
+  - id: actions
     description: optional list of labelled actions the user can take directly from the notification without opening the app

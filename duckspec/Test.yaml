@@ -1,14 +1,7 @@
-name: Test
 description: A named test case that verifies a @Software component behaves as expected.
+extends: @Term
 properties:
-  - name: name
-    required: true
-    description: test identifier, no spaces (code-style)
-  - name: description
-    description: what this test verifies
-  - name: command
-    required: true
+  - id: command
     description: command to run following the software's `platform` conventions
-  - name: expect
-    required: true
+  - id: expect
     description: expected output or behavior that indicates the test passed

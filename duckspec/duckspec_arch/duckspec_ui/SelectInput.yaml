@@ -1,9 +1,8 @@
-name: SelectInput
 description: A dropdown or picker for selecting one or more options from a predefined list.
 extends: @UserInterfaceElement
 properties:
-  - name: placeholder
+  - id: placeholder
     description: hint text displayed when no option is selected
-  - name: mandatory
+  - id: mandatory
     description: whether a value must be provided; defaults to false
     default: false

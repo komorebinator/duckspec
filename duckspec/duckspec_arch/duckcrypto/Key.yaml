@@ -1,10 +1,9 @@
-name: Key
 description: A cryptographic key used for encryption, decryption, signing, or verification.
-extends: @DesignPattern
+extends: @File
 properties:
-  - name: algorithm
+  - id: algorithm
     description: cryptographic algorithm (e.g. RSA-2048, ECDSA P-256, Ed25519, AES-256)
-  - name: format
-    description: storage format (e.g. PEM, DER, JWK, raw bytes)
-  - name: purpose
+  - id: encoding
+    description: storage encoding (e.g. PEM, DER, JWK, raw bytes); distinct from the inherited `format`, which is the file format
+  - id: purpose
     description: what this key is used for — signing, verification, encryption, decryption, or key exchange

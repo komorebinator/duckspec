@@ -1,2 +1,2 @@
-name: Settings
 description: A named set of configuration values
+extends: @Term

@@ -1,27 +1,26 @@
-name: Term
 description: A named element of the @Project's domain vocabulary.
-ai_instructions:
-  - When a @Term declares `extends`, resolve the parent @Term first (recursively). The child inherits all parent @Property, @Recipe, and contains slots. Any child member with the same name as a parent member fully replaces it. Members not redefined in the child are inherited as-is.
-  - "Path references: any named element within a @Term can be addressed by a `#`-separated path through its namespace (e.g. `cli#load` to reach the element named `load` inside `cli`). The path does not have to follow strict parent-child nesting — it is a sequence of names that narrows the namespace at each step. To reference an element in another @Term, prefix the path with `@TermName` (e.g. `@DuckTools#cli#load`)."
+guidelines:
+  - When a @Term declares `extends`, resolve the parent @Term first (recursively). The child inherits all parent @Property and @Recipe declarations. Any child member with the same name as a parent member fully replaces it. Members not redefined in the child are inherited as-is.
+  - "Never re-declare a `properties:` member that an ancestor already declares. Inheritance replaces it silently, so the two definitions drift apart and a reader cannot tell which one applies. If two subtypes both need a member, declare it once on their common parent; if only one needs it, only that one declares it. Recipes are the exception, and there re-declaration is the mechanism: a base term declares the contract, each subtype implements it under the same name."
+  - "Path references: any named element within a @Term can be addressed by a `#`-separated path through its namespace (e.g. `cli#load` to reach the element named `load` inside `cli`). The path does not have to follow strict parent-child nesting — it is a sequence of names that narrows the namespace at each step. A segment may name either a list entry (`- id: <segment>`) or a mapping key (`<segment>:`), so both `@DuckToolsApp#resolver#verify_project` and `@DuckToolsApp#mcp_server#functions` resolve; when a term holds both under one name, the list item wins. To reference an element in another @Term, prefix the path with `@<TermName>` (e.g. `@DuckToolsApp#cli#load-project`)."
 properties:
-  - name: name
-    required: true
-    description: CamelCase identifier; must match the filename (e.g. `UserInterface` in `UserInterface.yaml`)
-  - name: description
-    required: true
+  - id: id
+    description: identifier of this object, unique among its siblings. The only thing `#`-paths address; for entries naming something in the source (a @Function, a @Field) it must match that identifier verbatim.
+  - id: name
+    description: a short human-readable name for this object. A plain text field, never an identifier — addressing goes through `id`, and a term file is identified by its filename. Worth setting where a display name differs usefully from the id (a project, a piece of software); pointless where it would only restate it.
+  - id: description
     description: top-level overview of what this @Term represents or does; sufficient on its own for simple terms; other slots (properties, functions, components, etc.) add detail
-contains:
-  - name: extends
+  - id: extends
     description: parent @Term to inherit from
-  - name: contains
-    description: list of named slots this @Term introduces for its extenders
-  - name: properties
+  - id: properties
+    type: @Property
     description: list of @Property the @Term holds
-  - name: recipes
+  - id: recipes
+    type: @Recipe
     description: list of @Recipe the @Term exposes
-  - name: guidelines
+  - id: guidelines
     description: list of @Guideline the @Term defines for content and artifact quality
-  - name: ai_instructions
+  - id: ai_instructions
     description: list of behavioral directives for the model when working with this @Term
-  - name: lists
+  - id: lists
     description: named lookup tables available to this @Term's recipes; each list has a name and items, where each item has a name and a description; referenced by name in recipe instructions

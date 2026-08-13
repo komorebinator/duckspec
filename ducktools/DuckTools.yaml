@@ -1,6 +1,6 @@
-name: DuckTools
 description: CLI and MCP tools for loading and working with @DuckspecProject files.
 extends: @DuckspecProject
+terms_folder: ducktools
 uses:
   - ../Duckspec.yaml
 goals:
@@ -10,64 +10,62 @@ goals:
   - Expose a consistent interface as CLI commands and as an optional MCP server
   - Support any model or runtime without model-specific integration
 lists:
-  - name: installation-methods
+  - id: installation-methods
     items:
-      - name: mcp
+      - id: mcp
         description: "register ducktools as an MCP server in the model's tool configuration; the server is started with `ducktools serve` — no project_path or PYTHONPATH needed, `ducktools` is a real on-PATH binary (see @Duckspec#install) and every MCP call carries its own project_path argument"
-      - name: memory
+      - id: memory
         description: write `../AGENTS.md` into any persistent memory location available to the current model
-      - name: claude
-        description: register via mcp method first, then append a project entry to ~/.claude/CLAUDE.md noting the project path and that MCP tools (load_project, list_terms, load_terms, grep_terms, resolve_path) are available; create the file if it does not exist
+      - id: claude
+        description: register via mcp method first, then append a project entry to ~/.claude/CLAUDE.md noting the project path and that the MCP tools listed in @DuckToolsApp#mcp_server are available; create the file if it does not exist
 guidelines:
   - Zero external dependencies; only Python stdlib is allowed for all features including the MCP server.
   - "@DuckspecProject files and @Term files are read as plain text; field extraction is done with regex, not a YAML parser."
   - The MCP server implements the JSON-RPC 2.0 wire protocol directly over stdio without using an MCP SDK.
 recipes:
-  - name: build
+  - id: build
     description: Creates or updates source files in `src/` to match this @Software's specification
     instructions:
       - Invoke @Software#build()
-  - name: run
+  - id: run
     description: Runs a DuckTools command directly via Python without installation
     arguments:
-      - name: command
+      - id: command
         description: ducktools command to run; see cli#functions
-      - name: project_path
+      - id: project_path
         description: path to a @DuckspecProject .yaml file
     instructions:
       - "If `ducktools.bin` is set in `~/.duckspec/settings.json`, run `ducktools <command> <project_path>` directly. Otherwise run `PYTHONPATH=<ducktools.src from settings, or the local ducktools/src> python3 -m ducktools <command> <project_path>`."
-  - name: install
+  - id: install
     description: Installs DuckTools so it is available in future sessions
     arguments:
-      - name: method
+      - id: method
         description: installation method; from installation-methods list; suggest mcp for the most seamless experience, memory for a model-agnostic approach
-      - name: project_path
+      - id: project_path
         description: path to the @DuckspecProject .yaml file to register
     instructions:
       - Ask the user for `method` if not provided; execute the chosen method from installation-methods
-  - name: create_workspace
+  - id: create_workspace
     description: Adds a new named, empty workspace to the shared registry
     arguments:
-      - name: name
+      - id: name
         description: unique name for the new workspace
     instructions:
       - Read `~/.duckspec/settings.json` (create it with empty `workspaces` and no `active_workspace` if it does not exist)
       - Add `name` under `workspaces` with an empty `projects` map; if this is the first workspace or the user confirms, set `active_workspace` to `name`
       - Write the settings file back
-  - name: use_workspace
+  - id: use_workspace
     description: Switches the active workspace — the one whose `projects` registry is used to resolve `repository` URL references
     arguments:
-      - name: name
+      - id: name
         description: name of an existing workspace to activate
     instructions:
       - Read `~/.duckspec/settings.json`; if `name` is not a key under `workspaces`, tell the user and stop
       - Set `active_workspace` to `name` and write the file back
-  - name: list_projects
+  - id: list_projects
     description: Displays every project registered across all workspaces, grouped by workspace, marking which one is active
     instructions:
       - Read `~/.duckspec/settings.json`
-      - For each workspace (marking the active one): for each registered project, read its file and output `@Name — description` followed by its `repository → path`
-settings:
-  terms_folder: ducktools
+      - For each workspace (marking the active one): for each registered project, read its file and output `@<Name> — description` followed by its `repository → path`
 software:
   - @DuckToolsApp

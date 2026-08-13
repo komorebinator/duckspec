@@ -1,0 +1,4 @@
+description: A @Project developed and released outside this repository, described here only so this project's own terms can refer to it precisely.
+extends: @Project
+guidelines:
+  - "Use @ExternalProject as the parent for anything your project depends on but does not develop — an upstream platform, a base image, a vendored tool — whenever your own terms need to name its parts. The test is whether one of your terms refers to one of its internals: if it does, that internal has to exist as a @Term, and something has to own it."

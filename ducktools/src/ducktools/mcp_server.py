@@ -85,6 +85,69 @@ _TOOLS = [
         },
     },
     {
+        'name': 'verify_project',
+        'description': 'Mechanical consistency pass over the whole spec — dangling and ambiguous @TermName / Term#path references, unknown or cyclic extends, duplicate or unparseable terms, members that shadow an inherited one, and entries setting fields no type declares. Returns findings as a markdown table, or "no findings" when the spec is internally consistent',
+        'inputSchema': {
+            'type': 'object',
+            'properties': {
+                **_PROJECT_PATH_PROP,
+                'unreachable': {
+                    'type': 'boolean',
+                    'description': 'also report terms no reachable term mentions; noisy for framework/library projects whose terms are meant for consumers, so off by default',
+                },
+            },
+            'required': ['project_path'],
+        },
+    },
+    {
+        'name': 'term_uses',
+        'description': 'Reverse index for one term: which terms extend it, which name it as a type:, which merely reference it. Use before changing a term to see what depends on it',
+        'inputSchema': {'type': 'object', 'properties': {**_PROJECT_PATH_PROP,
+            'term_name': {'type': 'string', 'description': 'term to find references to'}},
+            'required': ['project_path', 'term_name']},
+    },
+    {
+        'name': 'term_schema',
+        'description': "Every member a term effectively has, each tagged with the ancestor that declared it — the term's own properties plus the whole extends chain",
+        'inputSchema': {'type': 'object', 'properties': {**_PROJECT_PATH_PROP,
+            'term_name': {'type': 'string', 'description': 'term whose effective schema to resolve'}},
+            'required': ['project_path', 'term_name']},
+    },
+    {
+        'name': 'query_terms',
+        'description': 'Filter terms by structure rather than text: no extends, extending a given term, declaring a given member, or living under a given folder',
+        'inputSchema': {'type': 'object', 'properties': {**_PROJECT_PATH_PROP,
+            'rootless': {'type': 'boolean', 'description': 'only terms declaring no extends'},
+            'extending': {'type': 'string', 'description': 'only terms whose extends chain includes this term'},
+            'declaring': {'type': 'string', 'description': 'only terms declaring a member of this id'},
+            'folder': {'type': 'string', 'description': 'only terms whose path contains this fragment'}},
+            'required': ['project_path']},
+    },
+    {
+        'name': 'slot_entries',
+        'description': 'List the entries of one slot in one term as id + the fields set on each entry itself',
+        'inputSchema': {'type': 'object', 'properties': {**_PROJECT_PATH_PROP,
+            'term_name': {'type': 'string', 'description': 'term holding the slot'},
+            'slot': {'type': 'string', 'description': 'slot whose entries to list'}},
+            'required': ['project_path', 'term_name', 'slot']},
+    },
+    {
+        'name': 'set_field',
+        'description': 'Set a field on the element a Term#path addresses, replacing it if present and inserting it at the element\'s own column if not. Refuses an ambiguous path instead of editing whichever element came first',
+        'inputSchema': {'type': 'object', 'properties': {**_PROJECT_PATH_PROP,
+            'ref': {'type': 'string', 'description': 'TermName or TermName#segment#segment...'},
+            'field': {'type': 'string', 'description': 'field to set'},
+            'value': {'type': 'string', 'description': 'value to set it to'}},
+            'required': ['project_path', 'ref', 'field', 'value']},
+    },
+    {
+        'name': 'remove_element',
+        'description': 'Remove the element a Term#path addresses together with everything nested under it, using indentation for boundaries. Refuses a bare term name and an ambiguous path',
+        'inputSchema': {'type': 'object', 'properties': {**_PROJECT_PATH_PROP,
+            'ref': {'type': 'string', 'description': 'TermName#segment#segment...'}},
+            'required': ['project_path', 'ref']},
+    },
+    {
         'name': 'create_workspace',
         'description': 'Add a new named, empty workspace to the shared ~/.duckspec/settings.json registry',
         'inputSchema': {
@@ -264,12 +327,56 @@ def _call(name: str, arguments: dict) -> str:
         rows += [f"| @{r['name']} | {r['path']} | {'; '.join(r['lines'][:3])} |" for r in results]
         return '\n'.join(rows)
 
+    if name == 'set_field':
+        return resolver.set_field(path, arguments['ref'], arguments['field'], arguments['value'])
+
+    if name == 'remove_element':
+        return resolver.remove_element(path, arguments['ref'])
+
+    if name == 'term_uses':
+        r = resolver.term_uses(path, arguments['term_name'])
+        return '\n'.join(f"{k}: {', '.join('@' + n for n in v) if v else '(none)'}" for k, v in r.items())
+
+    if name == 'term_schema':
+        rows = resolver.term_schema(path, arguments['term_name'])
+        if not rows:
+            return '(no members, or unknown term)'
+        return '\n'.join(['| Member | Declared by |', '|--------|-------------|']
+                          + [f"| {r['member']} | @{r['declared_by']} |" for r in rows])
+
+    if name == 'query_terms':
+        names = resolver.query_terms(path, rootless=bool(arguments.get('rootless', False)),
+                                     extending=arguments.get('extending'),
+                                     declaring=arguments.get('declaring'),
+                                     folder=arguments.get('folder'))
+        return '\n'.join('@' + n for n in names) + f'\n\n{len(names)} term(s)'
+
+    if name == 'slot_entries':
+        rows = resolver.slot_entries(path, arguments['term_name'], arguments['slot'])
+        if not rows:
+            return '(no entries)'
+        return '\n'.join(['| Id | Fields |', '|----|--------|']
+                          + [f"| {r['id']} | {', '.join(r['fields'])} |" for r in rows])
+
     if name == 'resolve_path':
         ref = arguments.get('ref', '')
         result = resolver.resolve_path(path, ref)
         if result is None:
             return f'not found: {ref}'
         return f"--- {ref} [{result['path']}] ---\n{result['content']}"
+
+    if name == 'verify_project':
+        findings = resolver.verify_project(path, unreachable=bool(arguments.get('unreachable', False)))
+        if not findings:
+            return 'no findings'
+        rows = ['| Severity | Check | Term | Location | Message |',
+                '|----------|-------|------|----------|---------|']
+        for f in findings:
+            location = f"{f['path']}:{f['line']}" if 'line' in f else f['path']
+            rows.append(f"| {f['severity']} | {f['check']} | @{f['term']} | {location} | {f['message']} |")
+        errors = sum(1 for f in findings if f['severity'] == 'error')
+        rows.append(f"\n{errors} error(s), {len(findings) - errors} warning(s)")
+        return '\n'.join(rows)
 
     raise ValueError(f'unknown tool: {name}')
 

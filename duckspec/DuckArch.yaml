@@ -1,11 +1,13 @@
-name: DuckArch
 description: Architecture description terms for the @Duckspec framework.
 extends: @DuckspecProject
+terms_folder: duckspec_arch
+goals:
+  - Describe a system's runtime structure in terms that survive a change of language, framework, or platform
+  - Give every code file a pattern it can be classified as, so a codebase can be described exhaustively rather than selectively
+  - Keep the pattern set small enough to choose from without deliberation — a new term is added only when the nearest existing one would hide the real concept
 startup:
   - load
 uses:
   - duckspec_arch/DuckUI.yaml
   - duckspec_arch/DuckCrypto.yaml
   - duckspec_arch/DuckFilesystem.yaml
-settings:
-  terms_folder: duckspec_arch

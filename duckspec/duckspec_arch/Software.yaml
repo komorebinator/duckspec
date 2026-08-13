@@ -1,39 +1,38 @@
-name: Software
 description: Any kind of software — an @Application, service, library, or tool.
 extends: @DesignPattern
-ai_instructions:
-  - Component names within a @Software are local path identifiers; use the `#`-separated path syntax (see @Term) to reference any named element within a component, e.g. `component#function` or `component#signal`
+guidelines:
   - When reading a @Software, resolve each component's type to its @DesignPattern term to understand what fields it supports
+  - Component names within a @Software are local path identifiers; use the `#`-separated path syntax (see @Term) to reference any named element within a component, e.g. `component#function` or `component#signal`
 properties:
-  - name: repository
+  - id: repository
     description: URL or path to the @Software's source repository
-  - name: platform
+  - id: platform
     description: language or platform the software is built for (e.g. Python, iOS, web)
-contains:
-  - name: tests
+  - id: tests
+    type: @Test
     description: list of @Test cases for this @Software
 recipes:
-  - name: build
+  - id: build
     description: Creates or updates source files in `src/` to match this @Software's specification
     instructions:
       - Read the @Software term; resolve each component's type to its @DesignPattern term
       - Create the folder at `src` if it does not exist
       - For each component and for the entry point: if the corresponding source file already exists in `src`, read it and apply only the changes needed to bring it in line with the specification; if it does not exist, create it; follow the conventions of `platform`
-  - name: test
+  - id: test
     description: Runs all @Test cases listed in `tests` and reports results
     instructions:
       - Read the @Software term to get `platform` and `tests`
       - For each @Test: run `command` following `platform` conventions; check output against `expect`; record pass (✓) or fail (✗) and the observed output
       - Output a markdown table with columns: Test | Status (✓ or ✗) | Detail
-  - name: run
+  - id: run
     description: Runs the @Software using the conventions of `platform`
     arguments:
-      - name: args
+      - id: args
         description: command-line arguments to pass to the software
     instructions:
       - Read the @Software term to determine `platform` and `src`
       - Run the software following `platform` conventions (e.g. `python3 -m <package> <args>` for Python)
-  - name: install
+  - id: install
     description: Installs the @Software as a system command using the conventions of `platform`
     instructions:
       - Read the @Software term to determine `platform` and `src`
