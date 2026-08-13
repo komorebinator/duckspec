@@ -512,9 +512,7 @@ class Resolver:
         project_path = _resolve_project(project_path)
         q = query.lower()
         results = []
-        root = Path(project_path).resolve()
-        for name, p, content in [(root.stem, root, root.read_text())] + list(
-                self._walk_terms(project_path, include_all)):
+        for name, p, content in self._walk_terms(project_path, include_all):
             matching = [line.strip() for line in content.splitlines() if q in line.lower()]
             if matching:
                 results.append({'name': name, 'path': str(p), 'lines': matching})
