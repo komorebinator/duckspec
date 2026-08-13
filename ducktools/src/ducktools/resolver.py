@@ -822,7 +822,10 @@ class Resolver:
         path, lines, start, end = located
         head = lines[start]
         indent = len(head) - len(head.lstrip())
-        column = indent + 2 if head.lstrip().startswith('- ') else indent
+        if head.lstrip().startswith('- ') or re.match(r'^\s*[\w-]+:\s*$', head):
+            column = indent + 2   # a list item or a key opening a block nests its fields
+        else:
+            column = indent       # the term itself: fields sit at the top level
         pattern = re.compile(rf'^{" " * column}{re.escape(field)}:')
         for i in range(start, end):
             if pattern.match(lines[i]):
