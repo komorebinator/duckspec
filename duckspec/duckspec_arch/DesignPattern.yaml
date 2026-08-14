@@ -9,6 +9,8 @@ properties:
   - id: functions
     type: @Function
     description: list of @Function the component exposes or handles
+  - id: implicit_functions
+    description: "function ids this type uses as a role rather than as a symbol in the source — `run` for a script's body, `on_click` for a handler attached inline. Set on the type, not on instances. @DuckspecProject#verify_source looks for every other function id in the referenced file and reports the ones it cannot find; without this it would report every one of these, since no such identifier is ever written."
   - id: signals
     type: @Signal
     description: list of @Signal the component emits

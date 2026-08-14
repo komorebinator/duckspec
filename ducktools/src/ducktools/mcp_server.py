@@ -95,9 +95,19 @@ _TOOLS = [
                     'type': 'boolean',
                     'description': 'also report terms no reachable term mentions; noisy for framework/library projects whose terms are meant for consumers, so off by default',
                 },
+                'untyped': {
+                    'type': 'boolean',
+                    'description': 'also report slots holding entries or a mapping that no type describes, so unknown-field read nothing in them — use it to tell "verified correct" apart from "never looked at"; off by default because a project mid-migration lights up everywhere',
+                },
             },
             'required': ['project_path'],
         },
+    },
+    {
+        'name': 'verify_source',
+        'description': 'Mechanical spec-versus-source pass: src paths that do not exist, and function entries whose id appears nowhere in the file their component points at. Returns findings as a markdown table, or "no findings". Answers only what a regex can settle — whether a description is actually true of the code still means reading it',
+        'inputSchema': {'type': 'object', 'properties': {**_PROJECT_PATH_PROP},
+                        'required': ['project_path']},
     },
     {
         'name': 'term_uses',
@@ -139,6 +149,15 @@ _TOOLS = [
             'field': {'type': 'string', 'description': 'field to set'},
             'value': {'type': 'string', 'description': 'value to set it to'}},
             'required': ['project_path', 'ref', 'field', 'value']},
+    },
+    {
+        'name': 'add_entry',
+        'description': 'Append a named entry to the slot a Term#path addresses (e.g. MyTerm#properties). Derives the item column from the entries already there instead of guessing indentation, and refuses an id the slot already has',
+        'inputSchema': {'type': 'object', 'properties': {**_PROJECT_PATH_PROP,
+            'ref': {'type': 'string', 'description': 'TermName#segment... ending at the slot to append to'},
+            'entry_id': {'type': 'string', 'description': 'id for the new entry'},
+            'fields': {'type': 'object', 'description': 'field name to value, written under the new entry'}},
+            'required': ['project_path', 'ref', 'entry_id']},
     },
     {
         'name': 'remove_element',
@@ -366,6 +385,9 @@ def _call(name: str, arguments: dict) -> str:
     if name == 'set_field':
         return resolver.set_field(path, arguments['ref'], arguments['field'], arguments['value'])
 
+    if name == 'add_entry':
+        return resolver.add_entry(path, arguments['ref'], arguments['entry_id'],
+                                  arguments.get('fields') or {})
     if name == 'remove_element':
         return resolver.remove_element(path, arguments['ref'])
 
@@ -419,8 +441,10 @@ def _call(name: str, arguments: dict) -> str:
             return f'not found: {ref}'
         return f"--- {ref} [{result['path']}] ---\n{result['content']}"
 
-    if name == 'verify_project':
-        findings = resolver.verify_project(path, unreachable=bool(arguments.get('unreachable', False)))
+    if name in ('verify_project', 'verify_source'):
+        findings = (resolver.verify_source(path) if name == 'verify_source' else
+                    resolver.verify_project(path, unreachable=bool(arguments.get('unreachable', False)),
+                                            untyped=bool(arguments.get('untyped', False))))
         if not findings:
             return 'no findings'
         rows = ['| Severity | Check | Term | Location | Message |',

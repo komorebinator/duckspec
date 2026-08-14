@@ -99,16 +99,24 @@ _COMMAND_GROUPS = [
          [('project', _PROJECT_ARG), ('ref', 'a reference of the form `TermName#slot`')]),
     ]),
     ('checking', [
-        ('verify-project', 'verify-project <project> [--unreachable]',
+        ('verify-project', 'verify-project <project> [--unreachable] [--untyped]',
          'Report dangling refs, bad `extends`, shadowed members; exits 1 on any error',
          [('project', _PROJECT_ARG),
-          ('--unreachable', 'also report terms nothing reaches')]),
+          ('--unreachable', 'also report terms nothing reaches'),
+          ('--untyped', 'also report slots whose contents no check reads')]),
+        ('verify-source', 'verify-source <project>',
+         'Report declared paths that do not exist and functions absent from the source',
+         [('project', _PROJECT_ARG)]),
     ]),
     ('editing', [
         ('set', 'set <project> <ref> <field> <value>',
          'Set a field on the addressed element, replacing it if already present',
          [('project', _PROJECT_ARG), ('ref', _REF_ARG),
           ('field', 'the field to set'), ('value', 'the value to set it to')]),
+        ('add', 'add <project> <ref> <id> [field=value ...]',
+         'Append a named entry to the addressed slot',
+         [('project', _PROJECT_ARG), ('ref', 'a reference of the form `TermName#slot`'),
+          ('id', 'id for the new entry'), ('field=value', 'fields to write under it')]),
         ('remove', 'remove <project> <ref>',
          'Remove the addressed element and everything nested under it',
          [('project', _PROJECT_ARG), ('ref', _REF_ARG)]),
@@ -237,8 +245,17 @@ def cmd_resolve_path(project_path: str, ref: str) -> None:
     print(result['content'])
 
 
-def cmd_verify_project(project_path: str, unreachable: bool = False) -> int:
-    findings = resolver.verify_project(project_path, unreachable=unreachable)
+def cmd_verify_source(project_path: str) -> int:
+    return _print_findings(resolver.verify_source(project_path))
+
+
+def cmd_verify_project(project_path: str, unreachable: bool = False,
+                       untyped: bool = False) -> int:
+    return _print_findings(
+        resolver.verify_project(project_path, unreachable=unreachable, untyped=untyped))
+
+
+def _print_findings(findings: list[dict]) -> int:
     if not findings:
         print('no findings')
         return 0
@@ -293,6 +310,17 @@ def cmd_entries(project_path: str, ref: str) -> None:
 
 def cmd_set_field(project_path: str, ref: str, field: str, value: str) -> None:
     print(resolver.set_field(project_path, ref, field, value))
+
+
+def cmd_add_entry(project_path: str, ref: str, entry_id: str, fields: list[str]) -> None:
+    parsed = {}
+    for pair in fields:
+        if '=' not in pair:
+            print(f"expected field=value, got: {pair}")
+            return
+        field, value = pair.split('=', 1)
+        parsed[field] = value
+    print(resolver.add_entry(project_path, ref, entry_id, parsed))
 
 
 def cmd_remove_element(project_path: str, ref: str) -> None:
@@ -379,6 +407,10 @@ def main() -> None:
     p = sub.add_parser('verify-project')
     p.add_argument('project_path')
     p.add_argument('--unreachable', action='store_true')
+    p.add_argument('--untyped', action='store_true')
+
+    p = sub.add_parser('verify-source')
+    p.add_argument('project_path')
 
     p = sub.add_parser('uses')
     p.add_argument('project_path')
@@ -402,6 +434,10 @@ def main() -> None:
     p = sub.add_parser('set')
     p.add_argument('project_path'); p.add_argument('ref')
     p.add_argument('field'); p.add_argument('value')
+
+    p = sub.add_parser('add')
+    p.add_argument('project_path'); p.add_argument('ref'); p.add_argument('entry_id')
+    p.add_argument('fields', nargs='*')
 
     p = sub.add_parser('remove')
     p.add_argument('project_path'); p.add_argument('ref')
@@ -444,7 +480,10 @@ def main() -> None:
     elif args.command == 'resolve-path':
         cmd_resolve_path(args.project_path, args.ref)
     elif args.command == 'verify-project':
-        raise SystemExit(cmd_verify_project(args.project_path, unreachable=args.unreachable))
+        raise SystemExit(cmd_verify_project(args.project_path, unreachable=args.unreachable,
+                                            untyped=args.untyped))
+    elif args.command == 'verify-source':
+        raise SystemExit(cmd_verify_source(args.project_path))
     elif args.command == 'uses':
         cmd_uses(args.project_path, args.term_name)
     elif args.command == 'schema':
@@ -453,6 +492,8 @@ def main() -> None:
         cmd_query(args.project_path, args.rootless, args.extending, args.declaring, args.folder)
     elif args.command == 'entries':
         cmd_entries(args.project_path, args.ref)
+    elif args.command == 'add':
+        cmd_add_entry(args.project_path, args.ref, args.entry_id, args.fields)
     elif args.command == 'set':
         cmd_set_field(args.project_path, args.ref, args.field, args.value)
     elif args.command == 'remove':

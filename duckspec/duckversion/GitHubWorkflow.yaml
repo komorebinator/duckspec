@@ -1,4 +1,4 @@
-description: GitHub-based delivery workflow. Changes are submitted as pull requests. Author pushes a branch and opens a PR; reviewer examines and merges via GitHub.
+description: Delivery workflow driving @Git plus @GitHub's pull requests and Releases. Changes are submitted as pull requests; the author pushes a branch and opens a PR, the reviewer examines and merges.
 extends: @DuckWorkflow
 properties:
   - id: merge_strategy

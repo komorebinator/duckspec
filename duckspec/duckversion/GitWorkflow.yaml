@@ -1,4 +1,4 @@
-description: Plain git delivery workflow. Changes are committed and pushed directly to the remote branch with no review step. `review` and `merge` are not applicable — submit is the delivery.
+description: Delivery workflow driving @Git alone. Changes are committed and pushed directly to the remote branch with no review step — `review` and `merge` are not applicable, submit is the delivery.
 extends: @DuckWorkflow
 properties:
   - id: remote

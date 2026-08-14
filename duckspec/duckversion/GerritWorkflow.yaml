@@ -1,4 +1,4 @@
-description: Gerrit-based delivery workflow. Changes are submitted as Change Lists via git push to refs/for/<main_branch>. Author commits and pushes for review; reviewer votes and submits via the Gerrit SSH API.
+description: Delivery workflow driving @Git plus @Gerrit's review pipeline. Changes are submitted as Change Lists via git push to refs/for/<main_branch>; the author commits and pushes for review, the reviewer votes and submits over the Gerrit SSH API.
 extends: @DuckWorkflow
 properties:
   - id: remote

@@ -16,7 +16,6 @@ _GUIDELINES_BLOCK = re.compile(r'^guidelines:\n((?:[ \t].+\n?)*)', re.MULTILINE)
 _AI_INSTRUCTIONS_BLOCK = re.compile(r'^ai_instructions:\n((?:[ \t].+\n?)*)', re.MULTILINE)
 _PROPERTIES_BLOCK = re.compile(r'^properties:\n((?:[ \t].+\n?)*)', re.MULTILINE)
 _PATH_REF = re.compile(r'@([A-Z][A-Za-z]+)((?:#[A-Za-z_][\w-]*)+)')
-_SLOT_DECL = re.compile(r'^\s*-\s+(?:id|name):\s*(\w+)\s*\n\s+type:\s*@(\w+)\s*$', re.MULTILINE)
 
 _SETTINGS_PATH = Path.home() / '.duckspec' / 'settings.json'
 
@@ -164,7 +163,15 @@ def _slot_element_types(content: str) -> dict[str, str]:
     m = _PROPERTIES_BLOCK.search(content)
     if not m:
         return {}
-    return {slot: element for slot, element in _SLOT_DECL.findall(m.group(0))}
+    out: dict[str, str] = {}
+    for slot, item, indent in _slot_items(m.group(0), 'properties'):
+        # `type:` is looked for anywhere among the entry's own fields, not only on the line after
+        # `- id:`: requiring that order let a slot written description-first read as untyped, and
+        # an untyped slot is one unknown-field silently skips.
+        declared = re.search(rf'^{" " * (indent + 2)}type:\s*@(\w+)\s*$', item, re.MULTILINE)
+        if declared:
+            out[slot] = declared.group(1)
+    return out
 
 
 def _item_name(item_lines: list[str]) -> str:
@@ -257,6 +264,84 @@ def _slot_mapping(content: str, slot: str) -> Iterator[tuple[list[str], str, int
             yield keys, own_type, key_indent
 
 
+def _quoted(value: str) -> str:
+    """A written value, wrapped in double quotes when leaving it bare would read as structure
+    rather than text — a `: ` inside it, or a leading character YAML gives meaning to. Term files
+    are parsed by regex here, so a bare colon does no damage today; the quoting keeps hand-written
+    and tool-written entries looking the same, and keeps the files readable by anything stricter."""
+    text = str(value)
+    if not text:
+        return "''"
+    if text.startswith(('"', "'")) and text.endswith(('"', "'")):
+        return text
+    if ': ' in text or text.endswith(':') or text[0] in '@&*!|>%#[]{},':
+        return '"' + text.replace('\\', '\\\\').replace('"', '\\"') + '"'
+    return text
+
+
+def _slot_names(content: str) -> Iterator[str]:
+    """Yields each distinct `<key>:` header name in the text, at any depth, in first-seen order.
+    The `untyped-slot` check needs the slots a term actually uses; the declared ones say nothing
+    about what a term put in them."""
+    seen = set()
+    for m in re.finditer(r'(?m)^\s*([a-z_][a-z_0-9]*):\s*$', content):
+        name = m.group(1)
+        if name not in seen:
+            seen.add(name)
+            yield name
+
+
+def _function_sites(content: str, function_slots: set[str]) -> Iterator[tuple[str, int, str, str]]:
+    """Yields (function_id, line_number, src, type_name) for every entry of a function-holding
+    slot, carrying the `src:` and `type:` of the nearest enclosing component — a function is
+    verified against the file its own component declares, not the term's top-level one, which
+    for a multi-file @Software would be the wrong file or no file at all. `function_slots` comes
+    from the declared element types, so a slot is recognised by what it holds rather than by
+    being called `functions`."""
+    lines = content.splitlines()
+    top = re.search(r'(?m)^src:\s*(\S+)\s*$', content)
+    slots: list[tuple[int, str]] = []
+    entries: list[tuple[int, str, str]] = [(-1, top.group(1).strip('\'"') if top else '', '')]
+
+    for i, line in enumerate(lines):
+        if not line.strip():
+            continue
+        indent = len(line) - len(line.lstrip())
+
+        header = re.match(r'^(\s*)([a-z_][a-z_0-9]*):\s*$', line)
+        if header:
+            while slots and slots[-1][0] >= indent:
+                slots.pop()
+            while len(entries) > 1 and entries[-1][0] >= indent:
+                entries.pop()
+            slots.append((indent, header.group(2)))
+            continue
+
+        entry = re.match(r'^(\s*)- id:\s*(\S.*)$', line)
+        if not entry:
+            continue
+        while slots and slots[-1][0] >= indent:
+            slots.pop()
+        while len(entries) > 1 and entries[-1][0] >= indent:
+            entries.pop()
+        entry_id = entry.group(2).strip().strip('\'"')
+
+        if slots and slots[-1][1] in function_slots:
+            yield entry_id, i + 1, entries[-1][1], entries[-1][2]
+            continue
+
+        src, type_name = entries[-1][1], ''
+        for j in range(i + 1, len(lines)):
+            if lines[j].strip() and len(lines[j]) - len(lines[j].lstrip()) <= indent:
+                break
+            f = re.match(r'^\s{%d}(src|type):\s*(\S+)\s*$' % (indent + 2), lines[j])
+            if f and f.group(1) == 'src':
+                src = f.group(2).strip('\'"')
+            elif f:
+                type_name = f.group(2).lstrip('@')
+        entries.append((indent, src, type_name))
+
+
 def _load_settings() -> dict:
     if not _SETTINGS_PATH.is_file():
         return {'active_workspace': None, 'workspaces': {}, 'ducktools': {}}
@@ -306,6 +391,9 @@ def _resolve_entry(sub: str, base: Path, workspace: dict[str, Path]) -> Path | N
 
 
 class Resolver:
+    def __init__(self) -> None:
+        self._search_cache: dict[Path, str] = {}
+
     def _collect(self, project_path: Path) -> tuple[list[Path], list[Path]]:
         """Returns (term_folders, project_files) discovered recursively."""
         folders: list[Path] = []
@@ -621,7 +709,8 @@ class Resolver:
             current = _parse_extends(content)
         return members
 
-    def verify_project(self, project_path: str, unreachable: bool = False) -> list[dict]:
+    def verify_project(self, project_path: str, unreachable: bool = False,
+                       untyped: bool = False) -> list[dict]:
         """Mechanical consistency pass — everything provable about a spec without reading source
         or judging meaning. Returns findings sorted errors-first; an empty list means the spec is
         internally consistent. The semantic half (do descriptions match the implementation?) is
@@ -764,6 +853,168 @@ class Resolver:
                     add('warning', 'unreachable-term', name, path,
                         'no reachable term mentions this term')
 
+        if untyped:
+            for name, path in sorted(term_map.items()):
+                content = cache.get(name)
+                if content is None:
+                    continue
+                for slot in _slot_names(content):
+                    if slot in slot_types:
+                        continue
+                    entries = sum(1 for _ in _slot_items(content, slot))
+                    mappings = sum(1 for _ in _slot_mapping(content, slot))
+                    if not entries and not mappings:
+                        continue  # holds bare strings or nothing — no fields to check
+                    held = (f'{entries} entr{"y" if entries == 1 else "ies"}' if entries
+                            else f'{mappings} mapping{"" if mappings == 1 else "s"}')
+                    add('warning', 'untyped-slot', name, path,
+                        f"'{slot}' holds {held} that unknown-field did not read, because no type "
+                        f"declares what the slot holds. A slot with a fixed shape wants "
+                        f"`type: @X`; one whose keys vary with the thing it sits on cannot have "
+                        f"one, and stays unverified until a check is written for it")
+
+        findings.sort(key=lambda f: (f['severity'] != 'error', f['path'], f.get('line', 0)))
+        return findings
+
+    def _source_root(self, term_path: Path) -> Path:
+        """The directory a term's `src:` values resolve against. A terms folder sits beside the
+        project file that names it, so the project owning `<dir>/<Name>.yaml` is `<dir>.yaml`;
+        its `settings.src` (default `..`) is the source root."""
+        folder = term_path.parent.resolve()
+        project = term_path
+        for candidate in sorted(folder.parent.glob('*.yaml')):
+            try:
+                declared = re.search(r'(?m)^terms_folder:\s*(\S+)\s*$', candidate.read_text())
+            except OSError:
+                continue
+            if declared and (candidate.parent / declared.group(1).strip('\'"').rstrip('/')
+                             ).resolve() == folder:
+                project = candidate    # the file naming this terms folder owns what is in it
+                break
+        try:
+            content = project.read_text()
+        except OSError:
+            return term_path.parent
+        m = re.search(r'(?m)^settings:\s*$((?:\n[ \t]+.*|\n\s*)*)', content)
+        src = '..'
+        if m:
+            s = re.search(r'(?m)^\s+src:\s*(\S+)\s*$', m.group(1))
+            if s:
+                src = s.group(1).strip('\'"')
+        return (project.parent / src).resolve()
+
+    def _searchable(self, target: Path) -> str | None:
+        """Text a function id is looked for in. A component may point at a folder rather than one
+        file — @DuckToolsApp's `ducktools/src/` is the whole package — and skipping those silently
+        is how the first run of this check read none of its 103 functions while reporting nothing.
+        Returns None only when nothing readable is there."""
+        if target.is_file():
+            try:
+                return target.read_text(errors='replace')
+            except OSError:
+                return None
+        cached = self._search_cache.get(target)
+        if cached is None:
+            parts = []
+            for f in sorted(target.rglob('*')):
+                if not f.is_file():
+                    continue
+                try:
+                    parts.append(f.read_text(errors='replace'))
+                except OSError:
+                    continue
+            cached = '\n'.join(parts)
+            self._search_cache[target] = cached
+        return cached or None
+
+    def verify_source(self, project_path: str) -> list[dict]:
+        """Mechanical half of @DuckspecProject#verify_source: declared paths exist, and named
+        functions are present in the file their component points at. Whether a description tells
+        the truth about the code is the other half, and stays a reading task."""
+        project_path = _resolve_project(project_path)
+        root = Path(project_path).resolve()
+        term_map = self._build_term_map(root)
+        cache = {name: path.read_text() for name, path in term_map.items()}
+        self._search_cache.clear()   # sources may have changed since the last run
+        findings: list[dict] = []
+
+        implicit: dict[str, set[str]] = {}
+        for name, content in cache.items():
+            m = re.search(r'(?m)^implicit_functions:\s*(.+)$', content)
+            if m:
+                implicit[name] = {v.strip() for v in m.group(1).split(',') if v.strip()}
+
+        slot_types: dict[str, str] = {}
+        for term_content in cache.values():
+            for slot, element in _slot_element_types(term_content).items():
+                slot_types.setdefault(slot, element)
+
+        def is_function_type(type_name: str) -> bool:
+            seen = set()
+            current = type_name
+            while current and current not in seen:
+                if current == 'Function':
+                    return True
+                seen.add(current)
+                if current not in cache:
+                    return False
+                current = _parse_extends(cache[current])
+            return False
+
+        function_slots = {slot for slot, element in slot_types.items()
+                          if is_function_type(element)}
+
+        def inherited_implicit(type_name: str) -> set[str]:
+            out, seen = set(), set()
+            current = type_name
+            while current and current in cache and current not in seen:
+                seen.add(current)
+                out |= implicit.get(current, set())
+                current = _parse_extends(cache[current])
+            return out
+
+        for name, path in sorted(term_map.items()):
+            if root.parent not in path.parents:
+                continue   # a dependency's source belongs to its own project
+            content = cache[name]
+            src_root = self._source_root(path)
+            lines = content.splitlines()
+
+            in_settings = False
+            for i, line in enumerate(lines):
+                if line.strip() and not line[:1].isspace():
+                    in_settings = line.startswith('settings:')
+                m = re.match(r'^\s*(?:- )?src:\s*(\S+)\s*$', line)
+                if not m or in_settings:
+                    continue   # settings.src defines the source root; it is not a path within it
+                value = m.group(1).strip('\'"')
+                if value.startswith('@'):
+                    continue
+                if value.startswith('~'):
+                    continue   # a path in the user's home, not something this repo ships
+                if not (src_root / value).exists():
+                    findings.append({'severity': 'error', 'check': 'missing-src', 'term': name,
+                                     'path': str(path), 'line': i + 1,
+                                     'message': f"src '{value}' does not exist under {src_root}"})
+
+            for fn_id, fn_line, src, type_name in _function_sites(content, function_slots):
+                if not src:
+                    continue
+                target = src_root / src
+                if not target.exists():
+                    continue   # already reported as missing-src
+                if fn_id in inherited_implicit(type_name):
+                    continue
+                haystack = self._searchable(target)
+                if haystack is None:
+                    continue
+                bare = fn_id.split('.')[-1]
+                if not re.search(r'\b' + re.escape(bare) + r'\b', haystack):
+                    findings.append({'severity': 'error', 'check': 'absent-function', 'term': name,
+                                     'path': str(path), 'line': fn_line,
+                                     'message': f"function '{fn_id}' is not defined anywhere in "
+                                                f"{src} — renamed, or moved to another file"})
+
         findings.sort(key=lambda f: (f['severity'] != 'error', f['path'], f.get('line', 0)))
         return findings
 
@@ -885,6 +1136,42 @@ class Resolver:
         path.write_text(''.join(lines))
         return f'{path}: added {field}'
 
+    def add_entry(self, project_path: str, ref: str, entry_id: str,
+                  fields: dict | None = None) -> str:
+        """Appends a named entry to the slot `ref` addresses. The item column comes from the
+        entries already in the slot, so a nested slot lands at its own depth instead of a guessed
+        one — hand-written indentation is what put a field outside its block during the identity
+        migration."""
+        located = self._locate(project_path, ref)
+        if isinstance(located, str):
+            return located
+        path, lines, start, end = located
+        head = lines[start]
+        if not re.match(r'^\s*[\w-]+:\s*$', head):
+            return f'refused: {ref} is not a slot — it does not open a block'
+
+        body = [l for l in lines[start + 1:end] if l.strip()]
+        existing = [l for l in body if l.lstrip().startswith('- ')]
+        column = (len(existing[0]) - len(existing[0].lstrip()) if existing
+                  else len(head) - len(head.lstrip()) + 2)
+
+        for line in existing:
+            m = re.match(r'^\s*- id:\s*(\S.*)$', line)
+            if m and m.group(1).strip().strip('\'"') == entry_id:
+                return (f"refused: '{entry_id}' is already an entry of {ref} — two entries "
+                        f"under one id cannot be told apart by a #-path")
+
+        block = [f'{" " * column}- id: {entry_id}\n']
+        for field, value in (fields or {}).items():
+            block.append(f'{" " * (column + 2)}{field}: {_quoted(value)}\n')
+
+        at = end
+        while at > start + 1 and not lines[at - 1].strip():
+            at -= 1   # keep trailing blank lines below the slot, not inside it
+        lines[at:at] = block
+        path.write_text(''.join(lines))
+        return f'{path}: added {entry_id} to {ref}'
+
     def remove_element(self, project_path: str, ref: str) -> str:
         if '#' not in ref:
             return 'refused: a bare term name removes a whole file, which this does not do'
@@ -984,7 +1271,7 @@ class Resolver:
         path = folder / f'{term_name}.yaml'
         if path.exists():
             return f'already exists: {path}'
-        path.write_text(f'description: {description}\nextends: @{extends}\n')
+        path.write_text(f'description: {description}\nextends: @{extends.lstrip("@")}\n')
         return f'{path}: created'
 
     def rename_term(self, project_path: str, old_name: str, new_name: str) -> str:

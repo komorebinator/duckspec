@@ -1,2 +1,3 @@
 description: A clickable element that triggers an action.
+implicit_functions: on_click
 extends: @UserInterfaceElement
