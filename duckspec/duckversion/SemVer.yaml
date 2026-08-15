@@ -8,6 +8,6 @@ recipes:
         description: patch (default), minor, or major; if not provided, inferred from git log since the last version tag — new .yaml files in `terms_folder` suggest minor, otherwise patch
     instructions:
       - Read the current version from the project's `version:` field; parse into major, minor, patch integers
-      - If bump is not provided, check git log since the last version tag for new .yaml files added to `terms_folder`; if any exist, suggest minor; otherwise suggest patch; offer major only if the user explicitly requests it; confirm with the user
+      - If bump is not provided, check git log since the last version tag for new .yaml files added to `terms_folder`; if any exist, recommend minor; otherwise recommend patch; offer major only if the user explicitly requests it
       - Increment the specified component; reset all lower components to zero (e.g. minor bump: minor+1, patch=0)
       - Return the new version string in major.minor.patch format

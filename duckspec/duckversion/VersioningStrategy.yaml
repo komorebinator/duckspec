@@ -10,4 +10,5 @@ recipes:
         description: hint about the significance of the change; interpretation depends on the strategy (e.g. major/minor/patch for SemVer, ignored for CalVer)
     instructions:
       - Read the concrete @VersioningStrategy subtype and calculate the next version string
-      - Return the new version string for the caller to write into the project's `version:` field
+      - "Ask the user which version to use through whatever interactive selection the executor provides — a real prompt with the candidates as options, not a question written into a reply. List every version this strategy can produce, mark the one the subtype's rules recommend as recommended, and give each option one line on what picking it claims about the release. Never write the `version:` field before the answer arrives. The recommendation comes from git history, which shows what changed but not how much it matters to whoever depends on it; and a version reaches a tag and a published release, neither of which can be taken back. So the strategy recommends and the user decides."
+      - Return the version the user chose, for the caller to write into the project's `version:` field
