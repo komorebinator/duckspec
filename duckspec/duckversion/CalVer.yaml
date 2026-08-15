@@ -13,4 +13,5 @@ recipes:
     instructions:
       - Format today's date according to `format`
       - If `micro` is true, check git tags for an existing release with today's date prefix; if found, append an incrementing suffix (.1, .2, …)
+      - "Ask the user which version to use through a real interactive prompt, as @VersioningStrategy#next_version requires — the candidates as options, the one above marked as recommended, and the `version:` field written only after the answer arrives. Overriding a recipe replaces the base one whole, so a subtype that leaves this out does not inherit it; it loses it."
       - Return the new version string

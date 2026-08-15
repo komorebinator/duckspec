@@ -51,21 +51,17 @@ recipes:
       - id: name
         description: unique name for the new workspace
     instructions:
-      - Read `~/.duckspec/settings.json` (create it with empty `workspaces` and no `active_workspace` if it does not exist)
-      - Add `name` under `workspaces` with an empty `projects` map; if this is the first workspace or the user confirms, set `active_workspace` to `name`
-      - Write the settings file back
+      - Invoke @DuckToolsApp#resolver#create_workspace(name=<name>)
   - id: use_workspace
     description: Switches the active workspace — the one whose `projects` registry is used to resolve `repository` URL references
     arguments:
       - id: name
         description: name of an existing workspace to activate
     instructions:
-      - Read `~/.duckspec/settings.json`; if `name` is not a key under `workspaces`, tell the user and stop
-      - Set `active_workspace` to `name` and write the file back
+      - Invoke @DuckToolsApp#resolver#use_workspace(name=<name>); if it reports no such workspace, tell the user and stop
   - id: list_projects
     description: Displays every project registered across all workspaces, grouped by workspace, marking which one is active
     instructions:
-      - Read `~/.duckspec/settings.json`
-      - For each workspace (marking the active one): for each registered project, read its file and output `@<Name> — description` followed by its `repository → path`
+      - Invoke @DuckToolsApp#resolver#list_projects() and output the result
 software:
   - @DuckToolsApp

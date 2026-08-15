@@ -10,4 +10,5 @@ recipes:
       - Read the current version from the project's `version:` field; parse into major, minor, patch integers
       - If bump is not provided, check git log since the last version tag for new .yaml files added to `terms_folder`; if any exist, recommend minor; otherwise recommend patch; offer major only if the user explicitly requests it
       - Increment the specified component; reset all lower components to zero (e.g. minor bump: minor+1, patch=0)
+      - "Ask the user which version to use through a real interactive prompt, as @VersioningStrategy#next_version requires — the candidates as options, the one above marked as recommended, and the `version:` field written only after the answer arrives. Overriding a recipe replaces the base one whole, so a subtype that leaves this out does not inherit it; it loses it."
       - Return the new version string in major.minor.patch format

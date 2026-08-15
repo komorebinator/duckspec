@@ -10,12 +10,11 @@ recipes:
       - id: project_path
         description: path to the @DuckspecProject file to register
     instructions:
-      - Read `repository` from the file at project_path; if absent, ask the user for the repository URL
-      - Write `{repository: project_path}` into this workspace's `projects` in `~/.duckspec/settings.json`
+      - Invoke @DuckToolsApp#resolver#add_project(project_path=<project_path>); it reads `repository` from the file itself, so ask the user for the URL only if it reports the field missing
   - id: remove_project
     description: Removes a project from this workspace
     arguments:
       - id: repository
         description: repository URL of the project to remove
     instructions:
-      - Delete the entry for `repository` from this workspace's `projects` in `~/.duckspec/settings.json`
+      - Invoke @DuckToolsApp#resolver#remove_project(repository=<repository>)

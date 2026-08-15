@@ -1,5 +1,5 @@
-description: Base term for delivery workflows — defines how changes in a @DuckspecProject are committed, submitted and released. A workflow is @Software that owns the delivery pipeline. Only `submit` and `release` are required; `commit` is inherited as written unless a subtype's VCS records local history differently, and workflows with a review step add `update`, `review`, and `merge` as needed.
-extends: @Software
+description: Base term for delivery workflows — defines how changes in a @DuckspecProject are committed, submitted and released. It is a set of procedures rather than something built or run, which is why it extends @Term directly, as @VersioningStrategy does for the parallel question of how a version is calculated. Only `submit` and `release` are required; `commit` is inherited as written unless a subtype's VCS records local history differently, and workflows with a review step add `update`, `review`, and `merge` as needed.
+extends: @Term
 properties:
   - id: main_branch
     description: branch changes are ultimately merged into; inferred from the remote default branch via `git remote show origin` if not set; falls back to `main`
@@ -7,13 +7,14 @@ guidelines:
   - Every @DuckWorkflow subtype must implement `submit` and `release`.
   - Workflows with a review step should also implement `update` (re-send after feedback), `review` (reviewer examination and verdict), and `merge` (reviewer approval and integration). Workflows without a review step omit these.
   - Before staging or committing changes, every `submit` implementation must first fetch the remote and fast-forward (or merge) the local `main_branch` to incorporate any upstream commits, resolving conflicts against pending changes before continuing. This prevents edits from being made against a stale checkout and avoids unnecessary merge conflicts discovered only at push time.
+  - "A commit message says what changed and why it changed. The why is the part that cannot be recovered later: the diff already shows what moved, and no one reading it a month on can tell which of several plausible reasons was the real one. Write for that reader. There is no length to fit into — a subject compressed until it reads as a slogan has been made worse, not shorter — and the body is where a reason too long for one line belongs. This is not a matter of tidiness: @DuckspecProject#release drafts the changelog from the log, so whatever a commit fails to say about itself is simply missing from the release notes, and a contributor's pull request is a set of commits and nothing else. Recovering it from the diff afterwards is guesswork about somebody else's intent."
 recipes:
   - id: commit
     description: Records pending changes in local history and stops there — no push, no review request, nothing that reaches anyone else
     instructions:
       - "Invoke @DuckspecProject#validate() and resolve every finding before committing. The whole recipe, not a mechanical subset: a commit that skips the guideline pass, the test-coverage pass or the reading half of verify_source records a spec which lies about what was just written, and the next commit inherits the lie."
       - "Separate unrelated changes into separate commits rather than one. A changelog is written from the log, and a commit that carries two unrelated changes cannot be described in one line without losing one of them."
-      - Stage the files belonging to each change and commit them with a message following the commit-message guideline
+      - Stage the files belonging to each change and commit them with a message that says what changed and why, per @DuckWorkflow's guidelines
       - Report each commit and what remains uncommitted; do not push, and do not offer to — delivering is @DuckWorkflow#submit's job and needs its own request
   - id: submit
     description: Delivers pending changes to their destination — directly or via a review request, depending on the workflow

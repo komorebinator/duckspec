@@ -10,4 +10,5 @@ recipes:
     instructions:
       - Read the current version from the project's `version:` field; strip `prefix`; parse the remainder as an integer
       - Increment by 1; prepend `prefix`
+      - "Ask the user which version to use through a real interactive prompt, as @VersioningStrategy#next_version requires — the candidates as options, the one above marked as recommended, and the `version:` field written only after the answer arrives. Overriding a recipe replaces the base one whole, so a subtype that leaves this out does not inherit it; it loses it."
       - Return the new version string
