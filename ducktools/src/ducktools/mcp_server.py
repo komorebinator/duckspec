@@ -1,5 +1,7 @@
 import json
+import re
 import sys
+from pathlib import Path
 
 from .resolver import resolver
 
@@ -256,6 +258,21 @@ _TOOLS = [
 ]
 
 
+def _version() -> str:
+    """The framework's own version, read from the Duckspec.yaml beside the installed clone.
+    Hardcoding it here reported 0.1.0 to every client for the whole of the 0.10 series: the
+    release recipe updates one `version:` field and has no reason to know about this file."""
+    from .resolver import _load_settings
+    src = _load_settings().get('ducktools', {}).get('src')
+    if src:
+        root = Path(src).parent / 'Duckspec.yaml'
+        if root.is_file():
+            m = re.search(r'(?m)^version:\s*(\S+)', root.read_text())
+            if m:
+                return m.group(1)
+    return 'unknown'
+
+
 def _send(obj: dict) -> None:
     print(json.dumps(obj), flush=True)
 
@@ -378,8 +395,9 @@ def _call(name: str, arguments: dict) -> str:
     if name == 'grep_terms':
         query = arguments.get('query', '')
         results = resolver.grep_terms(path, query, include_all=include_all)
-        rows = ['| Term | File | Matches |', '|------|------|---------|']
-        rows += [f"| @{r['name']} | {r['path']} | {'; '.join(r['lines'][:3])} |" for r in results]
+        rows = ['| Reference | Line | Match |', '|-----------|------|-------|']
+        rows += [f"| @{h['ref']} | {h['line']} | {h['text'][:100]} |"
+                 for r in results for h in r['hits'][:3]]
         return '\n'.join(rows)
 
     if name == 'set_field':
@@ -411,7 +429,10 @@ def _call(name: str, arguments: dict) -> str:
 
     if name == 'term_uses':
         r = resolver.term_uses(path, arguments['term_name'])
-        return '\n'.join(f"{k}: {', '.join('@' + n for n in v) if v else '(none)'}" for k, v in r.items())
+        return '\n'.join(
+            f"{label}: {', '.join('@' + n for n in r[key]) if r[key] else '(none)'}"
+            for label, key in (('extended by', 'extended_by'), ('typed by', 'typed_by'),
+                               ('referenced by', 'referenced_by')))
 
     if name == 'term_schema':
         rows = resolver.term_schema(path, arguments['term_name'])
@@ -439,6 +460,8 @@ def _call(name: str, arguments: dict) -> str:
         result = resolver.resolve_path(path, ref)
         if result is None:
             return f'not found: {ref}'
+        if result.get('error'):
+            return result['error']
         return f"--- {ref} [{result['path']}] ---\n{result['content']}"
 
     if name in ('verify_project', 'verify_source'):
@@ -480,7 +503,7 @@ def run_server() -> None:
             _respond(id, {
                 'protocolVersion': '2024-11-05',
                 'capabilities': {'tools': {}},
-                'serverInfo': {'name': 'ducktools', 'version': '0.1.0'},
+                'serverInfo': {'name': 'ducktools', 'version': _version()},
             })
         elif method == 'tools/list':
             _respond(id, {'tools': _TOOLS})

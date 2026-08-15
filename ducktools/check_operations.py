@@ -85,11 +85,120 @@ check('load_terms', 'turns the widget once' in str(blocks))
 hits = r.grep_terms(project, 'colour')
 check('grep_terms', any('Widget' == h['name'] for h in hits), f'got {hits}')
 
+# every hit names the element it sits in, and that name has to be one resolve_path accepts —
+# a ref that only looks right is worth no more than the bare line it replaced
+_refs = [h['ref'] for res in hits for h in res['hits']]
+check('grep_terms/ref', 'Widget#properties#colour' in _refs, f'got {_refs}')
+check('grep_terms/resolvable',
+      all(r.resolve_path(project, ref) is not None for ref in _refs), f'got {_refs}')
+
 resolved = r.resolve_path(project, 'Widget#spin')
 check('resolve_path', resolved is not None and 'turns the widget once' in resolved['content'])
 
+# two entries under one id is a defect in the spec; returning whichever came first hides it,
+# and hid a stale duplicate of a whole recipe for five releases
+_twin = Path(project).parent / 'Fixture' / 'Twin.yaml'
+_twin.write_text('description: Two entries share an id.\nextends: @Term\n'
+                 'properties:\n  - id: dup\n    description: first\n'
+                 'functions:\n  - id: dup\n    description: second\n')
+_amb = r.resolve_path(project, 'Twin#dup')
+check('resolve_path/ambiguous', _amb is not None and 'ambiguous' in _amb.get('error', ''),
+      f'got {_amb}')
+_twin.unlink()
+
 check('verify_project', r.verify_project(project) == [], f'got {r.verify_project(project)}')
 check('verify_source', r.verify_source(project) == [], f'got {r.verify_source(project)}')
+
+
+# --- absent-function: which file the name has to be in ------------------------
+# The name search itself is deliberately loose — no tool is going to enumerate every way a
+# function can be declared in every language, and a check that guesses wrong shouts at
+# working code. What it must not do is search the wrong bytes: a sibling module's symbol,
+# or compiled bytecode that still remembers a name the sources dropped.
+def absent_project() -> tuple[str, dict]:
+    root = TMP / 'absent'
+    (root / 'Absent').mkdir(parents=True)
+    pkg = root / 'pkg'
+    pkg.mkdir()
+    (pkg / 'real.py').write_text(
+        'def declared_py():\n'
+        '    return 1\n\n\n'
+        'def caller():\n'
+        '    # mentions only_a_comment in passing\n'
+        '    print("only_a_string")\n'
+        '    return only_a_call()\n'
+        'CLI = ["command-name"]\n'
+    )
+    (pkg / 'real.js').write_text(
+        'import { imported_only } from "./other.js";\n'
+        'export function declared_js(a) { return a; }\n'
+        'export class Thing {\n'
+        '  declared_method() { return 2; }\n'
+        '}\n'
+    )
+    (pkg / 'real.sh').write_text(
+        '#!/bin/sh\n'
+        'declared_sh() {\n'
+        '  echo hi\n'
+        '}\n'
+    )
+    # bytecode: unreadable as text, and stale by construction — must never satisfy anything
+    (pkg / '__pycache__').mkdir()
+    (pkg / '__pycache__' / 'real.cpython-313.pyc').write_bytes(
+        b'\xcb\r\r\n\x00\x00\x00\x00' + b'deleted_long_ago\x00' * 4)
+
+    duckspec = Path(__file__).resolve().parent.parent / 'Duckspec.yaml'
+    (root / 'Absent.yaml').write_text(
+        'description: A project for the absent-function cases.\n'
+        'extends: @DuckspecProject\n'
+        'terms_folder: Absent\n'
+        'repository: https://example.invalid/absent\n'
+        f'uses:\n  - {duckspec}\n'
+        'settings:\n  src: .\n'
+    )
+    (root / 'Absent' / 'Cases.yaml').write_text(
+        'description: Function entries checked against a whole package.\n'
+        'extends: @Term\n'
+        'src: pkg/\n'
+        'functions:\n'
+        '  - id: declared_py\n    description: a real Python definition\n'
+        '  - id: declared_js\n    description: a real JavaScript definition\n'
+        '  - id: declared_method\n    description: a real JavaScript class method\n'
+        '  - id: declared_sh\n    description: a real shell definition\n'
+        '  - id: command-name\n    description: a command name, present only in quotes\n'
+        '  - id: deleted_long_ago\n    description: survives only inside stale bytecode\n'
+    )
+    # a list-form `src:` — the form that used to read as no path at all, skipping every
+    # function under it without a word
+    (root / 'Absent' / 'Split.yaml').write_text(
+        'description: One term whose code is split across two files.\n'
+        'extends: @Term\n'
+        'src:\n'
+        '  - pkg/real.js\n'
+        '  - pkg/real.sh\n'
+        'functions:\n'
+        '  - id: declared_js\n    description: lives in the first file\n'
+        '  - id: declared_sh\n    description: lives in the second\n'
+        '  - id: in_neither\n    description: lives in neither, and must be reported\n'
+    )
+    findings = R.Resolver().verify_source(str(root / 'Absent.yaml'))
+    return str(root / 'Absent.yaml'), {
+        f['message'].split("'")[1]: (f['check'], f['severity']) for f in findings}
+
+
+_, verdicts = absent_project()
+
+# 'command-name' is there only inside quotes — that is how a CLI command exists, and it counts
+for present in ('declared_py', 'declared_js', 'declared_method', 'declared_sh', 'command-name'):
+    check(f'verify_source/{present}', present not in verdicts,
+          f'a name that is in the sources was reported: {verdicts.get(present)}')
+
+check('verify_source/bytecode', verdicts.get('deleted_long_ago') == ('absent-function', 'error'),
+      f'compiled bytecode must not satisfy the check: got {verdicts.get("deleted_long_ago")}')
+
+check('verify_source/src-list', verdicts.get('in_neither') == ('absent-function', 'error'),
+      f'a list-form src must be read, not treated as no path at all: '
+      f'got {verdicts.get("in_neither")}')
 
 uses = r.term_uses(project, 'Widget')
 check('term_uses', 'Gadget' in str(uses), f'got {uses}')
@@ -106,6 +215,14 @@ check('slot_entries', [e['id'] for e in entries] == ['colour'], f'got {entries}'
 # --- editing -----------------------------------------------------------------
 r.set_field(project, 'Widget#colour', 'description', 'the colour, restated')
 check('set_field', 'restated' in Path(project).parent.joinpath('Fixture/Widget.yaml').read_text())
+
+# an entry's own `id` sits on the `- ` line, two columns left of its siblings; setting it must
+# rewrite that line rather than append a second `id:` under it
+r.set_field(project, 'Widget#colour', 'id', 'hue')
+_widget = Path(project).parent / 'Fixture' / 'Widget.yaml'
+check('set_field/id', _widget.read_text().count('id: hue') == 1
+      and 'id: colour' not in _widget.read_text(), _widget.read_text())
+r.set_field(project, 'Widget#hue', 'id', 'colour')
 
 r.add_entry(project, 'Widget#properties', 'weight', {'description': 'how heavy: quite'})
 widget = Path(project).parent / 'Fixture' / 'Widget.yaml'

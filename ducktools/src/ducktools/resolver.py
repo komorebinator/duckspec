@@ -291,17 +291,64 @@ def _slot_names(content: str) -> Iterator[str]:
             yield name
 
 
-def _function_sites(content: str, function_slots: set[str]) -> Iterator[tuple[str, int, str, str]]:
-    """Yields (function_id, line_number, src, type_name) for every entry of a function-holding
+def _src_values(lines: list[str], i: int, indent: int) -> list[str]:
+    """The paths a `src:` on line i declares, written either inline or as a list beneath it.
+    Reading only the inline form left every function under a list-form `src:` with no path at
+    all, and a function with no path is one this check skips without saying so."""
+    inline = re.match(r'^\s*src:\s*(\S.*)$', lines[i])
+    if inline:
+        return [inline.group(1).strip().strip('\'"')]
+    values = []
+    for j in range(i + 1, len(lines)):
+        if not lines[j].strip():
+            continue
+        item = re.match(r'^(\s*)-\s+(\S.*)$', lines[j])
+        if not item or len(item.group(1)) <= indent:
+            break
+        values.append(item.group(2).strip().strip('\'"'))
+    return values
+
+
+def _element_paths(content: str) -> list[list[str]]:
+    """Module-level pure function. For each line of a term, the `#`-path segments of the element
+    it belongs to, so a hit anywhere in the file can name itself. Both kinds of segment count: a
+    `key:` opening a block, and a `- id:` entry inside one."""
+    stack: list[tuple[int, str]] = []
+    paths = []
+    for line in content.splitlines():
+        stripped = line.strip()
+        indent = len(line) - len(line.lstrip())
+        if stripped:
+            while stack and stack[-1][0] >= indent:
+                stack.pop()
+        here = [segment for _, segment in stack]
+        entry = re.match(r'^-\s+(?:id|name):\s*(\S.*)$', stripped)
+        header = re.match(r'^([a-z_][\w-]*):\s*$', stripped)
+        if entry or header:
+            own = (entry.group(1).strip().strip('\'"') if entry else header.group(1))
+            paths.append(here + [own])
+            stack.append((indent, own))
+        else:
+            paths.append(here)
+    return paths
+
+
+def _function_sites(content: str,
+                    function_slots: set[str]) -> Iterator[tuple[str, int, list[str], str]]:
+    """Yields (function_id, line_number, srcs, type_name) for every entry of a function-holding
     slot, carrying the `src:` and `type:` of the nearest enclosing component — a function is
     verified against the file its own component declares, not the term's top-level one, which
     for a multi-file @Software would be the wrong file or no file at all. `function_slots` comes
     from the declared element types, so a slot is recognised by what it holds rather than by
     being called `functions`."""
     lines = content.splitlines()
-    top = re.search(r'(?m)^src:\s*(\S+)\s*$', content)
+    top: list[str] = []
+    for i, line in enumerate(lines):
+        if re.match(r'^src:', line):
+            top = _src_values(lines, i, 0)
+            break
     slots: list[tuple[int, str]] = []
-    entries: list[tuple[int, str, str]] = [(-1, top.group(1).strip('\'"') if top else '', '')]
+    entries: list[tuple[int, list[str], str]] = [(-1, top, '')]
 
     for i, line in enumerate(lines):
         if not line.strip():
@@ -334,12 +381,15 @@ def _function_sites(content: str, function_slots: set[str]) -> Iterator[tuple[st
         for j in range(i + 1, len(lines)):
             if lines[j].strip() and len(lines[j]) - len(lines[j].lstrip()) <= indent:
                 break
-            f = re.match(r'^\s{%d}(src|type):\s*(\S+)\s*$' % (indent + 2), lines[j])
+            f = re.match(r'^\s{%d}(src|type):\s*(\S*)\s*$' % (indent + 2), lines[j])
             if f and f.group(1) == 'src':
-                src = f.group(2).strip('\'"')
-            elif f:
+                src = _src_values(lines, j, indent + 2)
+            elif f and f.group(2):
                 type_name = f.group(2).lstrip('@')
         entries.append((indent, src, type_name))
+
+
+_SKIP_DIRS = {'__pycache__', '.git', 'node_modules', '.mypy_cache', '.pytest_cache'}
 
 
 def _load_settings() -> dict:
@@ -392,7 +442,7 @@ def _resolve_entry(sub: str, base: Path, workspace: dict[str, Path]) -> Path | N
 
 class Resolver:
     def __init__(self) -> None:
-        self._search_cache: dict[Path, str] = {}
+        self._search_cache: dict[Path, list[Path]] = {}
 
     def _collect(self, project_path: Path) -> tuple[list[Path], list[Path]]:
         """Returns (term_folders, project_files) discovered recursively."""
@@ -638,13 +688,20 @@ class Resolver:
         return result
 
     def grep_terms(self, project_path: str, query: str, include_all: bool = False) -> list[dict]:
+        """Each hit carries the `#`-path of the element it sits in, not just its text. A bare
+        matching line says nothing about whose line it is, so every hit used to need the file
+        opened again to find out; the ref it comes back with now is the one resolve_path and
+        set_field already take."""
         project_path = _resolve_project(project_path)
         q = query.lower()
         results = []
         for name, p, content in self._walk_terms(project_path, include_all):
-            matching = [line.strip() for line in content.splitlines() if q in line.lower()]
-            if matching:
-                results.append({'name': name, 'path': str(p), 'lines': matching})
+            paths = _element_paths(content)
+            hits = [{'ref': '#'.join([name] + paths[i]), 'line': i + 1, 'text': line.strip()}
+                    for i, line in enumerate(content.splitlines()) if q in line.lower()]
+            if hits:
+                results.append({'name': name, 'path': str(p), 'hits': hits,
+                                'lines': [h['text'] for h in hits]})
         return results
 
     def resolve_path(self, project_path: str, ref: str) -> dict | None:
@@ -664,7 +721,16 @@ class Resolver:
             return None
 
         for segment in segments:
-            block = _narrow(content, segment)
+            # Refuse an ambiguous segment instead of returning whichever entry came first, the
+            # way _locate already does for the editing operations. A stale duplicate of an entire
+            # recipe sat in DuckspecProject.yaml across five releases precisely because nothing
+            # that reads a path ever objected to there being two of something.
+            candidates = _find_named_blocks(content, segment)
+            if len(candidates) > 1:
+                return {'name': term_name, 'path': str(term_path), 'ref': ref, 'content': '',
+                        'error': f"ambiguous: '{segment}' matches {len(candidates)} elements "
+                                 f"in {ref} — the spec has more than one, which is itself a defect"}
+            block = candidates[0] if candidates else _extract_key_block(content, segment)
             if block is None:
                 return None
             content = block
@@ -903,29 +969,21 @@ class Resolver:
                 src = s.group(1).strip('\'"')
         return (project.parent / src).resolve()
 
-    def _searchable(self, target: Path) -> str | None:
-        """Text a function id is looked for in. A component may point at a folder rather than one
-        file — @DuckToolsApp's `ducktools/src/` is the whole package — and skipping those silently
-        is how the first run of this check read none of its 103 functions while reporting nothing.
-        Returns None only when nothing readable is there."""
+    def _source_files(self, target: Path) -> list[Path]:
+        """The files a function id is looked for in. A component may point at a folder rather
+        than one file — @DuckToolsApp's `ducktools/src/` is the whole package — and skipping
+        those silently is how the first run of this check read none of its 103 functions while
+        reporting nothing. Each file is returned separately so the caller searches them one at a
+        time: concatenating a folder let a symbol defined in one module answer for a component
+        pointing at another, and pulled `__pycache__` bytecode into the text besides."""
         if target.is_file():
-            try:
-                return target.read_text(errors='replace')
-            except OSError:
-                return None
+            return [target]
         cached = self._search_cache.get(target)
         if cached is None:
-            parts = []
-            for f in sorted(target.rglob('*')):
-                if not f.is_file():
-                    continue
-                try:
-                    parts.append(f.read_text(errors='replace'))
-                except OSError:
-                    continue
-            cached = '\n'.join(parts)
+            cached = [f for f in sorted(target.rglob('*'))
+                      if f.is_file() and not _SKIP_DIRS.intersection(f.parts)]
             self._search_cache[target] = cached
-        return cached or None
+        return cached
 
     def verify_source(self, project_path: str) -> list[dict]:
         """Mechanical half of @DuckspecProject#verify_source: declared paths exist, and named
@@ -997,23 +1055,32 @@ class Resolver:
                                      'path': str(path), 'line': i + 1,
                                      'message': f"src '{value}' does not exist under {src_root}"})
 
-            for fn_id, fn_line, src, type_name in _function_sites(content, function_slots):
-                if not src:
-                    continue
-                target = src_root / src
-                if not target.exists():
-                    continue   # already reported as missing-src
+            for fn_id, fn_line, srcs, type_name in _function_sites(content, function_slots):
+                targets = [src_root / s for s in srcs if (src_root / s).exists()]
+                if not targets:
+                    continue   # nothing declared, or already reported as missing-src
                 if fn_id in inherited_implicit(type_name):
                     continue
-                haystack = self._searchable(target)
-                if haystack is None:
-                    continue
                 bare = fn_id.split('.')[-1]
-                if not re.search(r'\b' + re.escape(bare) + r'\b', haystack):
+                needle = re.compile(r'\b' + re.escape(bare) + r'\b')
+                found = False
+                for target in targets:
+                    for source_file in self._source_files(target):
+                        try:
+                            text = source_file.read_text()
+                        except (OSError, UnicodeDecodeError):
+                            continue      # binary, or unreadable — it defines nothing
+                        if needle.search(text):
+                            found = True
+                            break
+                    if found:
+                        break
+                if not found:
                     findings.append({'severity': 'error', 'check': 'absent-function', 'term': name,
                                      'path': str(path), 'line': fn_line,
-                                     'message': f"function '{fn_id}' is not defined anywhere in "
-                                                f"{src} — renamed, or moved to another file"})
+                                     'message': f"function '{fn_id}' appears nowhere in "
+                                                f"{', '.join(srcs)} — renamed, or moved to "
+                                                f"another file"})
 
         findings.sort(key=lambda f: (f['severity'] != 'error', f['path'], f.get('line', 0)))
         return findings
@@ -1126,6 +1193,14 @@ class Resolver:
             column = indent + 2   # a list item or a key opening a block nests its fields
         else:
             column = indent       # the term itself: fields sit at the top level
+        # An entry's first field lives on the `- ` line itself, indented two columns short of
+        # its siblings. Matching only the sibling column meant `id` was never found on an entry
+        # and a second `id:` was appended below the first, leaving two.
+        on_head = re.match(rf'^(\s*-\s+){re.escape(field)}:', head)
+        if on_head:
+            lines[start] = f'{on_head.group(1)}{field}: {value}\n'
+            path.write_text(''.join(lines))
+            return f'{path}: replaced {field}'
         pattern = re.compile(rf'^{" " * column}{re.escape(field)}:')
         for i in range(start, end):
             if pattern.match(lines[i]):

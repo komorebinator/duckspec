@@ -229,17 +229,20 @@ def cmd_load_terms(project_path: str, term_names: list[str]) -> None:
 
 def cmd_grep(project_path: str, query: str, include_all: bool = False) -> None:
     results = resolver.grep_terms(project_path, query, include_all=include_all)
-    print('| Term | File | Matches |')
-    print('|------|------|---------|')
+    print('| Reference | Line | Match |')
+    print('|-----------|------|-------|')
     for r in results:
-        matches = '; '.join(r['lines'][:3])
-        print(f"| @{r['name']} | {r['path']} | {matches} |")
+        for h in r['hits'][:3]:
+            print(f"| @{h['ref']} | {h['line']} | {h['text'][:100]} |")
 
 
 def cmd_resolve_path(project_path: str, ref: str) -> None:
     result = resolver.resolve_path(project_path, ref)
     if result is None:
         print(f'not found: {ref}')
+        return
+    if result.get('error'):
+        print(result['error'])
         return
     print(f"--- {ref} [{result['path']}] ---")
     print(result['content'])
