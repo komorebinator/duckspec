@@ -1,5 +1,7 @@
 description: Delivery workflow driving @Git plus @GitHub's pull requests and Releases. Changes are submitted as pull requests; the author pushes a branch and opens a PR, the reviewer examines and merges.
 extends: @DuckWorkflow
+guidelines:
+  - "Wrap every `@<TermName>` reference in backticks in any text that reaches GitHub — commit messages, changelog entries that become release notes, pull request titles and bodies, issue text. GitHub reads a bare `@name` as a mention of one of its users and links it, notifies whoever holds that account, and in the case of a `Co-Authored-By:` trailer credits them as a contributor; it applies this to commit messages too, which are git data written where GitHub has no part. The names this framework uses are ordinary words — `@Key`, `@File`, `@Term`, `@Page`, `@Application` are all real accounts belonging to people with no connection to the project, and release 0.11.0 notified eight of them. Backticks are not a workaround to be undone later: a term reference is an identifier in a formal grammar, and marking it as code is what it always was. There is no setting on GitHub that turns the parsing off, at any level, so the only point of control is the text itself."
 properties:
   - id: merge_strategy
     description: how pull requests are merged — merge, squash, or rebase
