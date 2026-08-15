@@ -1,4 +1,4 @@
-description: Any kind of software — an @Application, service, library, or tool.
+description: A body of code that is built, versioned and shipped as a unit — an application, a service, a library, a command-line tool, a container image. What distinguishes it from the @DesignPattern it extends is ownership of a lifecycle: it has a repository it lives in, a platform it is built for, tests that say whether it works, and recipes to build, run and install it. A component inside one is a @SoftwareComponent, not a @Software of its own.
 extends: @DesignPattern
 guidelines:
   - When reading a @Software, resolve each component's type to its @DesignPattern term to understand what fields it supports
@@ -22,8 +22,8 @@ recipes:
     description: Runs all @Test cases listed in `tests` and reports results
     instructions:
       - Read the @Software term to get `platform` and `tests`
-      - For each @Test: run `command` following `platform` conventions; check output against `expect`; record pass (✓) or fail (✗) and the observed output
-      - Output a markdown table with columns: Test | Status (✓ or ✗) | Detail
+      - For each @Test: run `command` following `platform` conventions; check output against `expect`; record 🟢 when it ran and matched, 🔴 when it ran and did not, 🟡 when it could not be run at all — and the observed output either way
+      - Output a markdown table with columns: Test | Status | Detail, using the same markers @DuckspecProject#validate reports with, since that recipe is where these results end up
   - id: run
     description: Runs the @Software using the conventions of `platform`
     arguments:

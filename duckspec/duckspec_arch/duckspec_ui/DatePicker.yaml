@@ -1,8 +1,2 @@
 description: An input element for selecting a date or time.
 extends: @UserInterfaceElement
-properties:
-  - id: placeholder
-    description: hint text displayed when no date is selected
-  - id: mandatory
-    description: whether a value must be provided; defaults to false
-    default: false

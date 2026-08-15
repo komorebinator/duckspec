@@ -1,11 +1,6 @@
 description: A numeric input field.
 extends: @UserInterfaceElement
 properties:
-  - id: placeholder
-    description: hint text displayed inside the field when empty
-  - id: mandatory
-    description: whether a value must be provided; defaults to false
-    default: false
   - id: min
     description: minimum allowed value
   - id: max

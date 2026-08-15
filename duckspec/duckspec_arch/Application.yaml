@@ -1,2 +1,2 @@
-description: A @Software application
+description: A @Software with an entry point a user or the system starts directly — a desktop program, a CLI, a daemon. The distinction from its parent is that something launches it: a library is @Software and is never an @Application, because nothing runs it on its own.
 extends: @Software

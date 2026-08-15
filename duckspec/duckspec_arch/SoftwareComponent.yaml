@@ -1,17 +1,8 @@
 description: A named instance of a @DesignPattern within a @Software.
-extends: @Term
+extends: @DesignPattern
 guidelines:
   - A component id is a local path identifier — use the `component#element` path syntax (see @Term) to reference its functions, signals, or nested components.
   - A component description is sufficient on its own for declarative components (@ConfigFile, @Patch); components with non-trivial behaviour add detail through their other slots rather than in prose.
 properties:
   - id: type
     description: the @DesignPattern this component instantiates (e.g. @Singleton)
-  - id: functions
-    type: @Function
-    description: list of @Function this component exposes or handles
-  - id: signals
-    type: @Signal
-    description: list of @Signal this component emits
-  - id: components
-    type: @SoftwareComponent
-    description: list of nested @SoftwareComponent instances owned by this component

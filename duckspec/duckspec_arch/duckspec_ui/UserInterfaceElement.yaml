@@ -12,3 +12,8 @@ properties:
   - id: states
     type: @ElementState
     description: list of @ElementState the element can be in; each names a condition and the properties that differ while it holds
+  - id: mandatory
+    description: whether the element must be given a value before the surrounding @Form can be submitted; defaults to false
+    default: false
+  - id: placeholder
+    description: hint text shown inside the element while it holds no value; applies only to elements that take input

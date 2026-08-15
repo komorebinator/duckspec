@@ -23,4 +23,4 @@ properties:
   - id: ai_instructions
     description: list of behavioral directives for the model when working with this @Term
   - id: lists
-    description: named lookup tables available to this @Term's recipes; each list has a name and items, where each item has a name and a description; referenced by name in recipe instructions
+    description: named lookup tables available to this @Term's recipes; each list has an `id` and `items`, where each item has an `id` and a description; referenced by id in recipe instructions

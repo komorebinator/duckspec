@@ -8,6 +8,7 @@ goals:
 startup:
   - load
 uses:
+  - ../Duckspec.yaml
   - duckspec_arch/DuckUI.yaml
   - duckspec_arch/DuckCrypto.yaml
   - duckspec_arch/DuckFilesystem.yaml

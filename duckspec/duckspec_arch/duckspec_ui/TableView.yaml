@@ -1,2 +1,7 @@
 description: A tabular display of structured data with rows and columns.
 extends: @UserInterfaceElement
+properties:
+  - id: columns
+    description: the columns in display order; each has a header, the field it shows, and whether it is sortable
+  - id: rows
+    description: what one row represents and where the row data comes from

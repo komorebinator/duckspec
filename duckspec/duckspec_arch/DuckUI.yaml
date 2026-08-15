@@ -7,3 +7,5 @@ goals:
   - Let one description render to GTK, web, or mobile, so an interface survives a change of frontend stack
 startup:
   - load
+uses:
+  - ../DuckArch.yaml

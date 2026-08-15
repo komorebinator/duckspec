@@ -8,4 +8,5 @@ goals:
 startup:
   - load
 uses:
+  - ../Duckspec.yaml
   - ../DuckArch.yaml

@@ -7,4 +7,4 @@ properties:
     description: directory permissions (e.g. 0755, owner:group); omit if default
   - id: files
     type: @File
-    description: list of @File or @Folder instances this directory directly contains
+    description: list of @File instances this directory contains. A directory inside it is not listed here — a @Folder carries its own absolute `path`, so nested directories are declared as @Folder entries in their own right rather than embedded, which is what keeps this slot holding one type.

@@ -1,5 +1,5 @@
 description: A cryptographic key used for encryption, decryption, signing, or verification.
-extends: @File
+extends: @DesignPattern
 properties:
   - id: algorithm
     description: cryptographic algorithm (e.g. RSA-2048, ECDSA P-256, Ed25519, AES-256)
@@ -7,3 +7,7 @@ properties:
     description: storage encoding (e.g. PEM, DER, JWK, raw bytes); distinct from the inherited `format`, which is the file format
   - id: purpose
     description: what this key is used for — signing, verification, encryption, decryption, or key exchange
+  - id: storage
+    description: the mechanism holding this key — a file on disk, an environment variable, a hardware token, a secret manager, a keyring entry. Says how it is kept; `path` says where, for the file case.
+  - id: path
+    description: filesystem path when this key is held as a file; omit when it is not — an environment variable, a hardware token or a secret manager has no path, which is why this is optional here rather than inherited from @File

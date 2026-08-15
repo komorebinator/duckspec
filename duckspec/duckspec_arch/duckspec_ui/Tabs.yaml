@@ -1,6 +1,6 @@
-description: A navigation container that switches between named @Page children via a visible tab bar. Each tab has a label and optionally an icon.
+description: A navigation container that switches between named @Page children via a visible tab bar. Each tab is labelled by its @Page's own `label`.
 extends: @View
 properties:
   - id: tabs
     type: @Page
-    description: list of tabs; each tab has a label, an optional icon, and a @Page it reveals when selected
+    description: list of the @Page children this container switches between, in tab-bar order. Each entry is a @Page and nothing more: the text on its tab is the @Page's own inherited `label`, so a tab is not a separate wrapper object with its own fields.

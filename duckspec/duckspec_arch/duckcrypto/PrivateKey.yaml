@@ -1,5 +1,3 @@
 description: The secret half of an asymmetric key pair. Must never be shared; used for signing or decryption.
 extends: @Key
 properties:
-  - id: storage
-    description: where and how this key is stored (e.g. environment variable, hardware token, secret manager, encrypted file on disk)

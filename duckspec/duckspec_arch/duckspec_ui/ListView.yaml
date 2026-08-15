@@ -1,2 +1,5 @@
 description: A scrollable list of items.
 extends: @UserInterfaceElement
+properties:
+  - id: items
+    description: the items the list displays — what each row represents and where the data comes from
