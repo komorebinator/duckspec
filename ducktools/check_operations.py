@@ -53,7 +53,9 @@ def fixture() -> Path:
     )
     (root / 'Fixture' / 'Widget.yaml').write_text(
         'description: A widget, described for the fixture.\n'
-        'extends: @Term\n'
+        # @Software, not @Term: the fixture lists it in `software:` and gives it `src:` and
+        # `functions:`, which @DesignPattern declares and @Term does not.
+        'extends: @Software\n'
         'src: src/widget.py\n'
         'properties:\n'
         '  - id: colour\n'
@@ -108,6 +110,30 @@ _twin.unlink()
 
 check('verify_project', r.verify_project(project) == [], f'got {r.verify_project(project)}')
 check('verify_source', r.verify_source(project) == [], f'got {r.verify_source(project)}')
+
+# a term's own top-level fields went unchecked against its extends chain, so `extends:` bought
+# nothing at that level: a term could invent a field — or a whole slot no type describes, holding
+# any number of unread entries — and verify_project still reported an empty list
+_w = Path(project).parent / 'Fixture' / 'Widget.yaml'
+_orig = _w.read_text()
+_w.write_text(_orig + 'invented_field: nothing declares this\n')
+_top = [f for f in r.verify_project(project)
+        if f['check'] == 'unknown-field' and 'invented_field' in f['message']]
+check('verify_project/top-level-field', len(_top) == 1, f'got {r.verify_project(project)}')
+_w.write_text(_orig)
+
+# when the chain cannot be resolved, _schema saw only part of the vocabulary; unknown-extends
+# reports that, and the top-level check must stay quiet rather than bury it under one finding per
+# inherited field the term legitimately carries
+_orphan = Path(project).parent / 'Fixture' / 'Orphan.yaml'
+_orphan.write_text('description: Extends a term that is not in the map.\n'
+                   'extends: @NotAThing\nplatform: python\n')
+_of = r.verify_project(project)
+check('verify_project/broken-chain-quiet',
+      any(f['check'] == 'unknown-extends' for f in _of)
+      and not any(f['check'] == 'unknown-field' and f['term'] == 'Orphan' for f in _of),
+      f'got {_of}')
+_orphan.unlink()
 
 
 # --- absent-function: which file the name has to be in ------------------------

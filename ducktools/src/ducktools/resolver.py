@@ -16,6 +16,15 @@ _GUIDELINES_BLOCK = re.compile(r'^guidelines:\n((?:[ \t].+\n?)*)', re.MULTILINE)
 _AI_INSTRUCTIONS_BLOCK = re.compile(r'^ai_instructions:\n((?:[ \t].+\n?)*)', re.MULTILINE)
 _PROPERTIES_BLOCK = re.compile(r'^properties:\n((?:[ \t].+\n?)*)', re.MULTILINE)
 _PATH_REF = re.compile(r'@([A-Z][A-Za-z]+)((?:#[A-Za-z_][\w-]*)+)')
+_TOP_FIELD = re.compile(r'^([a-z_][\w-]*):', re.MULTILINE)
+
+# Fields every term may carry regardless of what it extends: its identity, its content, and the
+# blocks through which it declares members for its subtypes. Everything else at the top level has
+# to be declared as a `properties:` entry somewhere in the extends chain, or it is an unknown-field.
+_STRUCTURAL_FIELDS = frozenset({
+    'description', 'extends', 'name',
+    'properties', 'recipes', 'guidelines', 'ai_instructions',
+})
 
 _SETTINGS_PATH = Path.home() / '.duckspec' / 'settings.json'
 
@@ -885,6 +894,30 @@ class Resolver:
                         add('error', 'redeclared-member', name, path,
                             f"'{member}' is already declared on @{ancestor} — "
                             f"inheritance replaces it silently")
+
+        for name, path in sorted(term_map.items()):
+            content = cache.get(name)
+            if content is None:
+                continue
+            # An unresolvable or cyclic extends chain means _schema saw only part of the
+            # vocabulary; unknown-extends and extends-cycle already report that, and listing every
+            # inherited field as unknown on top of it would bury the real finding.
+            chain, ancestor, complete = {name}, _parse_extends(content), True
+            while ancestor:
+                if ancestor not in term_map or ancestor in chain:
+                    complete = False
+                    break
+                chain.add(ancestor)
+                ancestor = _parse_extends(cache.get(ancestor, ''))
+            if not complete:
+                continue
+            allowed = self._schema(name, term_map, cache) | _STRUCTURAL_FIELDS
+            for m in _TOP_FIELD.finditer(content):
+                if m.group(1) not in allowed:
+                    add('error', 'unknown-field', name, path,
+                        f"'{m.group(1)}' is set here, which neither @{name} nor anything in its "
+                        f"extends chain declares",
+                        _line_of(content, m.start()))
 
         for name, path in sorted(term_map.items()):
             content = cache.get(name)
