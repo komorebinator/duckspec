@@ -1,7 +1,6 @@
 description: A @Project managed with @Duckspec.
 extends: @Project
 guidelines:
-  - "A changelog entry records what changed between two versions and why, and what a consuming project must do to move onto the new one. It is written for someone arriving at the new version, so it holds no temporal content: no account of how the work went, what was tried first, what broke on the way, or what remains unfinished. Anything a reader needs in order to use the current version belongs in the @Term files instead — a changelog that explains how something works is documentation filed in the wrong place, and it will rot there. One file per released version, named after it."
   - "Paths that point inside the spec — `terms_folder`, `uses` entries, and everything under `settings` — are relative to the file they appear in. A `src:` is the exception: it points into the source tree, so it resolves against the project's `settings.src` (default `..`) no matter how deep the term sits. A component in `Borshevik/ImageBuild.yaml` naming `build_files/scripts/build-base.sh` means the file in the repository, not one beside the term."
   - All entries in `uses` are loaded unconditionally when this project is loaded.
   - A @DuckspecProject may reference another @DuckspecProject in a different directory via `uses` with a relative path (e.g. `../OtherProject.yaml`); circular references are safe — the resolver deduplicates by resolved path.
@@ -141,7 +140,7 @@ recipes:
       - "Read whole files rather than sampling them. The contradictions cluster in descriptions written from a term's intent instead of from its file, and such a description is plausible everywhere except against the source — an excerpt will not reveal it, and a spot-check that comes back clean says nothing about the rest."
       - "Report one row per component from the list — component, file, read or not, and what was found — followed by the findings in full: missing paths, absent functions, description contradictions. The row is what makes the reading half answerable: a verdict like \"read the sources and compared them\" is the one claim in this whole recipe that cannot be checked by anyone, including its author, and a file left out shows up as a row rather than as nothing at all. Suggest the corrective edit for each finding; fix on user confirmation."
   - id: prepare_release
-    description: Calculates the next version and writes its changelog entry, then records both as a change. Publishing is not done here — the version bump is a change like any other and reaches `main_branch` by the same steps of the configured @DuckWorkflow, where a later step publishes it.
+    description: Calculates the next version and records the bump as a change. Publishing is not done here — the version bump is a change like any other and reaches `main_branch` by the same steps of the configured @DuckWorkflow, where a later step publishes it.
     arguments:
       - id: bump
         description: hint passed to the versioning strategy (e.g. patch/minor/major for @SemVer); interpretation depends on the configured strategy
@@ -149,5 +148,4 @@ recipes:
       - "Read `workflow` from this project and `versioning` from the workflow it names; if either is unset, ask the user to configure it and stop"
       - Invoke @VersioningStrategy#next_version(bump=<bump>) to obtain the new version string
       - Update the `version` field in this @DuckspecProject file to the new version string
-      - "Write the changelog entry into `settings.changelog` as `<version>.md`: what changed since the previous version and why, and what a consuming project must do to move onto it. Draft it from the commit log since the previous version tag, subjects and bodies both — those were written while each change was fresh and carry the reasons, which a diff does not. Read the diff too, but as a check that nothing landed without being described, not as the source: a change absent from the log is a commit-message defect to note, not something to reconstruct from code. Never draft from recollection of the session. If an entry for unreleased changes is already accumulating there, rename it to the new version and bring it up to date instead of starting over."
-      - "Invoke @Git#commit() for the version field and the changelog entry together, and stop there. Do not tag and do not publish: the tag belongs on the commit that has landed on `main_branch`, and how it gets there is the workflow's business"
+      - "Invoke @Git#commit() for the version field, and stop there. Do not tag and do not publish: the tag belongs on the commit that has landed on `main_branch`, and how it gets there is the workflow's business"

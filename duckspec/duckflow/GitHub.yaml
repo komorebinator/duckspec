@@ -3,7 +3,7 @@ extends: @Application
 platform: web (external dependency)
 repository: https://github.com
 guidelines:
-  - "Wrap every `@<TermName>` reference in backticks in any text that reaches GitHub — commit messages, changelog entries that become release notes, pull request titles and bodies, issue text. GitHub reads a bare `@name` as a mention of one of its users and links it, notifies whoever holds that account, and in the case of a `Co-Authored-By:` trailer credits them as a contributor; it applies this to commit messages too, which are git data written where GitHub has no part. The names this framework uses are ordinary words — `@Key`, `@File`, `@Term`, `@Page`, `@Application` are all real accounts belonging to people with no connection to the project, and release 0.11.0 notified eight of them. Backticks are not a workaround to be undone later: a term reference is an identifier in a formal grammar, and marking it as code is what it always was. There is no setting on GitHub that turns the parsing off, at any level, so the only point of control is the text itself."
+  - "Wrap every `@<TermName>` reference in backticks in any text that reaches GitHub — commit messages, release notes, pull request titles and bodies, issue text. GitHub reads a bare `@name` as a mention of one of its users and links it, notifies whoever holds that account, and in the case of a `Co-Authored-By:` trailer credits them as a contributor; it applies this to commit messages too, which are git data written where GitHub has no part. The names this framework uses are ordinary words — `@Key`, `@File`, `@Term`, `@Page`, `@Application` are all real accounts belonging to people with no connection to the project, and release 0.11.0 notified eight of them. Backticks are not a workaround to be undone later: a term reference is an identifier in a formal grammar, and marking it as code is what it always was. There is no setting on GitHub that turns the parsing off, at any level, so the only point of control is the text itself."
   - "Every recipe here resolves the repository from the project's `repository` field, stripping protocol and host to get `owner/name`, and the branch changes land on from the configured workflow's `main_branch`. Neither is asked for when the project already says it."
 recipes:
   - id: list_issues
@@ -52,14 +52,24 @@ recipes:
       - "Run `gh pr merge <number> --repo <repo> --<strategy>`"
       - Report the commit the change landed as on the base branch
   - id: create_release
-    description: Tags a version that has landed and publishes it as a GitHub Release
+    description: Tags a version that has landed, writes its release notes and publishes both as a GitHub Release. The notes live in the release and nowhere else; @GitHub#read_release is how they are read back.
     arguments:
       - id: version
         description: the version to release; the project's current `version` when omitted
     instructions:
       - "Confirm that the commit being tagged is on `main_branch` of the remote. If it is not — the version bump is still in a pull request, or only local — stop and say so: a tag on a commit outside `main_branch` publishes a release from a branch that does not contain it"
+      - "Write the release notes for someone arriving at this version: what changed since the previous version and why, and — whenever anything in it breaks a project that consumes this one — what that project must do to move onto it, under a heading of its own. Draft them from the commit log since the previous version tag, subjects and bodies both: those were written while each change was fresh and carry the reasons, which a diff does not. Read the diff too, but as a check that nothing landed undescribed, not as the source — a change absent from the log is a commit-message defect to note, not something to reconstruct from code — and never draft from recollection of the session. The notes hold no account of how the work went, what was tried first or what remains unfinished; and anything a reader needs in order to use the new version belongs in the @Term files, not here, where it would go stale. Wrap term references in backticks, per this term's guidelines"
+      - "Show the notes to the user and go on only once they confirm them: a release notifies everyone watching the repository, and its text is what every consumer moving onto the version will act on"
       - "Create and push the tag — `git tag <version> && git push origin <version>`"
-      - "Run `gh release create <version> --repo <repo> --target <main_branch>`, passing `--notes-file <settings.changelog>/<version>.md` when that entry exists and `--generate-notes` when it does not"
+      - "Run `gh release create <version> --repo <repo> --target <main_branch> --title <version> --notes-file <file holding the confirmed notes>`"
+  - id: read_release
+    description: Returns the release notes published for one version — the counterpart of @GitHub#create_release, named by a workflow's `release_notes` so that whoever moves onto a version can read what it asks of them
+    arguments:
+      - id: version
+        description: the version whose notes to read
+    instructions:
+      - "Run `gh release view <version> --repo <repo> --json body -q .body`"
+      - "When no release exists for that version, say so rather than returning nothing: a version with no notes and a version with empty notes are different facts"
   - id: run_workflow
     description: Starts a GitHub Actions workflow by hand and follows it to its end
     arguments:

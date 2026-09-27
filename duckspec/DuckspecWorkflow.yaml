@@ -1,8 +1,9 @@
-description: "How work is done on @Duckspec itself. The maintainer works straight on `main`; anyone else contributes by pull request from a fork, which the maintainer reviews and merges. The fact that shapes everything else is that `main` is also what every consuming project receives: @Duckspec#update is a `git pull` in the shared clone, so a push reaches every project on the machine the next time it updates, whether or not a release was ever cut. Consumers are therefore verified before anything reaches `main` — before the maintainer's push, and before a contributor's pull request is merged — not before the release. Releases name a version and carry its changelog; they record what changed, but nothing waits for them."
+description: "How work is done on @Duckspec itself. The maintainer works straight on `main`; anyone else contributes by pull request from a fork, which the maintainer reviews and merges. The fact that shapes everything else is that `main` is also what every consuming project receives: @Duckspec#update is a `git pull` in the shared clone, so a push reaches every project on the machine the next time it updates, whether or not a release was ever cut. Consumers are therefore verified before anything reaches `main` — before the maintainer's push, and before a contributor's pull request is merged — not before the release. Releases name a version and carry its release notes; they record what changed and what consumers must do, but nothing waits for them."
 extends: @DuckWorkflow
 main_branch: main
 versioning:
   type: @SemVer
+release_notes: "@GitHub#read_release"
 guidelines:
   - "Releases are cut only from the official repository. Before a release, compare `git remote get-url origin` with this project's `repository`; on a fork, stop — a release published there names a version nobody else will ever see and diverges the numbering."
   - A change that breaks a consumer is not finished until the consumer is fixed, in the same piece of work. The framework and the projects built on it move together here, and a breaking change pushed alone reaches every consumer on its next update with nothing telling them what to do. A contributor cannot see the maintainer's consumers, so for a contribution this falls to the maintainer, before the merge.
@@ -15,7 +16,7 @@ channels:
     description: "What consuming projects actually run: the shared clone @Duckspec#update pulls, which is `main` at whatever commit it was last pulled at — released or not. This is the channel a push delivers to."
   - id: releases
     from: main
-    description: "GitHub Releases, one per version, each carrying that version's changelog entry. Nobody follows them to get the framework; they are the record of what changed and what a consumer must do to move onto it."
+    description: "GitHub Releases, one per version, each carrying that version's release notes. Nobody follows them to get the framework; they are the record of what changed and what a consumer must do to move onto it."
 steps:
   - id: requested
     description: "A change is wanted — raised in conversation, or as a GitHub issue read with @GitHub#read_issue. It is clarified, then written into the terms."
@@ -42,12 +43,12 @@ steps:
     operation: "@GitHub#merge_pull_request"
   - id: on_main
     description: The change is on main and has already reached consumers on their next update, but no version names it yet. Changes accumulate here until a release.
-    when: main carries the change and no changelog entry covers it
+    when: main carries the change and its `version` is still the one the latest release tag names
     operation: "@DuckspecProject#prepare_release"
   - id: versioned
     description: A version covering the change is prepared and its bump has itself been committed, verified against consumers and pushed like any change.
-    when: "main carries a version whose changelog entry covers the change, and no tag names that version"
+    when: main carries a `version` that no tag names yet
     operation: "@GitHub#create_release"
   - id: released
-    description: The change is named by a published version, with its changelog as release notes.
-    when: a GitHub Release exists for a version whose changelog entry covers the change
+    description: The change is named by a published version, whose release notes say what changed and what consumers must do.
+    when: a GitHub Release exists for a version whose tag contains the change

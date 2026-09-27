@@ -15,14 +15,13 @@ uses:
 version: 0.12.0
 repository: https://github.com/komorebinator/duckspec
 settings:
-  changelog: changelog/
   readme: README.md
 workflow:
   type: @DuckspecWorkflow
 
 ai_instructions:
   - "Before acting on the change in hand — recording it, sending it, releasing it, or proposing what to do next — Invoke @DuckToolsApp#resolver#load_workflow() and find where the change stands by evaluating its steps' `when`. A request to take the change somewhere names how far it should travel: to record it locally (\"commit\", \"commit locally\", \"just commit\"), to send it where it gets accepted (\"submit\", \"push\", \"send\", \"open a PR\"), to publish it (\"release\", \"release it\"). Advance it one step at a time, each by that step's own `operation`, up to the step the request names and no further — a request to commit is not permission to push, and a request to send is not permission to merge or release. Never run git or a hosting CLI by hand to do what a step's operation does. Completing a task, permissive phrasing (\"we can push\", \"it's fine to commit\"), or confirmation that changes look good are not requests to move anything. When proposing a next step rather than answering a request, propose the step after the one the change is at: a local commit leaves the work in one copy on one machine, and sending it is what removes that risk."
-  - "Never manually edit the `version` field in any @DuckspecProject file. It is set only by @DuckspecProject#prepare_release, which asks for the bump and writes the changelog entry that belongs to it."
+  - "Never manually edit the `version` field in any @DuckspecProject file. It is set only by @DuckspecProject#prepare_release, which asks for the bump."
   - Never save information to external memory. Instead, suggest changes to the @DuckspecProject configuration or term files.
   - "When the user's request concerns something not covered by the currently loaded project(s) — a sub-project, an extension, a component referenced only by name or by a `references:` entry — check @DuckToolsApp#resolver#list_projects() for a matching registered project before assuming it's out of scope or asking the user for a path. If found, invoke @DuckToolsApp#resolver#load_project() on it explicitly. This is model-side behavior only — the resolver itself never auto-loads it as a side effect of loading another project."
   - "Read and edit @Term files through @DuckToolsApp#resolver, not through shell commands. Its operations know the format — they resolve `#`-paths, refuse an ambiguous one, and edit at the element's own column — where grep and sed see only lines and silently produce damage that still looks like valid YAML. The shell stays correct for what the resolver does not cover: source code, git, and bulk or analytical passes across many files at once. When a spec question or edit reaches for the shell only because no resolver operation exists for it, name the missing operation in the reply — a gap in @DuckToolsApp is a defect to report, not a standing reason to keep using the shell."
@@ -86,7 +85,9 @@ recipes:
     description: Updates @Duckspec to the latest version — a single `git pull` in the shared clone, immediately available to every project that references it
     instructions:
       - Read `ducktools.src` from `~/.duckspec/settings.json`; if unset, tell the user @Duckspec is not installed via the workspace model and stop
+      - Note the framework's `version` in the clone before pulling
       - Run `git pull` in the clone's repository root (the parent of `ducktools.src`)
+      - "If the version changed, read the notes of every released version after the old one up to the new one, oldest first, through the recipe named by `release_notes` on @DuckspecWorkflow. Tell the user what changed, and carry out — or, for projects not in hand, report — whatever each set of notes says a consuming project must do to move onto it. The pull has already delivered the new framework; the notes are the only place that says what it now asks of its consumers"
       - Invoke @DuckspecProject#validate()
   - id: create_project
     description: Creates a minimal @DuckspecProject term file — only what's required plus whatever context supplies. Repository, workflow, workspace registration, and everything else are deferred to @DuckspecProject#assess_coverage, which has real project context to fill them in correctly instead of guessing now.

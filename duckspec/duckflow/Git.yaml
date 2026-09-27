@@ -8,7 +8,7 @@ recipes:
   - id: commit
     description: Records pending changes in local history and stops there — no push, nothing that reaches anyone else
     instructions:
-      - "Separate unrelated changes into separate commits rather than one. A changelog is written from the log, and a commit that carries two unrelated changes cannot be described in one line without losing one of them."
+      - "Separate unrelated changes into separate commits rather than one. Release notes are written from the log, and a commit that carries two unrelated changes cannot be described in one line without losing one of them."
       - Stage the files belonging to each change and commit them with a message that says what changed and why, per @DuckWorkflow's guidelines
       - Report each commit and what remains uncommitted; do not push, and do not offer to — a request to commit is not a request to send
   - id: push

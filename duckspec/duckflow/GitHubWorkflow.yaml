@@ -1,5 +1,6 @@
 description: "The typical practice of a project developed entirely on GitHub: work comes from issues or conversation, is specified and built, goes up as a pull request, lands on `main_branch`, is versioned and published as a GitHub Release. Kept minimal on purpose — it is both what a project with this common shape uses as-is, overriding only `main_branch` and `versioning` in its own `workflow:` block, and the worked example to copy from when a project's practice differs in structure and needs a @DuckWorkflow of its own. A maintainer who pushes straight to `main_branch` leaves `in_review` unsatisfied, which the reading of the steps reports as skipped; that is the honest record of an unreviewed change, not something the workflow needs a second route for."
 extends: @DuckWorkflow
+release_notes: "@GitHub#read_release"
 steps:
   - id: requested
     description: "Someone wants a change — an open issue, read with @GitHub#read_issue, or a request made in the conversation. It is clarified until nothing is left to guess and then written into the terms, which is the author's work rather than anything a recipe performs."
@@ -22,12 +23,12 @@ steps:
     operation: "@GitHub#merge_pull_request"
   - id: landed
     description: The change is on `main_branch` but belongs to no released version yet.
-    when: the change is on `main_branch` and no changelog entry covers it
+    when: the change is on `main_branch` and its `version` is still the one the latest release tag names
     operation: "@DuckspecProject#prepare_release"
   - id: versioned
-    description: "A version covering the change has been prepared — the version field set, the changelog entry written — and has itself landed on `main_branch`, but is not published. The version bump is a change like any other and travels the steps above to get here."
-    when: "`main_branch` carries a version whose changelog entry covers the change, and no tag names that version"
+    description: "A version covering the change has been prepared — the version field set — and has itself landed on `main_branch`, but is not published. The version bump is a change like any other and travels the steps above to get here."
+    when: "`main_branch` carries a `version` that no tag names yet"
     operation: "@GitHub#create_release"
   - id: released
     description: The change is published in a GitHub Release.
-    when: a GitHub Release exists for a version whose changelog entry covers the change
+    when: a GitHub Release exists for a version whose tag contains the change
