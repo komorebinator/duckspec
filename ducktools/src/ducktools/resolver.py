@@ -652,18 +652,36 @@ class Resolver:
         references = [{'term': root.stem, **r} for r in _parse_references(root_content)]
         rules = self._project_wide_rules(root, root_content, term_map)
         terms = []
+        vocabulary: dict[str, list[str]] = {}
+
+        # A term is this project's own when its file lies under the root file's directory.
+        # Anything else came in through another project's `uses:`, and is attributed to the
+        # broadest such project containing it, so a framework is one group, not one per
+        # sub-project.
+        root_dir = root.parent
+        _, project_files = self._collect(root)
+        sources = sorted(
+            {f.resolve() for f in project_files if f.is_file() and not f.resolve().is_relative_to(root_dir)},
+            key=lambda f: len(f.parent.parts),
+        )
 
         for name, p, content in self._walk_terms(project_path):
-            if p.resolve() == root:
+            resolved = p.resolve()
+            if resolved == root:
                 continue
-            m = _DESCRIPTION.search(content)
-            terms.append({'name': name, 'path': str(p), 'description': m.group(1).strip() if m else ''})
+            if resolved.is_relative_to(root_dir):
+                m = _DESCRIPTION.search(content)
+                terms.append({'name': name, 'path': str(p), 'description': m.group(1).strip() if m else ''})
+            else:
+                source = next((f.stem for f in sources if resolved.is_relative_to(f.parent)), 'other')
+                vocabulary.setdefault(source, []).append(name)
             recipes += [{'term': name, **r} for r in _parse_recipes(content)]
             references += [{'term': name, **r} for r in _parse_references(content)]
 
         return {
             'root_content': root_content,
             'terms': terms,  # already sorted by _walk_terms
+            'vocabulary': [{'project': k, 'terms': v} for k, v in sorted(vocabulary.items())],
             'recipes': recipes,
             'references': references,
             'rules': rules,

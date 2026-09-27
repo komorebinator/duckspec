@@ -77,6 +77,13 @@ r = R.Resolver()
 # --- reading -----------------------------------------------------------------
 loaded = r.load_project(project)
 check('load_project', 'A fixture project.' in str(loaded) and 'Widget' in str(loaded))
+# The fixture's own reachable term is listed with its description; the framework it uses is not, and
+# comes back once, by name, under the project it belongs to.
+_own = {t['name'] for t in loaded['terms']}
+_vocab = {v['project']: v['terms'] for v in loaded['vocabulary']}
+check('load_project/vocabulary',
+      _own == {'Widget'} and list(_vocab) == ['Duckspec'] and 'Term' in _vocab['Duckspec'],
+      f'own={sorted(_own)} vocabulary={ {k: len(v) for k, v in _vocab.items()} }')
 
 terms = r.list_terms(project)
 check('list_terms', any(t['name'] == 'Widget' for t in terms), f'got {terms}')

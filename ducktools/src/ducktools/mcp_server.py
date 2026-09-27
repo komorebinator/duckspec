@@ -15,7 +15,7 @@ _PROJECT_PATH_PROP = {
 _TOOLS = [
     {
         'name': 'load_project',
-        'description': 'Load the root project file and list all reachable terms with descriptions. Call this first when starting work on a project.',
+        'description': 'Load the root project file: this project\'s own terms with descriptions, the vocabulary it uses from other projects by name, recipes and project-wide rules. Call this first when starting work on a project.',
         'inputSchema': {
             'type': 'object',
             'properties': _PROJECT_PATH_PROP,
@@ -302,6 +302,16 @@ def _format_terms_table(terms: list[dict]) -> str:
     return '\n'.join(rows)
 
 
+def _format_vocabulary(vocabulary: list[dict]) -> str:
+    """The Vocabulary section, or '' when the project uses no terms from other projects."""
+    if not vocabulary:
+        return ''
+    lines = ['## Vocabulary from other projects', '',
+             'Terms this project uses from other projects, by name — load_terms gives any of them in full.', '']
+    lines += [f"- @{v['project']}: " + ', '.join(f'@{t}' for t in v['terms']) for v in vocabulary]
+    return '\n'.join(lines)
+
+
 def _format_recipes_table(recipes: list[dict]) -> str:
     rows = ['| Recipe | Term | Description |', '|--------|------|-------------|']
     rows += [f"| {r['name']} | @{r['term']} | {r.get('description', '')} |" for r in recipes]
@@ -395,12 +405,15 @@ def _call(name: str, arguments: dict) -> str:
     if name == 'load_project':
         result = resolver.load_project(path)
         terms_table = _format_terms_table(result['terms'])
+        vocabulary = _format_vocabulary(result['vocabulary'])
         recipes_table = _format_recipes_table(result['recipes'])
         references_table = _format_references_table(result['references'])
         rules_table = _format_rules_table(result['rules'])
         return (
             f"{result['root_content']}\n\n## Workflow\n\n{result['workflow']['note']}"
-            f"\n\n## Terms\n\n{terms_table}\n\n## Recipes\n\n{recipes_table}"
+            f"\n\n## Terms\n\n{terms_table}"
+            + (f"\n\n{vocabulary}" if vocabulary else '')
+            + f"\n\n## Recipes\n\n{recipes_table}"
             f"\n\n## References\n\n{references_table}\n\n## Rules (project-wide)\n\n{rules_table}"
         )
 

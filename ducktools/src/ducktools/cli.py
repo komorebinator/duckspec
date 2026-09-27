@@ -11,6 +11,16 @@ def _print_terms_table(terms: list[dict]) -> None:
         print(f"| @{t['name']} | {t['path']} | {t.get('description', '')} |")
 
 
+def _print_vocabulary(vocabulary: list[dict]) -> None:
+    """The Vocabulary section; prints nothing when the project uses no terms from other projects."""
+    if not vocabulary:
+        return
+    print('\n## Vocabulary from other projects\n')
+    print('Terms this project uses from other projects, by name — load-terms gives any of them in full.\n')
+    for v in vocabulary:
+        print(f"- @{v['project']}: " + ', '.join(f'@{t}' for t in v['terms']))
+
+
 def _format_rules_tree(term_name: str, tree: dict) -> str:
     lines = [f'## Rules for @{term_name}']
     if not tree['own'] and not tree['inherited']:
@@ -226,6 +236,7 @@ def cmd_load_project(project_path: str) -> None:
     print(result['workflow']['note'])
     print('\n## Terms\n')
     _print_terms_table(result['terms'])
+    _print_vocabulary(result['vocabulary'])
     print('\n## Recipes\n')
     _print_recipes_table(result['recipes'])
     print('\n## References\n')
