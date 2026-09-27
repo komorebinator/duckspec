@@ -17,7 +17,7 @@ recipes:
     instructions:
       - Read the @Software term; resolve each component's type to its @DesignPattern term
       - Create the folder at `src` if it does not exist
-      - For each component and for the entry point: if the corresponding source file already exists in `src`, read it and apply only the changes needed to bring it in line with the specification; if it does not exist, create it; follow the conventions of `platform`
+      - "For each component and for the entry point: if the corresponding source file already exists in `src`, read it and apply only the changes needed to bring it in line with the specification, keeping the realization it already has wherever the spec leaves realization free — rewriting what no decision asked to change only produces noise in the diff; if it does not exist, create it, choosing the realization; follow the conventions of `platform`"
   - id: test
     description: Runs all @Test cases listed in `tests` and reports results
     instructions:

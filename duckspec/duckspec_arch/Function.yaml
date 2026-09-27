@@ -1,7 +1,7 @@
-description: A description of an algorithm that can be directly converted to code.
+description: A behaviour a component performs — what it does for its callers and what any implementation of it must preserve.
 extends: @Term
 guidelines:
-  - A @Function description carries the algorithm: the logic, the edge cases, and the expected behaviour. A restatement of the name is not a description.
+  - "A @Function description carries the decisions in the behaviour, not its realization: what callers rely on, the edge cases that matter to them, the constraints any implementation must keep — a platform workaround, an ordering, a case deliberately refused — and why. A restatement of the name is not a description, and neither is a line-by-line transcription of the body: an implementation that differs from the current one while keeping every stated decision is a correct rebuild."
 properties:
   - id: arguments
     type: @Property
