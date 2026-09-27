@@ -1,5 +1,5 @@
 description: A diff file applied to a component's source at build time to modify its default settings or behavior. Typically produced by diff -u.
-extends: @ConfigFile
+extends: "@ConfigFile"
 properties:
   - id: target
-    description: the @Term or component this patch applies to; use @<TermName> or component#element path syntax (e.g. @<MyTerm> or #my-component); implicit when @Patch is nested inside a component's patches block
+    description: "the @Term or component this patch applies to; use @<TermName> or component#element path syntax (e.g. @<MyTerm> or #my-component); implicit when @Patch is nested inside a component's patches block"

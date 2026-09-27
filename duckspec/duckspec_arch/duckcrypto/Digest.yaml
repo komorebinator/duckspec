@@ -1,5 +1,5 @@
 description: The output of a cryptographic hash function applied to data. Used for integrity verification and content-addressable references.
-extends: @DesignPattern
+extends: "@DesignPattern"
 properties:
   - id: algorithm
     description: hash algorithm (e.g. SHA-256, SHA-512, BLAKE3)

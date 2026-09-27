@@ -9,7 +9,7 @@ _USES_BLOCK = re.compile(r'^uses:\n((?:[ \t]+-[ \t]+\S+\n?)+)', re.MULTILINE)
 _LIST_ITEM = re.compile(r'-\s+(\S+)')
 _REPOSITORY = re.compile(r'^repository:\s*(\S+)', re.MULTILINE)
 _DESCRIPTION = re.compile(r'^description:\s*(.+)$', re.MULTILINE)
-_EXTENDS = re.compile(r'^extends:\s*@?(\S+)', re.MULTILINE)
+_EXTENDS = re.compile(r'''^extends:\s*["']?@?([A-Za-z_]\w*)''', re.MULTILINE)
 _RECIPES_BLOCK = re.compile(r'^recipes:\n((?:[ \t].+\n?)*)', re.MULTILINE)
 _REFERENCES_BLOCK = re.compile(r'^references:\n((?:[ \t].+\n?)*)', re.MULTILINE)
 _GUIDELINES_BLOCK = re.compile(r'^guidelines:\n((?:[ \t].+\n?)*)', re.MULTILINE)
@@ -138,10 +138,45 @@ def _extract_key_block(content: str, name: str) -> str | None:
     return None
 
 
-def _narrow(content: str, segment: str) -> str | None:
+def _nth_item(content: str, n: int) -> str | None:
+    """The list item at position n among the items at the first item column below the first line
+    of `content` — what a digits-only segment addresses, for entries that have no id."""
+    lines = content.splitlines()
+    column = None
+    starts: list[int] = []
+    for i, line in enumerate(lines[1:], start=1):
+        if not line.strip():
+            continue
+        indent = len(line) - len(line.lstrip())
+        if column is None:
+            if not line.lstrip().startswith('- '):
+                return None
+            column = indent
+        if indent < column:
+            break
+        if indent == column and line.lstrip().startswith('- '):
+            starts.append(i)
+    if n >= len(starts):
+        return None
+    start = starts[n]
+    end = len(lines)
+    for j in range(start + 1, len(lines)):
+        if lines[j].strip() and len(lines[j]) - len(lines[j].lstrip()) <= column:
+            end = j
+            break
+    return '\n'.join(lines[start:end]).rstrip()
+
+
+def _narrow(content: str, segment: str, prefer_key: bool = False) -> str | None:
     """Resolves one `#`-path segment. Named list items win over mapping keys of the same name —
     that ordering is what keeps a component called `settings` addressable in a term that also
-    carries a `settings:` key, and preserves the behaviour from before keys were addressable."""
+    carries a `settings:` key, and preserves the behaviour from before keys were addressable.
+    `prefer_key` reverses it for the operations that need a list: @Term's own `guidelines:` sits
+    beside the `guidelines` entry of its `properties:`. A digits-only segment picks by position."""
+    if segment.isdigit():
+        return _nth_item(content, int(segment))
+    if prefer_key:
+        return _extract_key_block(content, segment) or _extract_named_block(content, segment)
     return _extract_named_block(content, segment) or _extract_key_block(content, segment)
 
 
@@ -273,21 +308,104 @@ def _slot_mapping(content: str, slot: str) -> Iterator[tuple[list[str], str, int
             yield keys, own_type, key_indent
 
 
+_DOUBLE_QUOTED = re.compile(r'"(?:[^"\\]|\\.)*"')
+_SINGLE_QUOTED = re.compile(r"'(?:[^']|'')*'")
+
+
+def _is_quoted_scalar(text: str) -> bool:
+    """True when the whole text is one complete quoted scalar — not merely a text that starts and
+    ends with a quote, like `"Check for updates" or "Update"`."""
+    return bool(_DOUBLE_QUOTED.fullmatch(text) or _SINGLE_QUOTED.fullmatch(text))
+
+
+def _needs_quotes(text: str) -> bool:
+    """Whether a value written bare would be read by YAML as something other than its text.
+    The one definition of the rule, shared by _quoted when writing and by _unquoted_scalars when
+    checking or normalizing, so the two cannot disagree."""
+    if not text or _is_quoted_scalar(text):
+        return False
+    if text != text.strip():
+        return True
+    if text[0] in '@`&*!|>%#[]{},\'"':
+        return True
+    if text[:2] in ('- ', '? ', ': ') or text in ('-', '?', ':'):
+        return True
+    return ': ' in text or ' #' in text or text.endswith(':')
+
+
 def _quoted(value: str) -> str:
-    """A written value, wrapped in double quotes when leaving it bare would read as structure
-    rather than text — a `: ` inside it, or a leading character YAML gives meaning to. Term files
-    are parsed by regex here, so a bare colon does no damage today; the quoting keeps hand-written
-    and tool-written entries looking the same, and keeps the files readable by anything stricter."""
+    """A written value, in the form YAML reads as exactly that text. A term reference such as
+    `@Recipe` is quoted like anything else: YAML reserves a leading `@`, so leaving references
+    bare is what made every term file unreadable to a YAML parser. The readers of `type:` and
+    `extends:` accept both forms."""
     text = str(value)
     if not text:
         return "''"
-    if text.startswith(('"', "'")) and text.endswith(('"', "'")):
+    if not _needs_quotes(text):
         return text
-    if re.fullmatch(r'@[A-Z]\w*', text):
-        return text   # a bare term reference is written unquoted everywhere else in the format
-    if ': ' in text or text.endswith(':') or text[0] in '@&*!|>%#[]{},':
-        return '"' + text.replace('\\', '\\\\').replace('"', '\\"') + '"'
-    return text
+    return '"' + text.replace('\\', '\\\\').replace('"', '\\"') + '"'
+
+
+_BLOCK_SCALAR = re.compile(r'[|>][+-]?\d*[+-]?')
+_KEY_VALUE = re.compile(r'''^(\s*(?:-\s+)?(?:[A-Za-z_][\w.-]*|"[^"]*"|'[^']*'):[ \t]+)(\S.*?)\s*$''')
+_BARE_ITEM = re.compile(r'^(\s*-[ \t]+)(\S.*?)\s*$')
+
+
+def _unquoted_scalars(lines: list[str]) -> list[tuple[int, str, str]]:
+    """(index, prefix, value) for every line whose value is written bare although _needs_quotes
+    says it must not be. Leaves alone what cannot be rebuilt on one line: the text of block
+    scalars, quoted scalars continued over several lines, and bare values continued below."""
+    found: list[tuple[int, str, str]] = []
+    skip_deeper_than = None   # inside a block scalar: every line indented past this is raw text
+    in_quote = None           # inside a quoted scalar continued over lines: its quote character
+    for i, raw in enumerate(lines):
+        line = raw.rstrip('\n')
+        if not line.strip():
+            continue
+        indent = len(line) - len(line.lstrip())
+        if in_quote:
+            body = line.strip()
+            if in_quote == '"' and re.search(r'(?<!\\)(?:\\\\)*"\s*$', body):
+                in_quote = None
+            elif in_quote == "'" and body.endswith("'") and not body.endswith("''"):
+                in_quote = None
+            continue
+        if skip_deeper_than is not None:
+            if indent > skip_deeper_than:
+                continue
+            skip_deeper_than = None
+        if line.lstrip().startswith('#'):
+            continue
+        m = _KEY_VALUE.match(line)
+        if m is None:
+            item = _BARE_ITEM.match(line)
+            if item is None or re.match(r'^(?:[A-Za-z_][\w.-]*):(\s|$)', item.group(2)):
+                continue
+            m = item
+        prefix, value = m.group(1), m.group(2)
+        if _BLOCK_SCALAR.fullmatch(value):
+            skip_deeper_than = indent
+            continue
+        if value[0] in '"\'' and not _is_quoted_scalar(value):
+            opened = (_DOUBLE_QUOTED if value[0] == '"' else _SINGLE_QUOTED).match(value)
+            if opened is None:
+                in_quote = value[0]   # opened here, closed on a later line: not ours to touch
+                continue
+            if re.fullmatch(r'\s+#.*', value[opened.end():]):
+                continue   # a quoted value with a comment after it
+            # otherwise the quote closes partway, as in `'Roll back' with …`: text a parser
+            # stops reading at the closing quote, so the whole of it is wrapped
+        if not _needs_quotes(value):
+            continue
+        continued = next((l for l in lines[i + 1:] if l.strip()), None)
+        if continued is not None:
+            nxt = continued.rstrip('\n')
+            n_indent = len(nxt) - len(nxt.lstrip())
+            if (n_indent > indent and not nxt.lstrip().startswith(('- ', '#'))
+                    and not re.match(r'^\s*[A-Za-z_][\w.-]*:(\s|$)', nxt)):
+                continue   # a bare value folded onto the next line: rewriting one line would break it
+        found.append((i, prefix, value))
+    return found
 
 
 def _field_lines(field: str, value, column: int) -> list[str]:
@@ -422,7 +540,7 @@ def _function_sites(content: str,
             if f and f.group(1) == 'src':
                 src = _src_values(lines, j, indent + 2)
             elif f and f.group(2):
-                type_name = f.group(2).lstrip('@')
+                type_name = f.group(2).strip('\'"').lstrip('@')
         entries.append((indent, src, type_name))
 
 
@@ -802,6 +920,12 @@ class Resolver:
             # way _locate already does for the editing operations. A stale duplicate of an entire
             # recipe sat in DuckspecProject.yaml across five releases precisely because nothing
             # that reads a path ever objected to there being two of something.
+            if segment.isdigit():
+                block = _nth_item(content, int(segment))
+                if block is None:
+                    return None
+                content = block
+                continue
             candidates = _find_named_blocks(content, segment)
             if len(candidates) > 1:
                 return {'name': term_name, 'path': str(term_path), 'ref': ref, 'content': '',
@@ -887,6 +1011,7 @@ class Resolver:
                 f"also defined at {dup['first_path']}")
 
         workspace = _active_projects(_load_settings())   # once, not once per term with a `uses:`
+        own_paths = set(self._own_files(root))
         for name, path, content in self._walk_terms(project_path, include_all=True):
             cache[name] = content
             for slot, element in _slot_element_types(content).items():
@@ -896,6 +1021,14 @@ class Resolver:
             if not _DESCRIPTION.search(content):
                 add('error', 'unparsed-term', name, path, 'no top-level description:')
                 continue
+
+            # Only this project's own files: a term reached from another project is fixed there.
+            if Path(path).resolve() in own_paths:
+                for i, _prefix, value in _unquoted_scalars(content.splitlines(keepends=True)):
+                    shown = value if len(value) <= 60 else value[:57] + '...'
+                    add('error', 'unquoted-scalar', name, path,
+                        f"'{shown}' is written bare, and YAML would not read it as text — quote "
+                        f"it, or run normalize on the project", i + 1)
 
             # A `uses:` entry that resolves to nothing was skipped in silence, so the project it
             # names simply vanished from the term map and the report blamed the dangling
@@ -1322,10 +1455,12 @@ class Resolver:
             out.append({'id': item_id, 'fields': fields})
         return out
 
-    def _locate(self, project_path: str, ref: str) -> tuple[Path, list[str], int, int] | str:
+    def _locate(self, project_path: str, ref: str,
+                slot: bool = False) -> tuple[Path, list[str], int, int] | str:
         """(file, lines, start, end) for the element `ref` addresses, or an error string. Narrows
         segment by segment like resolve_path, but tracking line numbers, and refuses an ambiguous
-        step instead of taking the first match."""
+        step instead of taking the first match. With `slot`, the last segment prefers a mapping
+        key over a named entry of the same name, since the caller needs the element holding a list."""
         term_name, *segments = ref.split('#')
         term_name = term_name.lstrip('@')
         term_map = self._build_term_map(Path(_resolve_project(project_path)).resolve())
@@ -1334,57 +1469,143 @@ class Resolver:
         path = term_map[term_name]
         lines = path.read_text().splitlines(keepends=True)
         start, end = 0, len(lines)
-        for segment in segments:
+        for n, segment in enumerate(segments):
             window = ''.join(lines[start:end])
-            if len(_find_named_blocks(window, segment)) > 1:
+            prefer_key = slot and n == len(segments) - 1
+            keyed = prefer_key and _extract_key_block(window, segment) is not None
+            if (not segment.isdigit() and not keyed
+                    and len(_find_named_blocks(window, segment)) > 1):
                 return f"ambiguous: '{segment}' matches more than one element in {ref}"
-            block = _narrow(window, segment)
+            block = _narrow(window, segment, prefer_key=prefer_key)
             if block is None:
                 return f"not found: '{segment}' in {ref}"
-            first = block.splitlines()[0]
-            offset = next(i for i, l in enumerate(lines[start:end]) if l.rstrip('\n') == first)
+            # Found by its whole run of lines, not its first line alone: two list items can open
+            # with the same line, and a digits-only segment picks one of them by position.
+            wanted = [l.rstrip() for l in block.splitlines()]
+            have = [l.rstrip() for l in lines[start:end]]
+            offset = next(i for i in range(len(have)) if have[i:i + len(wanted)] == wanted)
             start += offset
-            end = start + len(block.splitlines())
+            end = start + len(wanted)
         return path, lines, start, end
+
+    @staticmethod
+    def _field_column(head: str) -> int:
+        """The column the fields of the element opening on `head` sit at."""
+        indent = len(head) - len(head.lstrip())
+        if head.lstrip().startswith('- ') or re.match(r'^\s*[\w-]+:\s*$', head):
+            return indent + 2   # a list item or a key opening a block nests its fields
+        return indent           # the term itself: fields sit at the top level
+
+    @staticmethod
+    def _field_span(lines: list[str], start: int, end: int, field: str) -> tuple[int, int, int] | None:
+        """(first line, line past the last, column) of `field` inside the element spanning
+        lines[start:end], or None when the element has no such field. The span takes in the lines a
+        value is continued on — a bare or quoted value folded below, a block scalar's body — so a
+        caller replacing it leaves nothing of the old value stranded."""
+        head = lines[start]
+        column = Resolver._field_column(head)
+        # An entry's first field lives on the `- ` line itself, indented two columns short of
+        # its siblings. Matching only the sibling column meant `id` was never found on an entry
+        # and a second `id:` was appended below the first, leaving two.
+        if re.match(rf'^(\s*-\s+){re.escape(field)}:', head):
+            return start, start + 1, column
+        pattern = re.compile(rf'^{" " * column}{re.escape(field)}:')
+        for i in range(start, end):
+            if pattern.match(lines[i]):
+                old = lines[i].split(':', 1)[1].strip()
+                block_scalar = bool(_BLOCK_SCALAR.fullmatch(old))
+                j = i + 1
+                while j < end and (block_scalar and not lines[j].strip()
+                                   or lines[j].strip() and len(lines[j]) - len(lines[j].lstrip()) > column
+                                   and (block_scalar
+                                        or not lines[j].lstrip().startswith('- ')
+                                        and not re.match(r'^\s*[A-Za-z_][\w.-]*:(\s|$)', lines[j]))):
+                    j += 1
+                while j > i + 1 and not lines[j - 1].strip():
+                    j -= 1   # blank lines after a block scalar belong to the file, not the value
+                return i, j, column
+        return None
 
     def set_field(self, project_path: str, ref: str, field: str, value: str) -> str:
         located = self._locate(project_path, ref)
         if isinstance(located, str):
             return located
         path, lines, start, end = located
-        head = lines[start]
-        indent = len(head) - len(head.lstrip())
-        if head.lstrip().startswith('- ') or re.match(r'^\s*[\w-]+:\s*$', head):
-            column = indent + 2   # a list item or a key opening a block nests its fields
-        else:
-            column = indent       # the term itself: fields sit at the top level
-        # An entry's first field lives on the `- ` line itself, indented two columns short of
-        # its siblings. Matching only the sibling column meant `id` was never found on an entry
-        # and a second `id:` was appended below the first, leaving two.
-        on_head = re.match(rf'^(\s*-\s+){re.escape(field)}:', head)
-        if on_head:
-            lines[start] = f'{on_head.group(1)}{field}: {value}\n'
+        value = _quoted(value)
+        span = self._field_span(lines, start, end, field)
+        if span is None:
+            lines.insert(start + 1, f'{" " * self._field_column(lines[start])}{field}: {value}\n')
             path.write_text(''.join(lines))
-            return f'{path}: replaced {field}'
-        pattern = re.compile(rf'^{" " * column}{re.escape(field)}:')
-        for i in range(start, end):
-            if pattern.match(lines[i]):
-                lines[i] = f'{" " * column}{field}: {value}\n'
-                path.write_text(''.join(lines))
-                return f'{path}: replaced {field}'
-        lines.insert(start + 1, f'{" " * column}{field}: {value}\n')
+            return f'{path}: added {field}'
+        i, j, column = span
+        on_head = re.match(rf'^(\s*-\s+){re.escape(field)}:', lines[i])
+        # A value continued on the lines below belongs to this field too, and replacing only the
+        # first line of it would leave the rest stranded under the new value.
+        lines[i:j] = [f'{on_head.group(1) if on_head else " " * column}{field}: {value}\n']
         path.write_text(''.join(lines))
-        return f'{path}: added {field}'
+        return f'{path}: replaced {field}'
+
+    def edit_field(self, project_path: str, ref: str, field: str, old: str, new: str) -> str:
+        """Replaces one piece of a field's text with another, leaving the rest as it was. A long
+        description gaining a sentence otherwise had to be rewritten whole through set_field, every
+        character of it retyped, or edited by hand outside the tools. The piece has to occur
+        exactly once, so an edit never lands somewhere its author did not look."""
+        located = self._locate(project_path, ref)
+        if isinstance(located, str):
+            return located
+        path, lines, start, end = located
+        span = self._field_span(lines, start, end, field)
+        if span is None:
+            return f'not found: {ref} has no field {field}'
+        i, j, _ = span
+        first = re.sub(rf'^\s*(?:-\s+)?{re.escape(field)}:', '', lines[i].rstrip('\n')).strip()
+        rest = [l.strip() for l in lines[i + 1:j]]
+        if _BLOCK_SCALAR.fullmatch(first) or '' in rest:
+            return f'refused: {field} spans paragraphs; rewrite it with set_field'
+        text = ' '.join([first] + rest)
+        if _DOUBLE_QUOTED.fullmatch(text):
+            try:
+                text = json.loads(text)
+            except ValueError:
+                return f'refused: {field} uses an escape only YAML knows; rewrite it with set_field'
+        elif _SINGLE_QUOTED.fullmatch(text):
+            text = text[1:-1].replace("''", "'")
+        count = text.count(old) if old else 0
+        if count != 1:
+            return f'refused: the text to replace occurs {count} times in {field}, not once'
+        return self.set_field(project_path, ref, field, text.replace(old, new))
 
     def add_entry(self, project_path: str, ref: str, entry_id: str,
                   fields: dict | None = None) -> str:
         """Appends a named entry to the slot `ref` addresses. The item column comes from the
         entries already in the slot, so a nested slot lands at its own depth instead of a guessed
         one — hand-written indentation is what put a field outside its block during the identity
-        migration."""
-        located = self._locate(project_path, ref)
+        migration. A slot that does not exist yet is created on the element the rest of the path
+        addresses, the way add_item creates a missing list."""
+        located = self._locate(project_path, ref, slot=True)
         if isinstance(located, str):
-            return located
+            parent_ref, _, slot_name = ref.rpartition('#')
+            if not parent_ref or not located.startswith('not found') or slot_name.isdigit():
+                return located
+            parent = self._locate(project_path, parent_ref)
+            if isinstance(parent, str):
+                return located
+            path, lines, p_start, p_end = parent
+            if '#' not in parent_ref:
+                column, at = 0, len(lines)   # the term itself: a new top-level slot goes last
+                if lines and not lines[-1].endswith('\n'):
+                    lines[-1] += '\n'
+            else:
+                p_head = lines[p_start]
+                column = len(p_head) - len(p_head.lstrip()) + 2
+                at = p_end
+                while at > p_start + 1 and not lines[at - 1].strip():
+                    at -= 1
+            lines.insert(at, f'{" " * column}{slot_name}:\n')
+            path.write_text(''.join(lines))
+            located = self._locate(project_path, ref, slot=True)
+            if isinstance(located, str):
+                return located
         path, lines, start, end = located
         head = lines[start]
         if not re.match(r'^\s*[\w-]+:\s*$', head):
@@ -1442,14 +1663,9 @@ class Resolver:
 
     @staticmethod
     def _item_line(text: str, indent: int) -> str:
-        """One list item at the given column. A colon or a hash in the text would read as structure,
-        so the value is quoted; a quote already inside it is escaped rather than left to close the
-        quoting early and leave a line that still looks like valid YAML."""
-        pad = " " * indent
-        if any(c in text for c in ":#"):
-            escaped = text.replace("\\", "\\\\").replace('"', '\\"')
-            return pad + '- "' + escaped + '"\n'
-        return pad + "- " + text + "\n"
+        """One list item at the given column, its text written through _quoted like every other
+        value, so a leading `@` or a `: ` inside it cannot turn it into something else."""
+        return " " * indent + "- " + _quoted(text) + "\n"
 
     @staticmethod
     def _item_text(item_lines: list[str]) -> str:
@@ -1469,7 +1685,7 @@ class Resolver:
 
 
     def add_item(self, project_path: str, ref: str, text: str, after: str | None = None) -> str:
-        located = self._locate(project_path, ref)
+        located = self._locate(project_path, ref, slot=True)
         if isinstance(located, str):
             head, _, block = ref.rpartition("#")
             if not head:
@@ -1501,7 +1717,7 @@ class Resolver:
         return f"{path}: added to {ref}"
 
     def set_item(self, project_path: str, ref: str, match: str, text: str) -> str:
-        located = self._locate(project_path, ref)
+        located = self._locate(project_path, ref, slot=True)
         if isinstance(located, str):
             return located
         path, lines, start, end = located
@@ -1515,7 +1731,7 @@ class Resolver:
         return f"{path}: replaced in {ref}"
 
     def remove_item(self, project_path: str, ref: str, match: str) -> str:
-        located = self._locate(project_path, ref)
+        located = self._locate(project_path, ref, slot=True)
         if isinstance(located, str):
             return located
         path, lines, start, end = located
@@ -1530,7 +1746,7 @@ class Resolver:
         return f"{path}: removed from {ref}"
 
     def move_item(self, project_path: str, from_ref: str, to_ref: str, match: str) -> str:
-        located = self._locate(project_path, from_ref)
+        located = self._locate(project_path, from_ref, slot=True)
         if isinstance(located, str):
             return located
         _, lines, start, end = located
@@ -1555,8 +1771,54 @@ class Resolver:
         path = folder / f'{term_name}.yaml'
         if path.exists():
             return f'already exists: {path}'
-        path.write_text(f'description: {_quoted(description)}\nextends: @{extends.lstrip("@")}\n')
+        path.write_text(f'description: {_quoted(description)}\n'
+                        f'extends: {_quoted("@" + extends.lstrip("@"))}\n')
         return f'{path}: created'
+
+    def _own_files(self, root: Path) -> list[Path]:
+        """The root project file and every term file under its directory — what normalize and the
+        unquoted-scalar check cover. Terms reached from another project are that project's."""
+        term_map = self._build_term_map(root)
+        own = {root}
+        own.update(p.resolve() for p in term_map.values() if p.resolve().is_relative_to(root.parent))
+        return sorted(own)
+
+    @staticmethod
+    def _normalized(text: str) -> tuple[str, int]:
+        """The text with every value _unquoted_scalars finds written through _quoted, and the count."""
+        lines = text.splitlines(keepends=True)
+        found = _unquoted_scalars(lines)
+        for i, prefix, value in found:
+            ending = '\n' if lines[i].endswith('\n') else ''
+            lines[i] = prefix + _quoted(value) + ending
+        return ''.join(lines), len(found)
+
+    def normalize(self, project_path: str) -> list[dict]:
+        """Rewrites every term file of the project so each value YAML would misread is quoted.
+        Returns [{path, quoted}] for the files it changed."""
+        root = Path(_resolve_project(project_path)).resolve()
+        changed = []
+        for path in self._own_files(root):
+            try:
+                text = path.read_text()
+            except Exception:
+                continue
+            new, count = self._normalized(text)
+            if count:
+                path.write_text(new)
+                changed.append({'path': str(path), 'quoted': count})
+        return changed
+
+    def replace_term(self, project_path: str, term_name: str, content: str) -> str:
+        """Replaces the whole content of an existing term file, normalized on the way in."""
+        path = self._term_file(project_path, term_name)
+        if path is None:
+            return f'unknown term: @{term_name.lstrip("@")}'
+        if not _DESCRIPTION.search(content):
+            return 'refused: the content has no top-level description:, which every term needs'
+        new, _ = self._normalized(content if content.endswith('\n') else content + '\n')
+        path.write_text(new)
+        return f'{path}: replaced'
 
     def rename_term(self, project_path: str, old_name: str, new_name: str) -> str:
         resolved = _resolve_project(project_path)

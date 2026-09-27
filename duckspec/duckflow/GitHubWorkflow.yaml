@@ -1,5 +1,5 @@
 description: "The typical practice of a project developed entirely on GitHub: work comes from issues or conversation, is specified and built, goes up as a pull request, lands on `main_branch`, is versioned and published as a GitHub Release. Kept minimal on purpose — it is both what a project with this common shape uses as-is, overriding only `main_branch` and `versioning` in its own `workflow:` block, and the worked example to copy from when a project's practice differs in structure and needs a @DuckWorkflow of its own. A maintainer who pushes straight to `main_branch` leaves `in_review` unsatisfied, which the reading of the steps reports as skipped; that is the honest record of an unreviewed change, not something the workflow needs a second route for."
-extends: @DuckWorkflow
+extends: "@DuckWorkflow"
 release_notes: "@GitHub#read_release"
 steps:
   - id: requested

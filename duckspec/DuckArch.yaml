@@ -1,5 +1,5 @@
 description: Architecture description terms for the @Duckspec framework.
-extends: @DuckspecProject
+extends: "@DuckspecProject"
 terms_folder: duckspec_arch
 goals:
   - Describe a system's runtime structure in terms that survive a change of language, framework, or platform

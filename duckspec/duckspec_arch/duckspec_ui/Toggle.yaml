@@ -1,2 +1,2 @@
 description: A switch element for enabling or disabling a setting.
-extends: @UserInterfaceElement
+extends: "@UserInterfaceElement"

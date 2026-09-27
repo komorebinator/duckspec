@@ -1,5 +1,5 @@
 description: An HTTP callback sent to a registered URL when an event occurs. The sender POSTs an event payload to the receiver's endpoint — no polling required.
-extends: @DesignPattern
+extends: "@DesignPattern"
 properties:
   - id: trigger_event
     description: the event that causes this webhook to fire (e.g. push, payment.completed, image.built)

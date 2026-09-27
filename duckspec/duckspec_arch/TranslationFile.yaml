@@ -1,5 +1,5 @@
 description: A locale resource file that maps translation keys to localized strings for a specific language.
-extends: @ConfigFile
+extends: "@ConfigFile"
 properties:
   - id: locale
     description: the language/locale this file covers (e.g. en, ru, uk, zh-CN)

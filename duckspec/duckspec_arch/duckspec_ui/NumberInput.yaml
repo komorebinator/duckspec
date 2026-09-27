@@ -1,5 +1,5 @@
 description: A numeric input field.
-extends: @UserInterfaceElement
+extends: "@UserInterfaceElement"
 properties:
   - id: min
     description: minimum allowed value

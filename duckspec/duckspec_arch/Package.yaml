@@ -1,5 +1,5 @@
 description: A distributable unit of code published to a package registry. Contains one or more @Module or @Software items and a manifest describing its name, version, and dependencies.
-extends: @DesignPattern
+extends: "@DesignPattern"
 properties:
   - id: registry
     description: the package registry this package is published to (e.g. npm, PyPI, crates.io, RubyGems)

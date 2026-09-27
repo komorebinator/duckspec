@@ -1,5 +1,5 @@
 description: A persistent data store with a defined schema. Stores and retrieves records, documents, or key-value pairs in response to queries.
-extends: @DesignPattern
+extends: "@DesignPattern"
 properties:
   - id: engine
     description: the database engine (e.g. PostgreSQL, MySQL, SQLite, MongoDB, Redis)

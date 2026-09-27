@@ -39,7 +39,7 @@ def fixture() -> Path:
     duckspec = Path(__file__).resolve().parent.parent / 'Duckspec.yaml'
     (root / 'Fixture.yaml').write_text(
         'description: A fixture project.\n'
-        'extends: @DuckspecProject\n'
+        'extends: "@DuckspecProject"\n'
         'terms_folder: Fixture\n'
         'repository: https://example.invalid/fixture\n'
         f'uses:\n'
@@ -47,7 +47,7 @@ def fixture() -> Path:
         'settings:\n'
         '  src: .\n'
         'software:\n'
-        '  - @Widget\n'
+        '  - "@Widget"\n'
         'guidelines:\n'
         '  - Keep the fixture small.\n'
     )
@@ -55,7 +55,7 @@ def fixture() -> Path:
         'description: A widget, described for the fixture.\n'
         # @Software, not @Term: the fixture lists it in `software:` and gives it `src:` and
         # `functions:`, which @DesignPattern declares and @Term does not.
-        'extends: @Software\n'
+        'extends: "@Software"\n'
         'src: src/widget.py\n'
         'properties:\n'
         '  - id: colour\n'
@@ -66,7 +66,7 @@ def fixture() -> Path:
     )
     (root / 'Fixture' / 'Gadget.yaml').write_text(
         'description: A gadget, built on @Widget.\n'
-        'extends: @Widget\n'
+        'extends: "@Widget"\n'
     )
     return root / 'Fixture.yaml'
 
@@ -118,7 +118,7 @@ check('resolve_path', resolved is not None and 'turns the widget once' in resolv
 # two entries under one id is a defect in the spec; returning whichever came first hides it,
 # and hid a stale duplicate of a whole recipe for five releases
 _twin = Path(project).parent / 'Fixture' / 'Twin.yaml'
-_twin.write_text('description: Two entries share an id.\nextends: @Term\n'
+_twin.write_text('description: Two entries share an id.\nextends: "@Term"\n'
                  'properties:\n  - id: dup\n    description: first\n'
                  'functions:\n  - id: dup\n    description: second\n')
 _amb = r.resolve_path(project, 'Twin#dup')
@@ -139,7 +139,7 @@ check('load_workflow/unconfigured', 'error' in r.load_workflow(project),
 
 _root = Path(project)
 _before = _root.read_text()
-_root.write_text(_before + 'workflow:\n  type: @GitHubWorkflow\n  main_branch: trunk\n')
+_root.write_text(_before + 'workflow:\n  type: "@GitHubWorkflow"\n  main_branch: trunk\n')
 _wf = r.load_workflow(project)
 check('load_workflow',
       _wf.get('name') == 'GitHubWorkflow'
@@ -192,7 +192,7 @@ _root.write_text(_saved)
 # enough: a function or a component describing a file resolves fine, and a step pointing at one
 # looks implemented while nothing could perform it
 _flow = Path(project).parent / 'Fixture' / 'Flow.yaml'
-_flow.write_text('description: A workflow for the operation checks.\nextends: @DuckWorkflow\nsteps:\n'
+_flow.write_text('description: A workflow for the operation checks.\nextends: "@DuckWorkflow"\nsteps:\n'
                  '  - id: good\n    when: always\n    operation: "@Git#push(branch=main)"\n'
                  '  - id: not_a_recipe\n    when: always\n    operation: "@Widget#spin"\n'
                  '  - id: bad_argument\n    when: always\n    operation: "@Git#push(bogus=1)"\n'
@@ -203,15 +203,18 @@ check('verify_project/broken-operation',
       _hit == ['bad_argument', 'bad_form', 'not_a_recipe'], f'got {_hit}')
 _flow.unlink()
 
-# add_entry once wrote `type: "@X"` and every parser of `type:` expected it bare, so the slot read
-# as untyped and unknown-field skipped every entry in it — a workflow's steps went unchecked. A term
-# reference is now written bare, and a quoted one is still recognised
+# a term reference is written quoted, since YAML reserves a leading @ and no standard parser reads
+# the bare form. Every reader of `type:` has to take it quoted — once, when add_entry quoted and the
+# readers expected bare, the slot read as untyped and unknown-field skipped every entry in it — and
+# the bare form files written before still carry is read too
 r.add_entry(project, 'Widget#properties', 'parts', {'type': '@Gadget', 'description': 'its parts'})
-check('add_entry/bare-term-ref', '    type: @Gadget\n' in _w.read_text(), _w.read_text())
-_w.write_text(_w.read_text().replace('    type: @Gadget\n', '    type: "@Gadget"\n')
-              + 'parts:\n  - id: cog\n    invented: nothing declares this\n')
+check('add_entry/quoted-term-ref', '    type: "@Gadget"\n' in _w.read_text(), _w.read_text())
+_w.write_text(_w.read_text() + 'parts:\n  - id: cog\n    invented: nothing declares this\n')
 _q = [f for f in r.verify_project(project) if f['check'] == 'unknown-field' and 'invented' in f['message']]
 check('verify_project/quoted-type', len(_q) == 1, f'got {r.verify_project(project)}')
+_w.write_text(_w.read_text().replace('    type: "@Gadget"\n', '    type: @Gadget\n'))
+_q = [f for f in r.verify_project(project) if f['check'] == 'unknown-field' and 'invented' in f['message']]
+check('verify_project/bare-type', len(_q) == 1, f'got {r.verify_project(project)}')
 _w.write_text(_orig)
 
 # when the chain cannot be resolved, _schema saw only part of the vocabulary; unknown-extends
@@ -219,7 +222,7 @@ _w.write_text(_orig)
 # inherited field the term legitimately carries
 _orphan = Path(project).parent / 'Fixture' / 'Orphan.yaml'
 _orphan.write_text('description: Extends a term that is not in the map.\n'
-                   'extends: @NotAThing\nplatform: python\n')
+                   'extends: "@NotAThing"\nplatform: python\n')
 _of = r.verify_project(project)
 check('verify_project/broken-chain-quiet',
       any(f['check'] == 'unknown-extends' for f in _of)
@@ -268,7 +271,7 @@ def absent_project() -> tuple[str, dict]:
     duckspec = Path(__file__).resolve().parent.parent / 'Duckspec.yaml'
     (root / 'Absent.yaml').write_text(
         'description: A project for the absent-function cases.\n'
-        'extends: @DuckspecProject\n'
+        'extends: "@DuckspecProject"\n'
         'terms_folder: Absent\n'
         'repository: https://example.invalid/absent\n'
         f'uses:\n  - {duckspec}\n'
@@ -276,7 +279,7 @@ def absent_project() -> tuple[str, dict]:
     )
     (root / 'Absent' / 'Cases.yaml').write_text(
         'description: Function entries checked against a whole package.\n'
-        'extends: @Term\n'
+        'extends: "@Term"\n'
         'src: pkg/\n'
         'functions:\n'
         '  - id: declared_py\n    description: a real Python definition\n'
@@ -290,7 +293,7 @@ def absent_project() -> tuple[str, dict]:
     # function under it without a word
     (root / 'Absent' / 'Split.yaml').write_text(
         'description: One term whose code is split across two files.\n'
-        'extends: @Term\n'
+        'extends: "@Term"\n'
         'src:\n'
         '  - pkg/real.js\n'
         '  - pkg/real.sh\n'
@@ -411,7 +414,7 @@ r.remove_item(project, 'Widget#ai_instructions', 'never')
 
 r.create_term(project, 'Sprocket', 'A sprocket.', '@Term')
 sprocket = Path(project).parent / 'Fixture' / 'Sprocket.yaml'
-check('create_term', sprocket.is_file() and 'extends: @Term\n' in sprocket.read_text(),
+check('create_term', sprocket.is_file() and 'extends: "@Term"\n' in sprocket.read_text(),
       sprocket.read_text() if sprocket.is_file() else 'not created')
 
 r.rename_term(project, 'Sprocket', 'Cog')
@@ -419,6 +422,89 @@ check('rename_term', (Path(project).parent / 'Fixture' / 'Cog.yaml').is_file() a
 
 r.remove_term(project, 'Cog')
 check('remove_term', not (Path(project).parent / 'Fixture' / 'Cog.yaml').exists())
+
+# --- whole-term replace, normalize, and the edits the resolver used to refuse ------
+# replace_term is for a rewrite too large for field and item edits; what it writes is normalized,
+# so a bare reference and a value with ": " in it land quoted, and the file stays valid YAML
+r.create_term(project, 'Knot', 'A knot.', '@Term')
+knot = Path(project).parent / 'Fixture' / 'Knot.yaml'
+_said = r.replace_term(project, 'Knot',
+                       'description: A knot\n'
+                       '  spanning two lines.\n'
+                       'extends: @Term\n'
+                       'properties:\n'
+                       '  - id: guidelines\n'
+                       '    description: |\n'
+                       '      a property that shares its name\n'
+                       '\n'
+                       '      with the slot below\n'
+                       'guidelines:\n'
+                       '  - Pull it tight.\n'
+                       'references:\n'
+                       '  - note: first\n'
+                       '  - note: second\n'
+                       'name: a knot: the tight kind\n')
+check('replace_term', 'replaced' in _said and 'extends: "@Term"\n' in knot.read_text()
+      and 'name: "a knot: the tight kind"\n' in knot.read_text(), knot.read_text())
+check('replace_term/needs-description',
+      'refused' in r.replace_term(project, 'Knot', 'extends: "@Term"\n'), knot.read_text())
+
+# replacing a value takes its continuation lines with it, and a block scalar's whole body, blank
+# lines inside it included — leaving them turned the next line into garbage for any parser
+r.set_field(project, 'Knot', 'description', 'A knot: tied for the checks.')
+r.set_field(project, 'Knot#properties#guidelines', 'description', 'shares a name')
+check('set_field/continuation',
+      'description: "A knot: tied for the checks."\nextends:' in knot.read_text()
+      and 'with the slot below' not in knot.read_text()
+      and '    description: shares a name\nguidelines:' in knot.read_text(), knot.read_text())
+
+# one piece of a value changes and the rest stays, whether the value was written bare or quoted with
+# escapes inside — the piece is matched against the text as it reads, not as it is stored
+knot.write_text(knot.read_text().replace('name: "a knot: the tight kind"\n',
+                                         'name: "a \\"knot\\": the tight kind"\n'))
+r.edit_field(project, 'Knot', 'name', 'tight', 'slipping')
+r.edit_field(project, 'Knot#properties#guidelines', 'description', 'shares', 'borrows')
+check('edit_field', 'name: "a \\"knot\\": the slipping kind"\n' in knot.read_text()
+      and '    description: borrows a name\n' in knot.read_text(), knot.read_text())
+check('edit_field/once',
+      'refused' in r.edit_field(project, 'Knot', 'name', 'zz', 'y')
+      and 'refused' in r.edit_field(project, 'Knot', 'name', 'k', 'y'), knot.read_text())
+
+# the list the operation edits is the key, not the property entry of the same name
+r.add_item(project, 'Knot#guidelines', 'Tie it twice.')
+check('add_item/prefers-key', '  - Pull it tight.\n  - Tie it twice.\n' in knot.read_text(),
+      knot.read_text())
+
+# an entry with no id is reached by its position
+_second = r.resolve_path(project, 'Knot#references#1')
+check('resolve_path/position', _second is not None and 'second' in _second['content']
+      and 'first' not in _second['content'], f'got {_second}')
+r.set_field(project, 'Knot#references#0', 'note', 'the first: kept')
+check('set_field/position', '  - note: "the first: kept"\n  - note: second\n' in knot.read_text(),
+      knot.read_text())
+
+# a slot that is not there yet is created rather than refused, at the top level and inside an entry
+r.add_entry(project, 'Knot#recipes', 'tie', {'description': 'ties it'})
+r.add_entry(project, 'Knot#tie#arguments', 'rope', {'description': 'which rope'})
+check('add_entry/creates-slot',
+      re.search(r'^recipes:\n  - id: tie\n    description: ties it\n'
+                r'    arguments:\n      - id: rope\n        description: which rope\n',
+                knot.read_text(), re.M) is not None, knot.read_text())
+
+# a value YAML would misread is a finding, and normalize fixes it and only it
+knot.write_text(knot.read_text() + 'goals:\n  - @Widget first\n  - "@Gadget"\n  - plain\n'
+                "  - 'Spin' it, then stop\n  - 'spanning\n    lines'\n")
+_bare = [f for f in r.verify_project(project) if f['check'] == 'unquoted-scalar']
+check('verify_project/unquoted-scalar',
+      [(f['term'], f['line']) for f in _bare]
+      == [('Knot', knot.read_text().splitlines().index(l) + 1) for l in ('  - @Widget first', "  - 'Spin' it, then stop")],
+      f'got {_bare}')
+_fixed = r.normalize(project)
+check('normalize', [Path(c['path']).name for c in _fixed] == ['Knot.yaml']
+      and '  - "@Widget first"\n  - "@Gadget"\n  - plain\n  - "\'Spin\' it, then stop"\n  - \'spanning\n' in knot.read_text()
+      and r.normalize(project) == [], f'got {_fixed}\n{knot.read_text()}')
+
+r.remove_term(project, 'Knot')
 
 # --- front ends --------------------------------------------------------------
 # The methods above can all be right while what a reader sees is wrong: load_project returned a
@@ -430,11 +516,13 @@ from ducktools import cli, mcp_server  # noqa: E402
 
 _root_file = Path(project)
 _before = _root_file.read_text()
-_root_file.write_text(_before + 'workflow:\n  type: @GitHubWorkflow\n')
+_root_file.write_text(_before + 'workflow:\n  type: "@GitHubWorkflow"\n')
 
 # (command, argv after the command, tool, arguments, text the output must contain — or a tuple
 # of alternatives, for the checks whose verdict depends on what earlier sections left behind)
 _P = {'project_path': project}
+_gear_file = TMP / 'gear.yaml'
+_gear_file.write_text('description: A toothed gear.\nextends: @Term\n')
 FRONT = [
     ('load-project', [project], 'load_project', _P, '## Workflow'),
     ('load-workflow', [project], 'load_workflow', _P, '# @GitHubWorkflow'),
@@ -453,6 +541,11 @@ FRONT = [
      {**_P, 'term_name': 'Cam', 'description': 'A cam.'}, 'created'),
     ('set', [project, 'Gear', 'description', 'A toothed gear.'], 'set_field',
      {**_P, 'ref': 'Cam', 'field': 'description', 'value': 'A lobed cam.'}, 'replaced description'),
+    ('replace-term', [project, 'Gear', str(_gear_file)], 'replace_term',
+     {**_P, 'term_name': 'Cam', 'content': 'description: A lobed cam.\nextends: @Term\n'}, 'replaced'),
+    ('normalize', [project], 'normalize', _P, ('quoted', 'nothing to change')),
+    ('edit', [project, 'Gear', 'description', 'toothed', 'spur'], 'edit_field',
+     {**_P, 'ref': 'Cam', 'field': 'description', 'old': 'lobed', 'new': 'round'}, 'replaced description'),
     ('add', [project, 'Widget#properties', 'size', 'description=how big'], 'add_entry',
      {**_P, 'ref': 'Widget#properties', 'entry_id': 'weight', 'fields': {'description': 'how heavy'}}, 'added'),
     ('remove', [project, 'Widget#properties#size'], 'remove_element',

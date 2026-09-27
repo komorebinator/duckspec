@@ -1,5 +1,5 @@
 description: A digital signature produced by signing data with a @PrivateKey. Verified using the corresponding @PublicKey or @Certificate.
-extends: @DesignPattern
+extends: "@DesignPattern"
 properties:
   - id: algorithm
     description: signature algorithm (e.g. ECDSA, Ed25519, RSA-PSS)

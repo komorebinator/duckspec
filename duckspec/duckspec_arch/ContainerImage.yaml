@@ -1,13 +1,13 @@
 description: A container image definition built from a Dockerfile or Containerfile, potentially with multiple named stages that layer on top of each other.
-extends: @Software
+extends: "@Software"
 properties:
   - id: registry
     description: container registry where the image is pushed (e.g. ghcr.io/komorebinator)
   - id: tags
     description: list of tags applied to the pushed image (e.g. latest, stable, DD.MM.YYYY)
   - id: stages
-    type: @ContainerImageStage
+    type: "@ContainerImageStage"
     description: ordered list of build stages
   - id: build_args
-    type: @Property
+    type: "@Property"
     description: build-time ARG values that parameterize the build (e.g. FEDORA_MAJOR_VERSION, IMAGE_NAME)

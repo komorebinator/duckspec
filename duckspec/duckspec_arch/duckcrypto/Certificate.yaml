@@ -1,5 +1,5 @@
 description: A @PublicKey bound to an identity and signed by a certificate authority or self-signed. Establishes trust between parties.
-extends: @PublicKey
+extends: "@PublicKey"
 properties:
   - id: issuer
     description: who issued this certificate (CA name, or "self-signed")

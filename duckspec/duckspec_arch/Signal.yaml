@@ -1,6 +1,6 @@
 description: An event emitted by a @SoftwareComponent that other components can connect to.
-extends: @Term
+extends: "@Term"
 properties:
   - id: parameters
-    type: @Property
+    type: "@Property"
     description: list of values carried by the signal

@@ -1,6 +1,6 @@
 description: The visual interface through which a user interacts with a @Software.
-extends: @DesignPattern
+extends: "@DesignPattern"
 properties:
   - id: views
-    type: @View
+    type: "@View"
     description: list of @View the @UserInterface contains

@@ -1,5 +1,5 @@
 description: The Git distributed version control system. External dependency — not built by this project. Its recipes are the operations a @DuckWorkflow step points at whenever work is recorded in or moved through a repository, independent of where that repository is hosted.
-extends: @Application
+extends: "@Application"
 platform: C (external dependency)
 repository: https://git-scm.com
 guidelines:

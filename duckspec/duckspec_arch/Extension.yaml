@@ -1,5 +1,5 @@
 description: A software extension that adds functionality to a target @Application.
-extends: @Software
+extends: "@Software"
 properties:
   - id: target
     description: the @Application or platform this @Extension adds functionality to (e.g. a link to the app term file or a URL to its documentation)

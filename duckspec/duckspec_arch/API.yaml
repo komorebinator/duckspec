@@ -1,5 +1,5 @@
 description: A set of HTTP, RPC, or similar endpoints that a @Server exposes for clients to call.
-extends: @DesignPattern
+extends: "@DesignPattern"
 properties:
   - id: protocol
     description: the API protocol (e.g. REST, GraphQL, gRPC, WebSocket, JSON-RPC)

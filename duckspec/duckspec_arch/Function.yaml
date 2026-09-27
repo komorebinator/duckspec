@@ -1,10 +1,10 @@
 description: A behaviour a component performs — what it does for its callers and what any implementation of it must preserve.
-extends: @Term
+extends: "@Term"
 guidelines:
   - "A @Function description carries the decisions in the behaviour, not its realization: what callers rely on, the edge cases that matter to them, the constraints any implementation must keep — a platform workaround, an ordering, a case deliberately refused — and why. A restatement of the name is not a description, and neither is a line-by-line transcription of the body: an implementation that differs from the current one while keeping every stated decision is a correct rebuild."
 properties:
   - id: arguments
-    type: @Property
+    type: "@Property"
     description: list of arguments the @Function accepts
   - id: signal
     description: "@Signal this @Function connects to; use name#signal_name for a local @SoftwareComponent or @<TermName>#signal_name for an external one; if set, the @Function is automatically called when the @Signal fires"

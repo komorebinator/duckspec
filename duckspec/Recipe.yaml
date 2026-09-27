@@ -1,5 +1,5 @@
 description: A named set of instructions executed by a model.
-extends: @Term
+extends: "@Term"
 guidelines:
   - "@Recipe call — an instruction may invoke another @Recipe using the syntax `Invoke @<TermName>#recipe_name(arg=value, ...)`. The model executes the referenced @Recipe's instructions as a subroutine, passing the specified arguments; unspecified arguments follow normal argument resolution. After the subroutine completes, execution continues with the next instruction of the calling @Recipe. The result of the called @Recipe is available as context for subsequent instructions."
 ai_instructions:
@@ -8,7 +8,7 @@ properties:
   - id: result
     description: the expected output or artifact produced when this @Recipe completes successfully
   - id: arguments
-    type: @Property
+    type: "@Property"
     description: list of arguments the @Recipe accepts
   - id: instructions
     description: ordered list of instructions for the model to execute

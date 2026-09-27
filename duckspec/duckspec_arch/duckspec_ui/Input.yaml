@@ -1,2 +1,2 @@
 description: A single-line text input field.
-extends: @UserInterfaceElement
+extends: "@UserInterfaceElement"

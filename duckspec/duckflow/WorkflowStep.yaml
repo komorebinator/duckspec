@@ -6,7 +6,7 @@ description: |
   with no tracker has no step for planning, one with no artifact has none for building, and a
   project whose practice looks like nobody else's declares its own. What the base offers is a
   vocabulary, not a sequence.
-extends: @Term
+extends: "@Term"
 guidelines:
   - "Steps are written in the order work passes through them; the list is the sequence and there is no separate ordering field. What the order does not claim is causation — that a step begins because the one above it finished. Where that matters, and it often does, it belongs to whatever performs the step rather than to its position: a nightly build is started by its own schedule and would run whether or not anything landed that day, which is a fact about the pipeline's triggers, not about where the step sits in the list. Say it in the step's description until the thing that triggers it is described in its own right."
   - "Whether something deserves a step is settled by trying to write its `when`. A condition that holds long enough to be worth asking about describes a step; one that is true for the instant between two calls describes an action, and belongs inside whatever performs it. Verification is the usual case that goes both ways: a checklist run by hand against a deployed build sits true for days and is plainly a step, while a test suite that finishes before the push does is a condition on leaving the step before it. The same activity, and only the duration decides."

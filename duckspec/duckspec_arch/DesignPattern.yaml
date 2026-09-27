@@ -1,24 +1,24 @@
 description: A named architectural pattern describing a runtime component's structure and behavior.
-extends: @Term
+extends: "@Term"
 properties:
   - id: src
     description: path to the source folder or file for this component
   - id: fields
-    type: @Field
+    type: "@Field"
     description: list of @Field the component declares — instance state, module-level constants, or external state it attaches to objects it does not own
   - id: functions
-    type: @Function
+    type: "@Function"
     description: list of @Function the component exposes or handles
   - id: implicit_functions
     description: "function ids this type uses as a role rather than as a symbol in the source — `run` for a script's body, `on_click` for a handler attached inline. Set on the type, not on instances. @DuckspecProject#verify_source looks for every other function id in the referenced file and reports the ones it cannot find; without this it would report every one of these, since no such identifier is ever written."
   - id: signals
-    type: @Signal
+    type: "@Signal"
     description: list of @Signal the component emits
   - id: components
-    type: @SoftwareComponent
+    type: "@SoftwareComponent"
     description: list of nested @SoftwareComponent instances owned by this component
   - id: patches
-    type: @Patch
+    type: "@Patch"
     description: list of @Patch instances that modify this component's source files at build time; when a @Patch is nested here, its target is implicit
 guidelines:
   - "Prefer `fields:` entries over narrative prose for state. State that other code reads or that shapes behaviour — an instance property, a module-level constant, or state attached to an object the component does not own — belongs in `fields:` (structured name/type/default; see @Field for how scope follows from nesting and name prefix), not buried in a `description` paragraph, so the state model is stated once instead of being reverse-engineered from prose. A variable that only holds one of the component's own widgets or helpers is realization, not state, and gets no @Field."

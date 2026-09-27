@@ -1,5 +1,5 @@
 description: Jira — Atlassian's issue tracker, where work is recorded as issues that move through statuses defined per project. External dependency — not built by this project.
-extends: @Application
+extends: "@Application"
 platform: web (external dependency)
 repository: https://www.atlassian.com/software/jira
 guidelines:

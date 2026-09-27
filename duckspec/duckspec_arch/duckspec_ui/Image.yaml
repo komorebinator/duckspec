@@ -1,7 +1,7 @@
 description: An element that displays an image.
-extends: @UserInterfaceElement
+extends: "@UserInterfaceElement"
 properties:
   - id: graphic
-    description: the image this element displays — a @Graphic reference, a filesystem path, a URL, or a themed icon name. Singular by design: an element shows one image at a time, and an image that changes with application state is described by overriding this property per @ElementState.
+    description: "the image this element displays — a @Graphic reference, a filesystem path, a URL, or a themed icon name. Singular by design: an element shows one image at a time, and an image that changes with application state is described by overriding this property per @ElementState."
   - id: alt
     description: alternative text description of the image

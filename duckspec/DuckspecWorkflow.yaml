@@ -1,8 +1,8 @@
 description: "How work is done on @Duckspec itself. The maintainer works straight on `main`; anyone else contributes by pull request from a fork, which the maintainer reviews and merges. The fact that shapes everything else is that `main` is also what every consuming project receives: @Duckspec#update is a `git pull` in the shared clone, so a push reaches every project on the machine the next time it updates, whether or not a release was ever cut. Consumers are therefore verified before anything reaches `main` — before the maintainer's push, and before a contributor's pull request is merged — not before the release. Releases name a version and carry its release notes; they record what changed and what consumers must do, but nothing waits for them."
-extends: @DuckWorkflow
+extends: "@DuckWorkflow"
 main_branch: main
 versioning:
-  type: @SemVer
+  type: "@SemVer"
 release_notes: "@GitHub#read_release"
 guidelines:
   - "Releases are cut only from the official repository. Before a release, compare `git remote get-url origin` with this project's `repository`; on a fork, stop — a release published there names a version nobody else will ever see and diverges the numbering."

@@ -1,5 +1,5 @@
 description: A draggable element for selecting a value within a range.
-extends: @UserInterfaceElement
+extends: "@UserInterfaceElement"
 properties:
   - id: min
     description: minimum value of the range

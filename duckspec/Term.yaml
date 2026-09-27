@@ -2,7 +2,8 @@ description: A named element of the @Project's domain vocabulary.
 guidelines:
   - When a @Term declares `extends`, resolve the parent @Term first (recursively). The child inherits all parent @Property and @Recipe declarations. Any child member with the same name as a parent member fully replaces it. Members not redefined in the child are inherited as-is.
   - "Never re-declare a `properties:` member that an ancestor already declares. Inheritance replaces it silently, so the two definitions drift apart and a reader cannot tell which one applies. If two subtypes both need a member, declare it once on their common parent; if only one needs it, only that one declares it. Recipes are the exception, and there re-declaration is the mechanism: a base term declares the contract, each subtype implements it under the same name."
-  - "Path references: any named element within a @Term can be addressed by a `#`-separated path through its namespace (e.g. `cli#load` to reach the element named `load` inside `cli`). The path does not have to follow strict parent-child nesting — it is a sequence of names that narrows the namespace at each step. A segment may name either a list entry (`- id: <segment>`) or a mapping key (`<segment>:`), so both `@DuckToolsApp#resolver#verify_project` and `@DuckToolsApp#mcp_server#functions` resolve; when a term holds both under one name, the list item wins. To reference an element in another @Term, prefix the path with `@<TermName>` (e.g. `@DuckToolsApp#cli#load-project`)."
+  - "Path references: any named element within a @Term can be addressed by a `#`-separated path through its namespace (e.g. `cli#load` to reach the element named `load` inside `cli`). The path does not have to follow strict parent-child nesting — it is a sequence of names that narrows the namespace at each step. A segment may name either a list entry (`- id: <segment>`) or a mapping key (`<segment>:`), so both `@DuckToolsApp#resolver#verify_project` and `@DuckToolsApp#mcp_server#functions` resolve; when a term holds both under one name, the list item wins — except for an operation that adds to or edits the items of a list, which takes the key, since that is the only one of the two holding a list (@Term's own `guidelines:` beside the `guidelines` entry of its `properties:`). A segment made only of digits picks the list item at that position, counting from 0 — the way to reach an entry that has no id, such as one under `references:`; it is meant for editing operations, since a position shifts when the list changes and so makes a poor reference in prose. To reference an element in another @Term, prefix the path with `@<TermName>` (e.g. `@DuckToolsApp#cli#load-project`)."
+  - "A term file is valid YAML, readable by any YAML parser, not only by @DuckTools. A value YAML would read as something other than its text is quoted — above all a term reference written as a value, `extends: \"@Term\"`, `type: \"@View\"`, `- \"@Recipe\"`, since YAML reserves a leading `@`; and any value with `: ` or ` #` inside it, or one starting with a character YAML gives meaning to. A value YAML types on purpose — `true`, `null`, a number, as in `visible: true` or `default: 0` — stays bare, since it means what YAML reads it as. @DuckToolsApp#resolver writes values this way, @DuckToolsApp#resolver#normalize brings existing files to it, and verify_project reports any value left bare that would not read as text. @DuckTools itself still reads both the quoted and the bare form."
 properties:
   - id: id
     description: identifier of this object, unique among its siblings. The only thing `#`-paths address; for entries naming something in the source (a @Function, a @Field) it must match that identifier verbatim.
@@ -13,10 +14,10 @@ properties:
   - id: extends
     description: parent @Term to inherit from
   - id: properties
-    type: @Property
+    type: "@Property"
     description: list of @Property the @Term holds
   - id: recipes
-    type: @Recipe
+    type: "@Recipe"
     description: list of @Recipe the @Term exposes
   - id: guidelines
     description: list of @Guideline the @Term defines for content and artifact quality

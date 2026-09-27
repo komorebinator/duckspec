@@ -1,5 +1,5 @@
 description: A data structure or service that holds items to be processed in order. Items are enqueued by producers and dequeued by consumers.
-extends: @DesignPattern
+extends: "@DesignPattern"
 properties:
   - id: ordering
     description: processing order — FIFO (default), LIFO, or priority-based

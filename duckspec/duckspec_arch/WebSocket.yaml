@@ -1,5 +1,5 @@
 description: A persistent bidirectional connection between client and server that allows either side to send messages at any time without a new request.
-extends: @DesignPattern
+extends: "@DesignPattern"
 properties:
   - id: protocol
     description: application-level protocol over the WebSocket connection (e.g. JSON-RPC, Socket.IO, raw JSON, binary frames)

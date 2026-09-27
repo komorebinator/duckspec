@@ -1,2 +1,2 @@
 description: A container within a @UserInterface that groups related @UserInterfaceElement instances — a window, screen, page, or any other full UI surface.
-extends: @UserInterfaceElement
+extends: "@UserInterfaceElement"

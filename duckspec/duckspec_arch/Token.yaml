@@ -1,5 +1,5 @@
 description: A dynamically issued credential with a defined lifecycle. Issued on authentication and presented on subsequent requests to prove identity or authorization.
-extends: @DesignPattern
+extends: "@DesignPattern"
 properties:
   - id: token_type
     description: token type (e.g. JWT, OAuth access token, refresh token, session cookie, API key)

@@ -1,5 +1,5 @@
 description: A named field on a @Term that holds a value.
-extends: @Term
+extends: "@Term"
 properties:
   - id: type
     description: free-form description of the value type

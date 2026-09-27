@@ -1,5 +1,5 @@
 description: A message delivered to the user outside the application's own UI surface. Platform-agnostic — covers desktop notifications, mobile push, email, and similar delivery channels.
-extends: @DesignPattern
+extends: "@DesignPattern"
 properties:
   - id: channel
     description: delivery mechanism (e.g. desktop, push, email, SMS, webhook)

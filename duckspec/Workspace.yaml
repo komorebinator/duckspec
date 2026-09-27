@@ -1,5 +1,5 @@
 description: A named group of @DuckspecProject files that reference each other without any local vendored copy — resolved by repository URL against a shared registry rather than relative paths.
-extends: @Settings
+extends: "@Settings"
 properties:
   - id: projects
     description: map of repository URL to the local path of that project's @DuckspecProject file

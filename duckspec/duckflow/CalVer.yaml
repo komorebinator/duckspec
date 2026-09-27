@@ -1,5 +1,5 @@
 description: Calendar versioning — the version is derived from the current date. Common formats include YYYY.MM.DD, YYYY.MM, YY.MM. Multiple releases on the same date are distinguished by an optional micro increment.
-extends: @VersioningStrategy
+extends: "@VersioningStrategy"
 properties:
   - id: format
     description: "date format string using: YYYY (4-digit year), YY (2-digit year), MM (month 1–12), DD (day 1–31), 0M (zero-padded month), 0D (zero-padded day); default is YYYY.MM.DD"

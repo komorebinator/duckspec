@@ -130,6 +130,10 @@ _COMMAND_GROUPS = [
          'Set a field on the addressed element, replacing it if already present',
          [('project', _PROJECT_ARG), ('ref', _REF_ARG),
           ('field', 'the field to set'), ('value', 'the value to set it to')]),
+        ('edit', 'edit <project> <ref> <field> <old> <new>',
+         'Replace one piece of a field\'s text, leaving the rest; the piece must occur exactly once',
+         [('project', _PROJECT_ARG), ('ref', _REF_ARG), ('field', 'the field to edit'),
+          ('old', 'the exact text to replace'), ('new', 'the text to put in its place')]),
         ('add', 'add <project> <ref> <id> [field=value ...]',
          'Append a named entry to the addressed slot',
          [('project', _PROJECT_ARG), ('ref', 'a reference of the form `TermName#slot`'),
@@ -163,6 +167,13 @@ _COMMAND_GROUPS = [
         ('remove-term', 'remove-term <project> <Term>',
          'Delete a term file, refusing while anything still references it',
          [('project', _PROJECT_ARG), ('Term', 'the term to delete')]),
+        ('replace-term', 'replace-term <project> <Term> <file>',
+         "Replace a term file's whole content, normalized on the way in; `-` reads standard input",
+         [('project', _PROJECT_ARG), ('Term', 'the term to replace'),
+          ('file', 'where to read the new content from; - for standard input')]),
+        ('normalize', 'normalize <project>',
+         'Quote every value YAML would misread, so each term file is valid YAML',
+         [('project', _PROJECT_ARG)]),
     ]),
     ('workspace', [
         ('list-projects', 'list-projects',
@@ -349,6 +360,10 @@ def cmd_set_field(project_path: str, ref: str, field: str, value: str) -> None:
     print(resolver.set_field(project_path, ref, field, value))
 
 
+def cmd_edit_field(project_path: str, ref: str, field: str, old: str, new: str) -> None:
+    print(resolver.edit_field(project_path, ref, field, old, new))
+
+
 def cmd_add_entry(project_path: str, ref: str, entry_id: str, fields: list[str]) -> None:
     parsed = {}
     for pair in fields:
@@ -397,6 +412,20 @@ def cmd_rename_term(project_path: str, old_name: str, new_name: str) -> None:
 
 def cmd_remove_term(project_path: str, term_name: str) -> None:
     print(resolver.remove_term(project_path, term_name))
+
+
+def cmd_replace_term(project_path: str, term_name: str, file: str) -> None:
+    import sys
+    content = sys.stdin.read() if file == '-' else open(file, encoding='utf-8').read()
+    print(resolver.replace_term(project_path, term_name, content))
+
+
+def cmd_normalize(project_path: str) -> None:
+    changed = resolver.normalize(project_path)
+    if not changed:
+        print('nothing to change')
+    for c in changed:
+        print(f"{c['path']}: quoted {c['quoted']} value(s)")
 
 
 def cmd_create_workspace(name: str) -> None:
@@ -503,6 +532,10 @@ def main() -> None:
     p.add_argument('project_path'); p.add_argument('ref')
     p.add_argument('field'); p.add_argument('value')
 
+    p = sub.add_parser('edit')
+    p.add_argument('project_path'); p.add_argument('ref')
+    p.add_argument('field'); p.add_argument('old'); p.add_argument('new')
+
     p = sub.add_parser('add')
     p.add_argument('project_path'); p.add_argument('ref'); p.add_argument('entry_id')
     p.add_argument('fields', nargs='*')
@@ -517,6 +550,8 @@ def main() -> None:
     p = sub.add_parser('create-term'); [p.add_argument(a) for a in ('project_path','term_name','description')]; p.add_argument('--extends', default='Term')
     p = sub.add_parser('rename-term'); [p.add_argument(a) for a in ('project_path','old_name','new_name')]
     p = sub.add_parser('remove-term'); [p.add_argument(a) for a in ('project_path','term_name')]
+    p = sub.add_parser('replace-term'); [p.add_argument(a) for a in ('project_path','term_name','file')]
+    p = sub.add_parser('normalize'); p.add_argument('project_path')
 
     sub.add_parser('serve').add_argument('project_path', nargs='?')
 
@@ -567,6 +602,8 @@ def main() -> None:
         cmd_add_entry(args.project_path, args.ref, args.entry_id, args.fields)
     elif args.command == 'set':
         cmd_set_field(args.project_path, args.ref, args.field, args.value)
+    elif args.command == 'edit':
+        cmd_edit_field(args.project_path, args.ref, args.field, args.old, args.new)
     elif args.command == 'remove':
         cmd_remove_element(args.project_path, args.ref)
     elif args.command == 'add-item':
@@ -583,6 +620,10 @@ def main() -> None:
         cmd_rename_term(args.project_path, args.old_name, args.new_name)
     elif args.command == 'remove-term':
         cmd_remove_term(args.project_path, args.term_name)
+    elif args.command == 'replace-term':
+        cmd_replace_term(args.project_path, args.term_name, args.file)
+    elif args.command == 'normalize':
+        cmd_normalize(args.project_path)
     elif args.command == 'serve':
         from .mcp_server import run_server
         run_server()

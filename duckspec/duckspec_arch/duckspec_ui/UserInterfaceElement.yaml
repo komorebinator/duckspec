@@ -1,5 +1,5 @@
 description: A single visual or interactive component within a @UserInterface.
-extends: @DesignPattern
+extends: "@DesignPattern"
 properties:
   - id: label
     description: text displayed on or alongside the element (button text, field label, option caption, etc.)
@@ -10,7 +10,7 @@ properties:
     description: whether the element is shown at all; defaults to true. An element that appears only under some condition sets this to false in the states where it is hidden, rather than describing the condition in prose.
     default: true
   - id: states
-    type: @ElementState
+    type: "@ElementState"
     description: list of @ElementState the element can be in; each names a condition and the properties that differ while it holds
   - id: mandatory
     description: whether the element must be given a value before the surrounding @Form can be submitted; defaults to false

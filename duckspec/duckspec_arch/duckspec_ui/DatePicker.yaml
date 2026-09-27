@@ -1,2 +1,2 @@
 description: An input element for selecting a date or time.
-extends: @UserInterfaceElement
+extends: "@UserInterfaceElement"

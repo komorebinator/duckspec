@@ -162,6 +162,16 @@ _TOOLS = [
             'required': ['project_path', 'ref', 'field', 'value']},
     },
     {
+        'name': 'edit_field',
+        'description': 'Replace one piece of a field\'s text with another, leaving the rest as it was — for a sentence added to or changed in a long description without retyping all of it. Refuses unless the piece occurs exactly once, and refuses a field spanning paragraphs (a block scalar), which set_field rewrites whole',
+        'inputSchema': {'type': 'object', 'properties': {**_PROJECT_PATH_PROP,
+            'ref': {'type': 'string', 'description': 'TermName or TermName#segment#segment...'},
+            'field': {'type': 'string', 'description': 'field to edit'},
+            'old': {'type': 'string', 'description': 'the exact text to replace, as it reads — not as it is escaped in the file'},
+            'new': {'type': 'string', 'description': 'the text to put in its place'}},
+            'required': ['project_path', 'ref', 'field', 'old', 'new']},
+    },
+    {
         'name': 'add_entry',
         'description': 'Append a named entry to the slot a Term#path addresses (e.g. MyTerm#properties). Derives the item column from the entries already there instead of guessing indentation, and refuses an id the slot already has',
         'inputSchema': {'type': 'object', 'properties': {**_PROJECT_PATH_PROP,
@@ -218,6 +228,17 @@ _TOOLS = [
         'description': "Delete a term file, refusing while anything still references it",
         'inputSchema': {'type': 'object', 'properties': {**_PROJECT_PATH_PROP, 'term_name': {'type': 'string'}},
             'required': ['project_path', 'term_name']},
+    },
+    {
+        'name': "replace_term",
+        'description': "Replace a term file's whole content, normalized on the way in so it stays valid YAML. For rewrites too large for field and item edits; prefer those for anything smaller",
+        'inputSchema': {'type': 'object', 'properties': {**_PROJECT_PATH_PROP, 'term_name': {'type': 'string'}, 'content': {'type': 'string', 'description': 'the new content of the file'}},
+            'required': ['project_path', 'term_name', 'content']},
+    },
+    {
+        'name': "normalize",
+        'description': "Quote every value in the project's own term files that YAML would misread — bare @ references, values with ': ' in them — so each file is valid YAML. Idempotent",
+        'inputSchema': {'type': 'object', 'properties': {**_PROJECT_PATH_PROP}, 'required': ['project_path']},
     },
     {
         'name': 'create_workspace',
@@ -440,6 +461,9 @@ def _call(name: str, arguments: dict) -> str:
     if name == 'set_field':
         return resolver.set_field(path, arguments['ref'], arguments['field'], arguments['value'])
 
+    if name == 'edit_field':
+        return resolver.edit_field(path, arguments['ref'], arguments['field'], arguments['old'], arguments['new'])
+
     if name == 'add_entry':
         return resolver.add_entry(path, arguments['ref'], arguments['entry_id'],
                                   arguments.get('fields') or {})
@@ -466,6 +490,15 @@ def _call(name: str, arguments: dict) -> str:
 
     if name == "remove_term":
         return resolver.remove_term(path, arguments["term_name"])
+
+    if name == "replace_term":
+        return resolver.replace_term(path, arguments["term_name"], arguments["content"])
+
+    if name == "normalize":
+        changed = resolver.normalize(path)
+        if not changed:
+            return 'nothing to change'
+        return '\n'.join(f"{c['path']}: quoted {c['quoted']} value(s)" for c in changed)
 
     if name == 'term_uses':
         r = resolver.term_uses(path, arguments['term_name'])

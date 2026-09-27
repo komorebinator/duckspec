@@ -1,5 +1,5 @@
 description: A cryptographic key used for encryption, decryption, signing, or verification.
-extends: @DesignPattern
+extends: "@DesignPattern"
 properties:
   - id: algorithm
     description: cryptographic algorithm (e.g. RSA-2048, ECDSA P-256, Ed25519, AES-256)

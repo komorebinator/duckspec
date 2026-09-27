@@ -1,2 +1,2 @@
 description: A file that exports a set of related functions or constants with no shared state or lifecycle. Imported by other components; never instantiated or run directly.
-extends: @DesignPattern
+extends: "@DesignPattern"

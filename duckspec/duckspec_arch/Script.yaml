@@ -1,6 +1,6 @@
 description: A file written in a scripting language that serves as an entry point, launcher, or automation utility within a @Software.
 implicit_functions: run
-extends: @DesignPattern
+extends: "@DesignPattern"
 properties:
   - id: interpreter
     description: the interpreter used to run this script (e.g. bash, python, sh)

@@ -1,5 +1,5 @@
 description: A list of labelled actions or navigation items presented to the user, typically as a dropdown, context menu, or sidebar. Each item triggers an action or navigates somewhere.
-extends: @UserInterfaceElement
+extends: "@UserInterfaceElement"
 properties:
   - id: items
     description: the menu items; each item has a label, an optional icon, an optional keyboard shortcut, and the action it triggers

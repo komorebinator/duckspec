@@ -1,5 +1,5 @@
 description: A named test case that verifies a @Software component behaves as expected.
-extends: @Term
+extends: "@Term"
 properties:
   - id: command
     description: command to run following the software's `platform` conventions

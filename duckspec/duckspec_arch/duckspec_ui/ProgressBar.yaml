@@ -1,5 +1,5 @@
 description: A visual indicator of progress or completion.
-extends: @UserInterfaceElement
+extends: "@UserInterfaceElement"
 properties:
   - id: value
     description: current progress value

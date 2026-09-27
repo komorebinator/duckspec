@@ -1,2 +1,2 @@
 description: A @Singleton that listens for and handles incoming requests.
-extends: @Singleton
+extends: "@Singleton"

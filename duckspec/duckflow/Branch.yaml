@@ -1,4 +1,4 @@
 description: A named line of history in the project's repository, described by the part it plays in how work moves — where a change is tried, where it lands, what is built from it. The name alone never says this, and two projects using the same name can mean opposite things by it, which is why a workflow declares its branches rather than leaving them to be inferred from the remote.
-extends: @Term
+extends: "@Term"
 guidelines:
   - "Describe a branch by what happens on it and what reads from it, not by what it is called. `main` is where changes land in one project and a stale mirror in another; the description is the only place that difference is recorded. A branch nothing reads from any more says so plainly instead of being left out: an abandoned branch that looks alive is exactly what a newcomer, or a model, will push to."

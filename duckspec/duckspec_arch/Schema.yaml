@@ -1,5 +1,5 @@
 description: A formal definition of a data structure — its fields, types, constraints, and relationships. May be expressed as JSON Schema, TypeScript interface, protobuf message, database table, or similar.
-extends: @DesignPattern
+extends: "@DesignPattern"
 properties:
   - id: format
     description: schema language or notation (e.g. JSON Schema, TypeScript, protobuf, SQL DDL, Zod)

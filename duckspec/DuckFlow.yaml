@@ -1,5 +1,5 @@
 description: How work flows through a @DuckspecProject — the practice a project follows, from where its work is tracked through review and landing to the artifacts that reach users. Holds the delivery workflows, the systems they are driven by, and the versioning strategies a release calculates its version with.
-extends: @DuckspecProject
+extends: "@DuckspecProject"
 terms_folder: duckflow
 goals:
   - Describe how a change reaches users — review, merge, tag, publish — independently of which VCS or review system is in use

@@ -1,10 +1,10 @@
 description: Base term for project definitions.
-extends: @Term
+extends: "@Term"
 guidelines:
   - Entries in `software:` must be @<TermName> references only (e.g. `- @DuckToolsApp`). Never use `extends:` in a `software:` list entry. Every software piece must be defined as its own named @Term.
 properties:
   - id: terms_folder
-    description: relative path to the folder holding this @Project's @Term files, relative to the @Project term file's own location. A top-level field rather than a settings entry, because it is what makes the project's terms discoverable at all. Optional: a project that defines no terms of its own simply omits it.
+    description: "relative path to the folder holding this @Project's @Term files, relative to the @Project term file's own location. A top-level field rather than a settings entry, because it is what makes the project's terms discoverable at all. Optional: a project that defines no terms of its own simply omits it."
   - id: repository
     description: URL of the project's source repository
   - id: version

@@ -1,5 +1,5 @@
 description: Configuration for an @DuckspecProject.
-extends: @Settings
+extends: "@Settings"
 properties:
   - id: readme
     description: path to the root description file of the @Project (e.g. README.md); relative to the @DuckspecProject term file's location

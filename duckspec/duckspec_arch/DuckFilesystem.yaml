@@ -1,5 +1,5 @@
 description: Filesystem artifact terms for the @Duckspec framework — files, directories, and image assets installed at build or deploy time.
-extends: @DuckspecProject
+extends: "@DuckspecProject"
 terms_folder: duckspec_filesystem
 goals:
   - Describe files and folders installed at build or deploy time as artifacts with a purpose, not as paths inside a script

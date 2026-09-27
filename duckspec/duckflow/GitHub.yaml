@@ -1,5 +1,5 @@
 description: GitHub — a hosted Git repository platform with issues, pull requests, Actions CI/CD, and Releases. External dependency — not built by this project. Its recipes are the operations a @DuckWorkflow step points at for work tracked, reviewed, built or published on GitHub; which of them a project uses, and in what order, is its workflow's business.
-extends: @Application
+extends: "@Application"
 platform: web (external dependency)
 repository: https://github.com
 guidelines:
