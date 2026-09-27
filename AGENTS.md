@@ -4,8 +4,10 @@ This project is built with the [Duckspec](https://github.com/komorebinator/ducks
 
 Before any work, load this project's spec:
 
-- MCP: `load_project(project_path="/var/home/komorebi/Projects/duckspec/Duckspec.yaml")`
-- CLI: `ducktools load-project Duckspec.yaml`
+- MCP: `load_project(project_path="Duckspec")`
+- CLI: `ducktools load-project Duckspec`
+
+If the project is not registered in your active workspace yet, run the same command from the repository root with the project file's path instead: `Duckspec.yaml`.
 
 To see every project registered across all your workspaces, not just this one:
 
