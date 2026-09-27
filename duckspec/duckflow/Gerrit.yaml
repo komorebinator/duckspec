@@ -1,0 +1,44 @@
+description: Gerrit — a web-based code review system built on top of Git. Changes are submitted as Change Lists and reviewed before merging. External dependency — not built by this project. Its recipes cover the review half of a practice only — sending a change, revising it, voting on it and submitting it — and leave tasks and builds to whatever else a project's @DuckWorkflow combines it with.
+extends: @Application
+platform: Java (external dependency)
+repository: https://gerrit-review.googlesource.com/gerrit
+guidelines:
+  - "A Gerrit change is identified by the Change-Id trailer the commit-msg hook stamps into the commit message, not by the commit. Revising a change therefore means amending the commit and pushing again, which lands as a new patchset on the same change; a new commit without the trailer opens a new change instead."
+  - "Connection details come from `git remote get-url <remote>` — user, host and port — rather than being asked for, and the branch a change targets is the configured workflow's `main_branch`."
+recipes:
+  - id: push_for_review
+    description: Sends the committed change to Gerrit for review
+    arguments:
+      - id: remote
+        description: the remote Gerrit is reached through; `origin` when omitted
+      - id: topic
+        description: a Gerrit topic to group the change under; none when omitted
+    instructions:
+      - Ensure the commit-msg hook is installed, so the commit carries a Change-Id
+      - Fetch `remote` and integrate `main_branch`, per @Git's guidelines
+      - "Run `git push <remote> HEAD:refs/for/<main_branch>`, appending `%topic=<topic>` when given"
+      - Report the change's URL from the push output
+  - id: update_change
+    description: Revises a change under review with a new patchset
+    arguments:
+      - id: remote
+        description: the remote Gerrit is reached through; `origin` when omitted
+    instructions:
+      - Stage the new edits and amend the commit with `git commit --amend --no-edit`, keeping its Change-Id
+      - "Run `git push <remote> HEAD:refs/for/<main_branch>`"
+  - id: review_change
+    description: Examines a change and records a vote
+    arguments:
+      - id: number
+        description: the change number
+    instructions:
+      - "Fetch the change with `ssh -p <port> <user>@<host> gerrit query --format=JSON --current-patch-set change:<number>` and read its diff"
+      - "Record the vote with `ssh -p <port> <user>@<host> gerrit review <number>,<patchset> --code-review <-2..+2> -m \"<message>\"`, confirming it with the user first"
+  - id: submit_change
+    description: Approves and submits a reviewed change, landing it on its target branch
+    arguments:
+      - id: number
+        description: the change number
+    instructions:
+      - "Run `ssh -p <port> <user>@<host> gerrit review <number>,<patchset> --code-review +2 --submit -m \"<message>\"`"
+      - Report the commit it landed as on `main_branch`

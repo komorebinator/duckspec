@@ -1,0 +1,24 @@
+description: The Git distributed version control system. External dependency — not built by this project. Its recipes are the operations a @DuckWorkflow step points at whenever work is recorded in or moved through a repository, independent of where that repository is hosted.
+extends: @Application
+platform: C (external dependency)
+repository: https://git-scm.com
+guidelines:
+  - "Before publishing local commits anywhere, fetch the remote and fast-forward or merge the local copy of the branch being pushed onto, resolving conflicts against the pending work first. A push made against a stale checkout finds its conflicts at the worst moment, after the work has been described as done."
+recipes:
+  - id: commit
+    description: Records pending changes in local history and stops there — no push, nothing that reaches anyone else
+    instructions:
+      - "Separate unrelated changes into separate commits rather than one. A changelog is written from the log, and a commit that carries two unrelated changes cannot be described in one line without losing one of them."
+      - Stage the files belonging to each change and commit them with a message that says what changed and why, per @DuckWorkflow's guidelines
+      - Report each commit and what remains uncommitted; do not push, and do not offer to — a request to commit is not a request to send
+  - id: push
+    description: Publishes local commits to a branch on the remote
+    arguments:
+      - id: branch
+        description: the remote branch to push to; the current branch when omitted
+      - id: remote
+        description: the remote to push to; `origin` when omitted
+    instructions:
+      - Fetch `remote` and integrate the branch being pushed onto, per this term's guidelines
+      - "Run `git push <remote> HEAD:<branch>`, never a force push unless the user asked for one by name"
+      - Report what reached the remote and on which branch

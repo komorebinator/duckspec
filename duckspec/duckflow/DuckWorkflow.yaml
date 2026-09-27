@@ -1,0 +1,21 @@
+description: "Base term for how work is done on a @DuckspecProject — the practice a contributor would otherwise have to read on a website: where work comes from, how a change is made, checked, sent, landed, built and delivered, which branches and channels exist, and the rules that hold along the way. It is a map rather than a procedure: its steps say what state a change can be in and what moves it on, so anyone looking at it — a person or a model — can tell where the change in hand stands and what to do next. The operations themselves live on the terms of the systems that perform them, such as @Git, @GitHub, @Gerrit and @Jira, and a workflow combines them. Extends @DesignPattern so a workflow can own the files that drive it — pipeline definitions, bot configuration — rather than describing them from a distance. Deliberately not @Software: a practice is not built, versioned or tested."
+extends: @DesignPattern
+properties:
+  - id: main_branch
+    description: branch changes are ultimately merged into; inferred from the remote default branch via `git remote show origin` if not set; falls back to `main`
+  - id: branches
+    type: @Branch
+    description: the branches of the repository that play a part in how work moves, each described by that part. Declared so the role of every branch is stated once instead of being inferred from which pipeline happens to check it out.
+  - id: channels
+    type: @Channel
+    description: the names through which what the project ships is received — tags, dist-tags, tracks, environments — each with what it is fed from. With `branches`, this is the map of where a change can be on its way to the people who run it.
+  - id: steps
+    type: @WorkflowStep
+    description: "the states work passes through in this project, from a request to something a user can have, written in the order it passes through them. Declared by the concrete workflow, not by this term: there is no set every project shares, and a project with no tracker, no review or no artifact simply has fewer of them."
+  - id: versioning
+    type: @VersioningStrategy
+    description: "how the version a release ships under is calculated; `type:` names a @VersioningStrategy subtype and any other field overrides one of its properties. It sits here rather than on the project because a version is the name given to what is shipped, and naming what is shipped is part of shipping it. Keeping it here also leaves the workflow self-contained: it can calculate a version without reaching back up into the project that configured it."
+guidelines:
+  - "A workflow is complete when nobody has to leave it to take part: where to find work, how to propose a change, how it is checked and reviewed, what happens after it lands and how it reaches people should all be answerable from its steps, branches, channels and rules. A step that only a project's maintainers know how to perform, and that the workflow does not describe, is the thing a new contributor will get wrong."
+  - "Before any operation that records a change or sends it anywhere — a commit, a push, a review request, a release — Invoke @DuckspecProject#validate() and resolve every finding. The whole recipe, not a mechanical subset: a change recorded without the guideline pass, the test-coverage pass or the reading half of verify_source carries a spec that lies about what was just written, and everything after it inherits the lie."
+  - "A commit message says what changed and why it changed. The why is the part that cannot be recovered later: the diff already shows what moved, and no one reading it a month on can tell which of several plausible reasons was the real one. Write for that reader. There is no length to fit into — a subject compressed until it reads as a slogan has been made worse, not shorter — and the body is where a reason too long for one line belongs. This is not a matter of tidiness: @DuckspecProject#prepare_release drafts the changelog from the log, so whatever a commit fails to say about itself is simply missing from the release notes, and a contributor's pull request is a set of commits and nothing else."

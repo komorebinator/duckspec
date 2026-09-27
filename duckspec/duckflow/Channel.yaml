@@ -1,0 +1,7 @@
+description: A movable name through which people receive what the project ships — an image tag, a package dist-tag, a release track, a deployment environment. What distinguishes channels is who follows them and how something comes to be there, not how it was built, since a channel is moved onto a build that already exists. A workflow declares its channels so that where a change can be, and what gets it there, is stated rather than reconstructed from pipeline files.
+extends: @Term
+properties:
+  - id: from
+    description: what this channel is fed from — one or more @Branch or other @Channel entries of the same workflow, by id. Together these edges are the map of how a change travels from the branch it lands on to the people who run it; a step's `when` and `operation` say when and how each edge is crossed.
+guidelines:
+  - "A channel's description says who follows it and what that audience should expect from it — whether it is for testers who accept anything or for users who get only what has been deliberately promoted. That expectation is the whole point of having more than one channel, and it is the thing nobody can recover from a tag name."

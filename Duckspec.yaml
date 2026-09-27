@@ -10,7 +10,7 @@ startup:
   - load
 uses:
   - duckspec/DuckArch.yaml
-  - duckspec/DuckVersion.yaml
+  - duckspec/DuckFlow.yaml
   - ducktools/DuckTools.yaml
 version: 0.11.1
 repository: https://github.com/komorebinator/duckspec
@@ -18,13 +18,11 @@ settings:
   changelog: changelog/
   readme: README.md
 workflow:
-  type: @GitHubWorkflow
-versioning:
-  type: @SemVer
+  type: @DuckspecWorkflow
 
 ai_instructions:
-  - "Never run git by hand to commit, push or publish. Three requests map to three recipes, and the difference is how far the change travels: asking to record work locally (\"commit\", \"commit locally\", \"just commit\") invokes @DuckWorkflow#commit(), which stops at local history; asking to send it (\"submit\", \"push\", \"send\") invokes @DuckspecProject#submit(); asking for a release (\"release\", \"release it\") invokes @DuckspecProject#release(). Never substitute a wider one for a narrower one — a request to commit is not permission to push. Completing a task, permissive phrasing (\"we can push\", \"it's fine to commit\"), or confirmation that changes look good are none of the three. When proposing a next step rather than answering a request, propose submit: a local commit leaves the work in one copy on one machine, and pushing it is what removes that risk, so commit is for when the user has a reason to stay local, not a default worth suggesting."
-  - Never manually edit the `version` field in any @DuckspecProject file. Version changes must always go through the @DuckspecProject#release recipe, which handles validation and the correct bump calculation.
+  - "Before acting on the change in hand — recording it, sending it, releasing it, or proposing what to do next — Invoke @DuckToolsApp#resolver#load_workflow() and find where the change stands by evaluating its steps' `when`. A request to take the change somewhere names how far it should travel: to record it locally (\"commit\", \"commit locally\", \"just commit\"), to send it where it gets accepted (\"submit\", \"push\", \"send\", \"open a PR\"), to publish it (\"release\", \"release it\"). Advance it one step at a time, each by that step's own `operation`, up to the step the request names and no further — a request to commit is not permission to push, and a request to send is not permission to merge or release. Never run git or a hosting CLI by hand to do what a step's operation does. Completing a task, permissive phrasing (\"we can push\", \"it's fine to commit\"), or confirmation that changes look good are not requests to move anything. When proposing a next step rather than answering a request, propose the step after the one the change is at: a local commit leaves the work in one copy on one machine, and sending it is what removes that risk."
+  - "Never manually edit the `version` field in any @DuckspecProject file. It is set only by @DuckspecProject#prepare_release, which asks for the bump and writes the changelog entry that belongs to it."
   - Never save information to external memory. Instead, suggest changes to the @DuckspecProject configuration or term files.
   - "When the user's request concerns something not covered by the currently loaded project(s) — a sub-project, an extension, a component referenced only by name or by a `references:` entry — check @DuckToolsApp#resolver#list_projects() for a matching registered project before assuming it's out of scope or asking the user for a path. If found, invoke @DuckToolsApp#resolver#load_project() on it explicitly. This is model-side behavior only — the resolver itself never auto-loads it as a side effect of loading another project."
   - "Read and edit @Term files through @DuckToolsApp#resolver, not through shell commands. Its operations know the format — they resolve `#`-paths, refuse an ambiguous one, and edit at the element's own column — where grep and sed see only lines and silently produce damage that still looks like valid YAML. The shell stays correct for what the resolver does not cover: source code, git, and bulk or analytical passes across many files at once. When a spec question or edit reaches for the shell only because no resolver operation exists for it, name the missing operation in the reply — a gap in @DuckToolsApp is a defect to report, not a standing reason to keep using the shell."
@@ -35,7 +33,7 @@ guidelines:
   - Each `.yaml` file defines exactly one term following the @Term format.
   - "A @Term is identified by its filename, written in CamelCase with no spaces (e.g. `UserInterface.yaml` is @UserInterface). That filename is what `@<TermName>` references resolve against; the `name:` field inside the file is a short human-readable label, not the identity."
   - "Every `@<Name>` mention in a @Term file must resolve to a term reachable in the project — define it locally, or bring the project that owns it in via `uses:`. There is no exemption for examples: an unresolvable name in documentation is as much a defect as one in a real reference, because a reader cannot tell the two apart. When documenting the reference syntax itself, write generic stand-ins in angle brackets (`@<TermName>`, `@<recipe_name>`) — the same substitution notation recipes already use for arguments, and deliberately outside the reference grammar so it never reads as a reference. Prefer a real term over a stand-in wherever one fits the example."
-  - Sub-project @Term names must follow the pattern `Duck` + what it does (e.g. `DuckArch`, `DuckUI`); the word "spec" must not appear in sub-project names.
+  - Sub-projects of @Duckspec itself are named `Duck` + what they do (e.g. `DuckArch`, `DuckUI`), and the word "spec" does not appear in their names. This is the framework's own naming, not a rule for projects built with it.
   - A gap requiring a new @Term exists when the closest available @DesignPattern would lose significant architectural information — using it feels like a stretch that hides the real concept rather than describing it.
   - Avoid using the word "extends" in a description in its everyday English sense when it could be confused with the formal `extends:` field — prefer synonyms like "built on", "managed by", "implements" to avoid implying a false inheritance relationship or referencing a term that does not exist.
 lists:
@@ -74,14 +72,6 @@ lists:
       - id: Script
         description: other scripting files
 recipes:
-  - id: release
-    description: Releases a new version of the @Duckspec framework
-    arguments:
-      - id: bump
-        description: version component to bump; see @DuckspecProject#release
-    instructions:
-      - Check that the URL of the current git repository matches `repository`; if not, abort — releases must be run from the official @Duckspec repository
-      - Invoke @DuckspecProject#release(bump=<bump>)
   - id: install
     description: Bootstraps the shared @Duckspec/@DuckTools installation for this executor, then offers to bring in an existing project or start a new one — never sets a specific project's own metadata itself; that's @Duckspec#create_project/#import_project's job
     instructions:
@@ -110,7 +100,7 @@ recipes:
       - "Ask the user for `goals` — what this project is trying to achieve. This is the one required field that can never be inferred, so always ask, even when everything else came from context."
       - Set `terms_folder` to a subfolder named after the project, located next to the @DuckspecProject term file (e.g. if the file is `myapp/MyApp.yaml`, set `terms_folder` to `MyApp/`)
       - If a README or other description file exists, set `settings.readme` to its path (relative to the @DuckspecProject term file)
-      - "Create the @DuckspecProject term file named `<ProjectName>.yaml` — the filename is the project's identity — with only `name` (when the user gave one), `description`, `goals`, `terms_folder`, and `uses` set to `https://github.com/komorebinator/duckspec`; leave `repository`, `workflow`, `versioning`, and `software` unset entirely"
+      - "Create the @DuckspecProject term file named `<ProjectName>.yaml` — the filename is the project's identity — with only `name` (when the user gave one), `description`, `goals`, `terms_folder`, and `uses` set to `https://github.com/komorebinator/duckspec`; leave `repository`, `workflow`, and `software` unset entirely"
       - Create the terms folder on disk at the path set in `terms_folder`
       - Invoke @DuckspecProject#create_readme() if no readme exists yet, else @DuckspecProject#update_readme()
       - Invoke @DuckspecProject#update_agents() — so AGENTS.md exists from the moment the project does, before @DuckspecProject#assess_coverage ever runs against it
@@ -125,3 +115,9 @@ recipes:
       - Invoke @Duckspec#create_project(context_path=<source_path>)
       - "Set `settings.src` on the created project to `source_path`, expressed relative to the @DuckspecProject file's location (skip this if it already resolves to the default `..`)"
       - Invoke @DuckspecProject#assess_coverage() on the created project
+  - id: verify_consumers
+    description: Verifies every registered project that uses @Duckspec against the framework as it stands in this working copy — the check that has to pass before anything reaches main_branch, because main_branch is what those projects receive.
+    instructions:
+      - "Invoke @DuckToolsApp#resolver#list_projects() and keep every project whose `uses:` reaches this repository — by its repository URL, directly or through a sub-project"
+      - "Invoke @DuckToolsApp#resolver#verify_project() on each, from its root project file. Sub-projects are validated as part of the project that uses them, not opened on their own: a sub-project may name its siblings' and its parent's terms, and resolves only in the context the root assembles"
+      - "Every consumer must verify clean, and any finding blocks the push: fix the consumer in the same piece of work, or change the framework so it no longer breaks it. A registered consumer resolves the framework through the workspace, which on the machine it is developed on points at this working copy — so what is checked here is exactly what the consumers are already reading, and there is no older state to compare with"

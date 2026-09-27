@@ -1,4 +1,4 @@
-description: Base term for versioning strategies — defines how a project's version string is calculated and incremented. Add a concrete subtype to the project's `versioning:` slot to configure version management. Only `next_version` is required; subtypes may add additional recipes.
+description: Base term for versioning strategies — defines how a project's version string is calculated and incremented. Name a concrete subtype in the `versioning:` slot of the project's @DuckWorkflow to configure version management. Only `next_version` is required; subtypes may add additional recipes.
 extends: @Term
 guidelines:
   - Every @VersioningStrategy subtype must implement `next_version`.

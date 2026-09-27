@@ -1,0 +1,53 @@
+description: "How work is done on @Duckspec itself. The maintainer works straight on `main`; anyone else contributes by pull request from a fork, which the maintainer reviews and merges. The fact that shapes everything else is that `main` is also what every consuming project receives: @Duckspec#update is a `git pull` in the shared clone, so a push reaches every project on the machine the next time it updates, whether or not a release was ever cut. Consumers are therefore verified before anything reaches `main` — before the maintainer's push, and before a contributor's pull request is merged — not before the release. Releases name a version and carry its changelog; they record what changed, but nothing waits for them."
+extends: @DuckWorkflow
+main_branch: main
+versioning:
+  type: @SemVer
+guidelines:
+  - "Releases are cut only from the official repository. Before a release, compare `git remote get-url origin` with this project's `repository`; on a fork, stop — a release published there names a version nobody else will ever see and diverges the numbering."
+  - A change that breaks a consumer is not finished until the consumer is fixed, in the same piece of work. The framework and the projects built on it move together here, and a breaking change pushed alone reaches every consumer on its next update with nothing telling them what to do. A contributor cannot see the maintainer's consumers, so for a contribution this falls to the maintainer, before the merge.
+branches:
+  - id: main
+    description: "The only branch of the official repository, and what consumers receive. The maintainer pushes to it directly; a contribution reaches it by a merged pull request from a branch of the contributor's own fork, which is not a branch of this repository."
+channels:
+  - id: shared-clone
+    from: main
+    description: "What consuming projects actually run: the shared clone @Duckspec#update pulls, which is `main` at whatever commit it was last pulled at — released or not. This is the channel a push delivers to."
+  - id: releases
+    from: main
+    description: "GitHub Releases, one per version, each carrying that version's changelog entry. Nobody follows them to get the framework; they are the record of what changed and what a consumer must do to move onto it."
+steps:
+  - id: requested
+    description: "A change is wanted — raised in conversation, or as a GitHub issue read with @GitHub#read_issue. It is clarified, then written into the terms."
+    when: a request exists that the framework's terms do not yet reflect
+  - id: specified
+    description: The change is in the spec, which is consistent, but the sources do not implement it yet.
+    when: the change is present in the terms, verify_project is clean, and the sources do not yet implement it
+    operation: "@Software#build"
+  - id: implemented
+    description: "The sources carry the change and the framework validates — including the operation and wiring checks of @DuckToolsApp — but nothing is recorded."
+    when: the working tree carries the change, @DuckspecProject#validate passes, and it is not committed
+    operation: "@Git#commit"
+  - id: committed
+    description: The change is recorded locally. Before it goes anywhere, every consumer is checked against it, because pushing is delivering.
+    when: local commits carry the change, are not on the remote, and the consumers have not been verified against them
+    operation: "@Duckspec#verify_consumers"
+  - id: consumers_verified
+    description: "Every consuming project verifies clean against the change, or has been fixed in the same work. The maintainer sends it with a push to `main`. Anyone without push access to the official repository — every contributor but the maintainer — sends it instead with @GitHub#open_pull_request from a branch of their fork, which moves it to `in_review`; the consumers verified here are only the ones the contributor has, and the maintainer verifies their own before merging."
+    when: local commits carry the change, are not on the remote, and every registered consumer verifies clean against them
+    operation: "@Git#push(branch=main)"
+  - id: in_review
+    description: "A contribution waits in a pull request. The maintainer reads it with @GitHub#review_pull_request, then checks it out and runs @Duckspec#verify_consumers against it, since merging it delivers it to every consumer just as a push would; the contributor revises it with @Git#commit and @Git#push to the same branch of their fork. The maintainer's own changes never pass through here, and the reading of the steps reports this step as skipped for them."
+    when: an open pull request against the official repository carries the change
+    operation: "@GitHub#merge_pull_request"
+  - id: on_main
+    description: The change is on main and has already reached consumers on their next update, but no version names it yet. Changes accumulate here until a release.
+    when: main carries the change and no changelog entry covers it
+    operation: "@DuckspecProject#prepare_release"
+  - id: versioned
+    description: A version covering the change is prepared and its bump has itself been committed, verified against consumers and pushed like any change.
+    when: "main carries a version whose changelog entry covers the change, and no tag names that version"
+    operation: "@GitHub#create_release"
+  - id: released
+    description: The change is named by a published version, with its changelog as release notes.
+    when: a GitHub Release exists for a version whose changelog entry covers the change
