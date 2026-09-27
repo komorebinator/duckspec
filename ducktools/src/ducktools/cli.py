@@ -1,4 +1,5 @@
 import argparse
+import json
 
 from .resolver import resolver
 
@@ -24,6 +25,9 @@ def _format_rules_tree(term_name: str, tree: dict) -> str:
     return '\n'.join(lines)
 
 
+NOTE = 'References (mentioned, not loaded — load them if the question is about one): '
+
+
 def _print_term_blocks(terms: list[dict]) -> None:
     for t in terms:
         print(f"--- @{t['name']} [{t['path']}] ---")
@@ -31,6 +35,9 @@ def _print_term_blocks(terms: list[dict]) -> None:
         if 'rules' in t:
             print()
             print(_format_rules_tree(t['name'], t['rules']))
+        if t.get('references'):
+            print()
+            print(NOTE + ', '.join('@' + n for n in t['references']))
 
 
 def _print_recipes_table(recipes: list[dict]) -> None:
@@ -61,14 +68,17 @@ _REF_ARG = 'a `TermName#segment#segment...` path; refused when it matches more t
 _COMMAND_GROUPS = [
     ('reading', [
         ('load-project', 'load-project <project>',
-         'Root file, term list, recipes, and project-wide rules — start here',
+         'Root file, workflow pointer, term list, recipes, and project-wide rules — start here',
+         [('project', _PROJECT_ARG)]),
+        ('load-workflow', 'load-workflow <project>',
+         'Print the project\'s workflow in full — steps, rules, and the overrides the project sets',
          [('project', _PROJECT_ARG)]),
         ('list-terms', 'list-terms <project> [--all]',
          'Every reachable term with its description',
          [('project', _PROJECT_ARG),
           ('--all', 'include terms in the map that nothing reaches')]),
         ('load-terms', 'load-terms <project> <Term> [Term ...]',
-         'Named terms with their transitive dependencies and applicable rules',
+         'Named terms with their `extends` chain and applicable rules; other terms they mention are named, not loaded',
          [('project', _PROJECT_ARG),
           ('Term', 'one or more term names, written without the leading @')]),
         ('resolve-path', 'resolve-path <project> <ref>',
@@ -120,19 +130,22 @@ _COMMAND_GROUPS = [
         ('remove', 'remove <project> <ref>',
          'Remove the addressed element and everything nested under it',
          [('project', _PROJECT_ARG), ('ref', _REF_ARG)]),
-        ('add-rule', 'add-rule <project> <Term> <block> <text>',
-         'Append a rule to a term\'s guidelines, ai_instructions or goals',
-         [('project', _PROJECT_ARG), ('Term', 'the term to add the rule to'),
-          ('block', 'guidelines, ai_instructions or goals'), ('text', 'the rule text')]),
-        ('remove-rule', 'remove-rule <project> <Term> <block> <match>',
-         'Remove one rule from a rule block; refuses when the match is ambiguous',
-         [('project', _PROJECT_ARG), ('Term', 'the term to remove the rule from'),
-          ('block', 'guidelines, ai_instructions or goals'), ('match', 'substring identifying the rule')]),
-        ('move-rule', 'move-rule <project> <Term> <from> <to> <match>',
-         'Move a rule verbatim between rule blocks — e.g. an ai_instruction that is really a guideline',
-         [('project', _PROJECT_ARG), ('Term', 'the term holding the rule'),
-          ('from', 'block the rule sits in'), ('to', 'block to move it to'),
-          ('match', 'substring identifying the rule')]),
+        ('add-item', 'add-item <project> <Term#path> <text> [--after M]',
+         'Append a bare string to the addressed list — guidelines, instructions, goals, software',
+         [('project', _PROJECT_ARG), ('Term#path', 'path ending at the list to append to'),
+          ('text', 'the text to add'), ('--after', 'insert after the item matching this substring')]),
+        ('set-item', 'set-item <project> <Term#path> <match> <text>',
+         'Replace one item in place; remove plus add would move it to the end of its block',
+         [('project', _PROJECT_ARG), ('Term#path', 'path ending at the list'),
+          ('match', 'substring identifying the item'), ('text', 'the replacement text')]),
+        ('remove-item', 'remove-item <project> <Term#path> <match>',
+         'Remove one item from the addressed list; refuses when the match is ambiguous',
+         [('project', _PROJECT_ARG), ('Term#path', 'path ending at the list'),
+          ('match', 'substring identifying the item')]),
+        ('move-item', 'move-item <project> <from#path> <to#path> <match>',
+         'Move an item verbatim between lists — e.g. an ai_instruction that is really a guideline',
+         [('project', _PROJECT_ARG), ('from#path', 'list the item sits in'),
+          ('to#path', 'list to move it to'), ('match', 'substring identifying the item')]),
         ('create-term', 'create-term <project> <Term> <description> [--extends T]',
          'Create a term file; the filename is derived from the name, since it is the identity',
          [('project', _PROJECT_ARG), ('Term', 'CamelCase name, becoming the filename'),
@@ -209,6 +222,8 @@ def cmd_help(command: str | None = None) -> None:
 def cmd_load_project(project_path: str) -> None:
     result = resolver.load_project(project_path)
     print(result['root_content'])
+    print('\n## Workflow\n')
+    print(result['workflow']['note'])
     print('\n## Terms\n')
     _print_terms_table(result['terms'])
     print('\n## Recipes\n')
@@ -217,6 +232,17 @@ def cmd_load_project(project_path: str) -> None:
     _print_references_table(result['references'])
     print('\n## Rules (project-wide)\n')
     _print_rules_table(result['rules'])
+
+
+def cmd_load_workflow(project_path: str) -> None:
+    result = resolver.load_workflow(project_path)
+    if 'error' in result:
+        print(result['error'])
+        return
+    print(f"# @{result['name']}\n")
+    print('## As this project configures it\n')
+    print(result['configuration'].rstrip() + '\n')
+    _print_term_blocks(result['terms'])
 
 
 def cmd_list_terms(project_path: str, include_all: bool = False) -> None:
@@ -322,6 +348,13 @@ def cmd_add_entry(project_path: str, ref: str, entry_id: str, fields: list[str])
             print(f"expected field=value, got: {pair}")
             return
         field, value = pair.split('=', 1)
+        if value[:1] in '[{':
+            # a list or mapping, written as JSON, becomes a nested block under the field
+            try:
+                value = json.loads(value)
+            except ValueError as e:
+                print(f"{field}: not valid JSON ({e})")
+                return
         parsed[field] = value
     print(resolver.add_entry(project_path, ref, entry_id, parsed))
 
@@ -330,12 +363,32 @@ def cmd_remove_element(project_path: str, ref: str) -> None:
     print(resolver.remove_element(project_path, ref))
 
 
-def cmd_add_rule(pp, t, b, x): print(resolver.add_rule(pp, t, b, x))
-def cmd_remove_rule(pp, t, b, m): print(resolver.remove_rule(pp, t, b, m))
-def cmd_move_rule(pp, t, f, to, m): print(resolver.move_rule(pp, t, f, to, m))
-def cmd_create_term(pp, t, d, e): print(resolver.create_term(pp, t, d, e))
-def cmd_rename_term(pp, o, n): print(resolver.rename_term(pp, o, n))
-def cmd_remove_term(pp, t): print(resolver.remove_term(pp, t))
+def cmd_add_item(project_path: str, ref: str, text: str, after: str | None = None) -> None:
+    print(resolver.add_item(project_path, ref, text, after))
+
+
+def cmd_set_item(project_path: str, ref: str, match: str, text: str) -> None:
+    print(resolver.set_item(project_path, ref, match, text))
+
+
+def cmd_remove_item(project_path: str, ref: str, match: str) -> None:
+    print(resolver.remove_item(project_path, ref, match))
+
+
+def cmd_move_item(project_path: str, from_ref: str, to_ref: str, match: str) -> None:
+    print(resolver.move_item(project_path, from_ref, to_ref, match))
+
+
+def cmd_create_term(project_path: str, term_name: str, description: str, extends: str) -> None:
+    print(resolver.create_term(project_path, term_name, description, extends))
+
+
+def cmd_rename_term(project_path: str, old_name: str, new_name: str) -> None:
+    print(resolver.rename_term(project_path, old_name, new_name))
+
+
+def cmd_remove_term(project_path: str, term_name: str) -> None:
+    print(resolver.remove_term(project_path, term_name))
 
 
 def cmd_create_workspace(name: str) -> None:
@@ -352,6 +405,9 @@ def cmd_use_workspace(name: str) -> None:
 
 def cmd_list_projects() -> None:
     result = resolver.list_projects()
+    if not result['workspaces']:
+        print('(no workspaces registered)')
+        return
     active = result['active_workspace']
     for name, workspace in result['workspaces'].items():
         marker = ' (active)' if name == active else ''
@@ -390,6 +446,7 @@ def main() -> None:
 
     sub.add_parser('load-project').add_argument('project_path')
 
+    p = sub.add_parser('load-workflow'); p.add_argument('project_path')
     p = sub.add_parser('list-terms')
     p.add_argument('project_path')
     p.add_argument('--all', action='store_true', dest='include_all')
@@ -445,9 +502,10 @@ def main() -> None:
     p = sub.add_parser('remove')
     p.add_argument('project_path'); p.add_argument('ref')
 
-    p = sub.add_parser('add-rule'); [p.add_argument(a) for a in ('project_path','term_name','block','text')]
-    p = sub.add_parser('remove-rule'); [p.add_argument(a) for a in ('project_path','term_name','block','match')]
-    p = sub.add_parser('move-rule'); [p.add_argument(a) for a in ('project_path','term_name','from_block','to_block','match')]
+    p = sub.add_parser('add-item'); [p.add_argument(a) for a in ('project_path','ref','text')]; p.add_argument('--after')
+    p = sub.add_parser('set-item'); [p.add_argument(a) for a in ('project_path','ref','match','text')]
+    p = sub.add_parser('remove-item'); [p.add_argument(a) for a in ('project_path','ref','match')]
+    p = sub.add_parser('move-item'); [p.add_argument(a) for a in ('project_path','from_ref','to_ref','match')]
     p = sub.add_parser('create-term'); [p.add_argument(a) for a in ('project_path','term_name','description')]; p.add_argument('--extends', default='Term')
     p = sub.add_parser('rename-term'); [p.add_argument(a) for a in ('project_path','old_name','new_name')]
     p = sub.add_parser('remove-term'); [p.add_argument(a) for a in ('project_path','term_name')]
@@ -474,6 +532,8 @@ def main() -> None:
         cmd_help(args.topic)
     elif args.command == 'load-project':
         cmd_load_project(args.project_path)
+    elif args.command == 'load-workflow':
+        cmd_load_workflow(args.project_path)
     elif args.command == 'list-terms':
         cmd_list_terms(args.project_path, include_all=args.include_all)
     elif args.command == 'load-terms':
@@ -501,12 +561,14 @@ def main() -> None:
         cmd_set_field(args.project_path, args.ref, args.field, args.value)
     elif args.command == 'remove':
         cmd_remove_element(args.project_path, args.ref)
-    elif args.command == 'add-rule':
-        cmd_add_rule(args.project_path, args.term_name, args.block, args.text)
-    elif args.command == 'remove-rule':
-        cmd_remove_rule(args.project_path, args.term_name, args.block, args.match)
-    elif args.command == 'move-rule':
-        cmd_move_rule(args.project_path, args.term_name, args.from_block, args.to_block, args.match)
+    elif args.command == 'add-item':
+        cmd_add_item(args.project_path, args.ref, args.text, args.after)
+    elif args.command == 'set-item':
+        cmd_set_item(args.project_path, args.ref, args.match, args.text)
+    elif args.command == 'remove-item':
+        cmd_remove_item(args.project_path, args.ref, args.match)
+    elif args.command == 'move-item':
+        cmd_move_item(args.project_path, args.from_ref, args.to_ref, args.match)
     elif args.command == 'create-term':
         cmd_create_term(args.project_path, args.term_name, args.description, args.extends)
     elif args.command == 'rename-term':

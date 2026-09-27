@@ -177,7 +177,7 @@ def _slot_element_types(content: str) -> dict[str, str]:
         # `type:` is looked for anywhere among the entry's own fields, not only on the line after
         # `- id:`: requiring that order let a slot written description-first read as untyped, and
         # an untyped slot is one unknown-field silently skips.
-        declared = re.search(rf'^{" " * (indent + 2)}type:\s*@(\w+)\s*$', item, re.MULTILINE)
+        declared = re.search(rf'^{" " * (indent + 2)}type:\s*["\']?@(\w+)["\']?\s*$', item, re.MULTILINE)
         if declared:
             out[slot] = declared.group(1)
     return out
@@ -265,7 +265,7 @@ def _slot_mapping(content: str, slot: str) -> Iterator[tuple[list[str], str, int
             if m is None:
                 continue
             if m.group(1) == 'type':
-                own = re.match(r'\s*@(\w+)\s*$', m.group(2))
+                own = re.match(r'\s*["\']?@(\w+)["\']?\s*$', m.group(2))
                 own_type = own.group(1) if own else ''
             else:
                 keys.append(m.group(1))
@@ -283,9 +283,37 @@ def _quoted(value: str) -> str:
         return "''"
     if text.startswith(('"', "'")) and text.endswith(('"', "'")):
         return text
+    if re.fullmatch(r'@[A-Z]\w*', text):
+        return text   # a bare term reference is written unquoted everywhere else in the format
     if ': ' in text or text.endswith(':') or text[0] in '@&*!|>%#[]{},':
         return '"' + text.replace('\\', '\\\\').replace('"', '\\"') + '"'
     return text
+
+
+def _field_lines(field: str, value, column: int) -> list[str]:
+    """One field written at `column`, with whatever it holds nested beneath it: a mapping as keys
+    two columns in, a list as `- ` items — an item that is itself a mapping carries its first key
+    on the marker line, the way every entry in the format does. Scalars go through _quoted."""
+    pad = ' ' * column
+    if isinstance(value, dict):
+        lines = [f'{pad}{field}:\n']
+        for key, inner in value.items():
+            lines += _field_lines(key, inner, column + 2)
+        return lines
+    if isinstance(value, list):
+        lines = [f'{pad}{field}:\n']
+        for item in value:
+            if isinstance(item, dict) and item:
+                (first, head), *rest = item.items()
+                nested = _field_lines(first, head, column + 4)
+                lines.append(f'{pad}  - {nested[0].lstrip()}')
+                lines += nested[1:]
+                for key, inner in rest:
+                    lines += _field_lines(key, inner, column + 4)
+            else:
+                lines.append(f'{pad}  - {_quoted(item)}\n')
+        return lines
+    return [f'{pad}{field}: {_quoted(value)}\n']
 
 
 def _slot_names(content: str) -> Iterator[str]:
@@ -589,27 +617,6 @@ class Resolver:
                 rules += _own_rules(use_content, sub_path.stem)
         return rules
 
-    def _reachable_from(self, seeds: list[Path], term_map: dict[str, Path]) -> dict[str, Path]:
-        """BFS from seed files; follows @TermName references."""
-        reachable: dict[str, Path] = {}
-        visited: set[Path] = set()
-        queue = list(seeds)
-        while queue:
-            path = queue.pop(0)
-            key = path.resolve()
-            if key in visited:
-                continue
-            visited.add(key)
-            try:
-                content = path.read_text()
-            except Exception:
-                continue
-            for name in _TERM_REF.findall(content):
-                if name in term_map and name not in reachable:
-                    reachable[name] = term_map[name]
-                    queue.append(term_map[name])
-        return reachable
-
     def _walk_terms(self, project_path: str, include_all: bool = False) -> Iterator[tuple[str, Path, str]]:
         """Yields (name, path, content) for each reachable term, reading each file once."""
         path = Path(project_path).resolve()
@@ -660,7 +667,41 @@ class Resolver:
             'recipes': recipes,
             'references': references,
             'rules': rules,
+            'workflow': self._workflow_hint(root_content),
         }
+
+    @staticmethod
+    def _workflow_hint(root_content: str) -> dict:
+        """Which term describes how work is done here, and a note that it has not been read.
+
+        Opening a project is not the moment to load it: nothing is in hand yet, so its steps and
+        rules would be context spent on a question nobody has asked. The name plus the pointer is
+        enough for the reader to fetch it when there is actually work to place."""
+        block = _extract_key_block(root_content, 'workflow')
+        if block is None:
+            return {'name': None,
+                    'note': 'this project declares no `workflow:`, so nothing describes how work '
+                            'is done here'}
+        m = re.search(r'^\s+type:\s*["\']?@?(\w+)', block, re.MULTILINE)
+        if not m:
+            return {'name': None, 'note': "the project's `workflow:` names no `type:`"}
+        return {'name': m.group(1),
+                'note': f'how work is done here is described by @{m.group(1)}; call '
+                        f'load_workflow to read its steps — not loaded with the project, since '
+                        f'at open time there is no work to place among them'}
+
+    def load_workflow(self, project_path: str) -> dict:
+        """The project's configured workflow in full, with the root's overrides beside it."""
+        root = Path(_resolve_project(project_path)).resolve()
+        root_content = root.read_text()
+        hint = self._workflow_hint(root_content)
+        if hint['name'] is None:
+            return {'error': hint['note']}
+        configuration = _extract_key_block(root_content, 'workflow')
+        terms = self.load_terms(project_path, [hint['name']])
+        if not terms:
+            return {'error': f"unknown term: @{hint['name']}", 'configuration': configuration}
+        return {'name': hint['name'], 'configuration': configuration, 'terms': terms}
 
     def list_terms(self, project_path: str, include_all: bool = False) -> list[dict]:
         project_path = _resolve_project(project_path)
@@ -671,29 +712,37 @@ class Resolver:
         return result
 
     def load_terms(self, project_path: str, term_names: list[str]) -> list[dict]:
-        """Loads the named terms and their transitive @TermName dependencies. Only the
-        explicitly requested terms (not every dependency pulled in for context) get a `rules`
-        tree attached — own guidelines/ai_instructions plus each `extends` ancestor's own,
-        kept separate so scope stays visible instead of flattened into one list."""
+        """Loads the named terms, each followed by its `extends` chain. Only the explicitly
+        requested terms (not the ancestors inlined with them) get a `rules` tree attached — own
+        guidelines/ai_instructions plus each `extends` ancestor's own, kept separate so scope
+        stays visible instead of flattened into one list — and a `references` list naming the
+        terms they mention without loading them."""
         project_path = _resolve_project(project_path)
         path = Path(project_path).resolve()
         term_map = self._build_term_map(path)
-        seeds = [term_map[n] for n in term_names if n in term_map]
-        reachable = self._reachable_from(seeds, term_map)
-        for n in term_names:
-            if n in term_map and n not in reachable:
-                reachable[n] = term_map[n]
-        requested = {n for n in term_names if n in term_map}
-        result = []
-        for name, p in sorted(reachable.items()):
+        requested = [n for n in term_names if n in term_map]
+        result: list[dict] = []
+        seen: set[str] = set()
+        for n in requested:
             try:
-                content = p.read_text()
+                own = term_map[n].read_text()
             except Exception:
-                content = ''
-            entry = {'name': name, 'path': str(p), 'content': content}
-            if name in requested:
-                entry['rules'] = self._rules_tree(name, term_map)
-            result.append(entry)
+                own = ''
+            for name, content in self._extends_chain_from(n, own, term_map):
+                if name in seen:
+                    continue
+                seen.add(name)
+                entry = {'name': name, 'path': str(term_map[name]), 'content': content}
+                if name in requested:
+                    entry['rules'] = self._rules_tree(name, term_map)
+                    # neighbours by name, not by content: a mention is not a dependency, and
+                    # following them reaches the whole corpus through the @Term and
+                    # @DuckspecProject hubs. Naming them is what lets the reader pick a branch.
+                    entry['references'] = sorted(
+                        {r for r in _TERM_REF.findall(content)
+                         if r in term_map and r != name and r not in
+                         {a for a, _ in self._extends_chain_from(name, content, term_map)}})
+                result.append(entry)
         return result
 
     def grep_terms(self, project_path: str, query: str, include_all: bool = False) -> list[dict]:
@@ -818,6 +867,7 @@ class Resolver:
             add('error', 'duplicate-term', dup['name'], dup['path'],
                 f"also defined at {dup['first_path']}")
 
+        workspace = _active_projects(_load_settings())   # once, not once per term with a `uses:`
         for name, path, content in self._walk_terms(project_path, include_all=True):
             cache[name] = content
             for slot, element in _slot_element_types(content).items():
@@ -827,6 +877,24 @@ class Resolver:
             if not _DESCRIPTION.search(content):
                 add('error', 'unparsed-term', name, path, 'no top-level description:')
                 continue
+
+            # A `uses:` entry that resolves to nothing was skipped in silence, so the project it
+            # names simply vanished from the term map and the report blamed the dangling
+            # references that followed instead of the one line that caused them.
+            m = _USES_BLOCK.search(content)
+            if m:
+                for entry in _LIST_ITEM.findall(m.group(1)):
+                    if entry.startswith(('http://', 'https://')):
+                        if workspace.get(entry) is None:
+                            add('warning', 'broken-uses', name, path,
+                                f"'{entry}' has no entry in the active workspace — the project is "
+                                f"not registered here, so nothing it defines is in scope",
+                                _line_of(content, m.start() + m.group(0).index(entry)))
+                    elif not (path.parent / entry).resolve().exists():
+                        add('error', 'broken-uses', name, path,
+                            f"'{entry}' does not resolve to a file — everything that project "
+                            f"defines is missing from this one",
+                            _line_of(content, m.start() + m.group(0).index(entry)))
 
             parent = _parse_extends(content)
             if parent and parent not in term_map:
@@ -929,7 +997,7 @@ class Resolver:
                     continue
                 for item_id, item, indent in _slot_items(content, slot):
                     column = ' ' * (indent + 2)
-                    own = re.search(rf'^{column}type:\s*@(\w+)', item, re.MULTILINE)
+                    own = re.search(rf'^{column}type:\s*["\']?@(\w+)', item, re.MULTILINE)
                     fields = allowed | (self._schema(own.group(1), term_map, cache) if own else set())
                     for key in re.findall(rf'^{column}([a-z_]+):', item, re.MULTILINE):
                         if key not in fields:
@@ -945,6 +1013,50 @@ class Resolver:
                                 f"{slot} sets '{key}', which no type it has "
                                 f"declares (@{element}"
                                 + (f" + @{own_type}" if own_type else "") + ")")
+
+        # A step's operation has to be something that can be run. broken-path-ref only proves the
+        # reference lands somewhere, and a component describing a pipeline file is somewhere — a
+        # step pointing at one looks implemented while nothing could ever perform it.
+        call = re.compile(r'^"?@([A-Z]\w*)#([A-Za-z_][\w-]*)(?:\((.*)\))?"?$')
+        for name, path in sorted(term_map.items()):
+            content = cache.get(name)
+            if content is None:
+                continue
+            for step_id, item, indent in _slot_items(content, 'steps'):
+                op = re.search(rf'^{" " * (indent + 2)}operation:\s*(.+?)\s*$', item, re.MULTILINE)
+                if not op:
+                    continue
+                m = call.match(op.group(1))
+                if not m:
+                    add('error', 'broken-operation', name, path,
+                        f"step '{step_id}' has operation {op.group(1)}, which is not a call of the "
+                        f"form @<TermName>#<recipe>(<argument>=<value>, ...)")
+                    continue
+                target, recipe, args = m.group(1), m.group(2), m.group(3)
+                if target not in term_map:
+                    continue                      # dangling-ref already names it
+                block = None
+                for _, anc in self._extends_chain_from(target, cache.get(target) or
+                                                       term_map[target].read_text(), term_map):
+                    rb = _RECIPES_BLOCK.search(anc)
+                    found = _find_named_blocks(rb.group(0), recipe) if rb else []
+                    if found:
+                        block = found[0]
+                        break
+                if block is None:
+                    add('error', 'broken-operation', name, path,
+                        f"step '{step_id}' calls @{target}#{recipe}, which is not a recipe of "
+                        f"@{target} or anything it extends — something that describes a file is "
+                        f"not something that can be run")
+                    continue
+                if args:
+                    arguments = _extract_key_block(block, 'arguments') or ''
+                    declared = set(re.findall(r'^\s*-\s+id:\s*(\S+)', arguments, re.MULTILINE))
+                    for given in re.findall(r'(?:^|,)\s*([A-Za-z_]\w*)\s*=', args):
+                        if given not in declared:
+                            add('error', 'broken-operation', name, path,
+                                f"step '{step_id}' passes '{given}' to @{target}#{recipe}, which "
+                                f"declares no such argument")
 
         if unreachable:
             for name, path in sorted(term_map.items()):
@@ -976,9 +1088,10 @@ class Resolver:
         return findings
 
     def _source_root(self, term_path: Path) -> Path:
-        """The directory a term's `src:` values resolve against. A terms folder sits beside the
-        project file that names it, so the project owning `<dir>/<Name>.yaml` is `<dir>.yaml`;
-        its `settings.src` (default `..`) is the source root."""
+        """The directory a term's `src:` values resolve against: the `settings.src` (default `..`)
+        of the project whose `terms_folder:` names the folder the term sits in. Matched on that
+        declaration, not on the folder's name, which need not match the project's. A term no
+        project claims — a root project file itself — is read as its own project."""
         folder = term_path.parent.resolve()
         project = term_path
         for candidate in sorted(folder.parent.glob('*.yaml')):
@@ -1132,7 +1245,7 @@ class Resolver:
                 continue
             if _parse_extends(content) == term_name:
                 out['extended_by'].append(name)
-            if re.search(rf'^\s*type:\s*@{re.escape(term_name)}\b', content, re.MULTILINE):
+            if re.search(rf'^\s*type:\s*["\']?@{re.escape(term_name)}\b', content, re.MULTILINE):
                 out['typed_by'].append(name)
             elif term_name in _TERM_REF.findall(content):
                 out['referenced_by'].append(name)
@@ -1271,7 +1384,7 @@ class Resolver:
 
         block = [f'{" " * column}- id: {entry_id}\n']
         for field, value in (fields or {}).items():
-            block.append(f'{" " * (column + 2)}{field}: {_quoted(value)}\n')
+            block += _field_lines(field, value, column + 2)
 
         at = end
         while at > start + 1 and not lines[at - 1].strip():
@@ -1291,82 +1404,126 @@ class Resolver:
         path.write_text(''.join(lines))
         return f'{path}: removed {end - start} line(s)'
 
-    def _rule_block(self, lines: list[str], block: str) -> tuple[int, int] | None:
-        for i, line in enumerate(lines):
-            if re.match(rf'^{block}:\s*$', line):
-                end = len(lines)
-                for j in range(i + 1, len(lines)):
-                    if lines[j].strip() and not lines[j].startswith((' ', '\t')):
-                        end = j
-                        break
-                return i, end
-        return None
+    @staticmethod
+    def _find_item(lines: list[str], start: int, end: int, match: str):
+        """(i, j) bounding the one item in lines[start:end] whose text contains `match`, or an
+        error string. Refuses more than one hit rather than editing whichever came first."""
+        hits = [i for i in range(start + 1, end)
+                if lines[i].lstrip().startswith('- ') and match in lines[i]]
+        if not hits:
+            return f'no item matching {match!r}'
+        if len(hits) > 1:
+            return f'{len(hits)} items match {match!r} — narrow it'
+        i = hits[0]
+        base = len(lines[i]) - len(lines[i].lstrip())
+        j = i + 1
+        while j < end and lines[j].strip() and len(lines[j]) - len(lines[j].lstrip()) > base:
+            j += 1
+        return i, j
+
+    @staticmethod
+    def _item_line(text: str, indent: int) -> str:
+        """One list item at the given column. A colon or a hash in the text would read as structure,
+        so the value is quoted; a quote already inside it is escaped rather than left to close the
+        quoting early and leave a line that still looks like valid YAML."""
+        pad = " " * indent
+        if any(c in text for c in ":#"):
+            escaped = text.replace("\\", "\\\\").replace('"', '\\"')
+            return pad + '- "' + escaped + '"\n'
+        return pad + "- " + text + "\n"
+
+    @staticmethod
+    def _item_text(item_lines: list[str]) -> str:
+        """The text of one list item, as _item_line would take it — the inverse of that function.
+        Double quotes are undone together with the escapes inside them, single quotes with their
+        doubled `''`, and a value continued over several lines is joined the way YAML folds it."""
+        text = ' '.join(l.strip() for l in item_lines)[2:].strip()
+        if len(text) >= 2 and text[0] == text[-1] == '"':
+            return re.sub(r'\\(.)', r'\1', text[1:-1])
+        if len(text) >= 2 and text[0] == text[-1] == "'":
+            return text[1:-1].replace("''", "'")
+        return text
 
     def _term_file(self, project_path: str, term_name: str) -> Path | None:
         term_map = self._build_term_map(Path(_resolve_project(project_path)).resolve())
         return term_map.get(term_name)
 
-    def add_rule(self, project_path: str, term_name: str, block: str, text: str) -> str:
-        path = self._term_file(project_path, term_name)
-        if path is None:
-            return f'unknown term: @{term_name}'
-        lines = path.read_text().splitlines(keepends=True)
-        body = f'  - "{text}"\n' if any(c in text for c in ':#') else f'  - {text}\n'
-        found = self._rule_block(lines, block)
-        if found:
-            lines.insert(found[1], body)
-        else:
-            anchor = next((i for i, l in enumerate(lines) if l.startswith(('properties:', 'recipes:'))), len(lines))
-            lines[anchor:anchor] = [f'{block}:\n', body]
-        path.write_text(''.join(lines))
-        return f'{path}: added to {block}'
 
-    def _find_rule(self, lines: list[str], block: str, match: str):
-        found = self._rule_block(lines, block)
-        if not found:
-            return f'no {block}: block'
-        start, end = found
-        hits = [i for i in range(start + 1, end)
-                if lines[i].lstrip().startswith('- ') and match in lines[i]]
-        if not hits:
-            return f'no rule matching {match!r} in {block}'
-        if len(hits) > 1:
-            return f'{len(hits)} rules match {match!r} in {block} — narrow it'
-        i = hits[0]
-        j = i + 1
-        while j < end and lines[j].strip() and not lines[j].lstrip().startswith('- '):
-            j += 1
-        return start, end, i, j
+    def add_item(self, project_path: str, ref: str, text: str, after: str | None = None) -> str:
+        located = self._locate(project_path, ref)
+        if isinstance(located, str):
+            head, _, block = ref.rpartition("#")
+            if not head:
+                return located
+            parent = self._locate(project_path, head)
+            if isinstance(parent, str):
+                return parent
+            path, lines, p_start, p_end = parent
+            # p_start == 0 means the parent is the whole file, so the block sits at column 0
+            indent = 0 if p_start == 0 else len(lines[p_start]) - len(lines[p_start].lstrip()) + 2
+            anchor = p_end
+            if p_start == 0:
+                anchor = next((i for i, l in enumerate(lines)
+                               if l.startswith(("properties:", "recipes:"))), len(lines))
+            lines[anchor:anchor] = [f"{' ' * indent}{block}:\n",
+                                    self._item_line(text, indent + 2)]
+            path.write_text("".join(lines))
+            return f"{path}: created {block} and added to it"
+        path, lines, start, end = located
+        indent = len(lines[start]) - len(lines[start].lstrip()) + 2
+        at = end
+        if after is not None:
+            found = self._find_item(lines, start, end, after)
+            if isinstance(found, str):
+                return found
+            at = found[1]
+        lines.insert(at, self._item_line(text, indent))
+        path.write_text("".join(lines))
+        return f"{path}: added to {ref}"
 
-    def remove_rule(self, project_path: str, term_name: str, block: str, match: str) -> str:
-        path = self._term_file(project_path, term_name)
-        if path is None:
-            return f'unknown term: @{term_name}'
-        lines = path.read_text().splitlines(keepends=True)
-        found = self._find_rule(lines, block, match)
+    def set_item(self, project_path: str, ref: str, match: str, text: str) -> str:
+        located = self._locate(project_path, ref)
+        if isinstance(located, str):
+            return located
+        path, lines, start, end = located
+        found = self._find_item(lines, start, end, match)
         if isinstance(found, str):
             return found
-        start, end, i, j = found
+        i, j = found
+        indent = len(lines[i]) - len(lines[i].lstrip())
+        lines[i:j] = [self._item_line(text, indent)]
+        path.write_text("".join(lines))
+        return f"{path}: replaced in {ref}"
+
+    def remove_item(self, project_path: str, ref: str, match: str) -> str:
+        located = self._locate(project_path, ref)
+        if isinstance(located, str):
+            return located
+        path, lines, start, end = located
+        found = self._find_item(lines, start, end, match)
+        if isinstance(found, str):
+            return found
+        i, j = found
         del lines[i:j]
-        if end - start == j - i + 1:          # the block held only that rule
+        if end - start == j - i + 1:          # the block held only that item
             del lines[start]
-        path.write_text(''.join(lines))
-        return f'{path}: removed from {block}'
+        path.write_text("".join(lines))
+        return f"{path}: removed from {ref}"
 
-    def move_rule(self, project_path: str, term_name: str, from_block: str, to_block: str, match: str) -> str:
-        path = self._term_file(project_path, term_name)
-        if path is None:
-            return f'unknown term: @{term_name}'
-        lines = path.read_text().splitlines(keepends=True)
-        found = self._find_rule(lines, from_block, match)
+    def move_item(self, project_path: str, from_ref: str, to_ref: str, match: str) -> str:
+        located = self._locate(project_path, from_ref)
+        if isinstance(located, str):
+            return located
+        _, lines, start, end = located
+        found = self._find_item(lines, start, end, match)
         if isinstance(found, str):
             return found
-        _, _, i, j = found
-        text = ''.join(lines[i:j]).rstrip('\n').lstrip()[2:].strip()
-        removed = self.remove_rule(project_path, term_name, from_block, match)
-        if not removed.endswith(f'removed from {from_block}'):
+        i, j = found
+        text = self._item_text(lines[i:j])
+        removed = self.remove_item(project_path, from_ref, match)
+        if "removed from" not in removed:
             return removed
-        return self.add_rule(project_path, term_name, to_block, text.strip('"'))
+        return self.add_item(project_path, to_ref, text)
 
     def create_term(self, project_path: str, term_name: str, description: str,
                     extends: str = 'Term') -> str:
@@ -1379,7 +1536,7 @@ class Resolver:
         path = folder / f'{term_name}.yaml'
         if path.exists():
             return f'already exists: {path}'
-        path.write_text(f'description: {description}\nextends: @{extends.lstrip("@")}\n')
+        path.write_text(f'description: {_quoted(description)}\nextends: @{extends.lstrip("@")}\n')
         return f'{path}: created'
 
     def rename_term(self, project_path: str, old_name: str, new_name: str) -> str:

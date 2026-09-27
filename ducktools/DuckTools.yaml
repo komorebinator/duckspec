@@ -5,7 +5,7 @@ uses:
   - ../Duckspec.yaml
 goals:
   - Provide a lightweight project overview (root file + term list with descriptions) as the primary entry point
-  - Load selected @Term definitions and their transitive dependencies by name, on demand
+  - Load selected @Term definitions by name, on demand, each with the `extends` chain it inherits from, naming rather than loading the terms it merely mentions
   - Search across term content by keyword to locate relevant terms without loading everything
   - Expose a consistent interface as CLI commands and as an optional MCP server
   - Support any model or runtime without model-specific integration

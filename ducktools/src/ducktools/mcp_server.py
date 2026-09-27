@@ -23,6 +23,15 @@ _TOOLS = [
         },
     },
     {
+        'name': 'load_workflow',
+        'description': "The project's configured workflow in full — its steps, properties, recipes and rules, plus the overrides the project sets on it. Call this when there is work in hand and the question is what to do with it next; load_project deliberately does not carry it",
+        'inputSchema': {
+            'type': 'object',
+            'properties': _PROJECT_PATH_PROP,
+            'required': ['project_path'],
+        },
+    },
+    {
         'name': 'list_terms',
         'description': 'List reachable term names, file paths, and descriptions',
         'inputSchema': {
@@ -39,7 +48,7 @@ _TOOLS = [
     },
     {
         'name': 'load_terms',
-        'description': 'Load specific terms and their transitive dependencies by name',
+        'description': 'Load specific terms by name, each with its `extends` chain and applicable rules; other terms they mention are named as references, not loaded',
         'inputSchema': {
             'type': 'object',
             'properties': {
@@ -73,7 +82,7 @@ _TOOLS = [
     },
     {
         'name': 'resolve_path',
-        'description': 'Resolve a Term#path reference to a single nested element (e.g. one recipe, function, or component) without loading the whole term or its transitive dependencies',
+        'description': 'Resolve a Term#path reference to a single nested element (e.g. one recipe, function, or component) without loading the whole term',
         'inputSchema': {
             'type': 'object',
             'properties': {
@@ -158,7 +167,7 @@ _TOOLS = [
         'inputSchema': {'type': 'object', 'properties': {**_PROJECT_PATH_PROP,
             'ref': {'type': 'string', 'description': 'TermName#segment... ending at the slot to append to'},
             'entry_id': {'type': 'string', 'description': 'id for the new entry'},
-            'fields': {'type': 'object', 'description': 'field name to value, written under the new entry'}},
+            'fields': {'type': 'object', 'description': 'field name to value, written under the new entry; a list or object value is written as a nested block (a list of objects as named entries, e.g. arguments)'}},
             'required': ['project_path', 'ref', 'entry_id']},
     },
     {
@@ -169,22 +178,28 @@ _TOOLS = [
             'required': ['project_path', 'ref']},
     },
     {
-        'name': "add_rule",
-        'description': "Append a rule to a term's guidelines, ai_instructions or goals; these hold bare strings that set_field cannot reach",
-        'inputSchema': {'type': 'object', 'properties': {**_PROJECT_PATH_PROP, 'term_name': {'type': 'string'}, 'block': {'type': 'string'}, 'text': {'type': 'string'}},
-            'required': ['project_path', 'term_name', 'block', 'text']},
+        'name': "add_item",
+        'description': "Append a bare string to the list a Term#path addresses — guidelines, ai_instructions, goals, a recipe's instructions, software, uses; creates the block when absent, inserts after a neighbour when `after` is given",
+        'inputSchema': {'type': 'object', 'properties': {**_PROJECT_PATH_PROP, 'ref': {'type': 'string', 'description': 'TermName#segment... ending at the list'}, 'text': {'type': 'string'}, 'after': {'type': 'string', 'description': 'substring identifying the item to insert after; appended at the end when omitted'}},
+            'required': ['project_path', 'ref', 'text']},
     },
     {
-        'name': "remove_rule",
-        'description': "Remove the rule matching a substring from a term's rule block; refuses when more than one matches",
-        'inputSchema': {'type': 'object', 'properties': {**_PROJECT_PATH_PROP, 'term_name': {'type': 'string'}, 'block': {'type': 'string'}, 'match': {'type': 'string'}},
-            'required': ['project_path', 'term_name', 'block', 'match']},
+        'name': "set_item",
+        'description': "Replace the text of the item matching a substring, in place — remove plus add would append it to the end of its block instead",
+        'inputSchema': {'type': 'object', 'properties': {**_PROJECT_PATH_PROP, 'ref': {'type': 'string'}, 'match': {'type': 'string'}, 'text': {'type': 'string'}},
+            'required': ['project_path', 'ref', 'match', 'text']},
     },
     {
-        'name': "move_rule",
-        'description': "Move a rule verbatim between a term's rule blocks, e.g. reclassifying an ai_instruction as a guideline",
-        'inputSchema': {'type': 'object', 'properties': {**_PROJECT_PATH_PROP, 'term_name': {'type': 'string'}, 'from_block': {'type': 'string'}, 'to_block': {'type': 'string'}, 'match': {'type': 'string'}},
-            'required': ['project_path', 'term_name', 'from_block', 'to_block', 'match']},
+        'name': "remove_item",
+        'description': "Remove the item matching a substring from the list a Term#path addresses; refuses when more than one matches",
+        'inputSchema': {'type': 'object', 'properties': {**_PROJECT_PATH_PROP, 'ref': {'type': 'string'}, 'match': {'type': 'string'}},
+            'required': ['project_path', 'ref', 'match']},
+    },
+    {
+        'name': "move_item",
+        'description': "Move an item verbatim between lists, e.g. reclassifying an ai_instruction as a guideline",
+        'inputSchema': {'type': 'object', 'properties': {**_PROJECT_PATH_PROP, 'from_ref': {'type': 'string'}, 'to_ref': {'type': 'string'}, 'match': {'type': 'string'}},
+            'required': ['project_path', 'from_ref', 'to_ref', 'match']},
     },
     {
         'name': "create_term",
@@ -319,12 +334,17 @@ def _format_rules_tree(term_name: str, tree: dict) -> str:
     return '\n'.join(lines)
 
 
+NOTE = 'References (mentioned, not loaded — load them if the question is about one): '
+
+
 def _format_term_blocks(terms: list[dict]) -> str:
     blocks = []
     for t in terms:
         block = f"--- @{t['name']} [{t['path']}] ---\n{t['content']}"
         if 'rules' in t:
             block += '\n\n' + _format_rules_tree(t['name'], t['rules'])
+        if t.get('references'):
+            block += '\n\n' + NOTE + ', '.join('@' + n for n in t['references'])
         blocks.append(block)
     return '\n\n'.join(blocks)
 
@@ -379,9 +399,18 @@ def _call(name: str, arguments: dict) -> str:
         references_table = _format_references_table(result['references'])
         rules_table = _format_rules_table(result['rules'])
         return (
-            f"{result['root_content']}\n\n## Terms\n\n{terms_table}\n\n## Recipes\n\n{recipes_table}"
+            f"{result['root_content']}\n\n## Workflow\n\n{result['workflow']['note']}"
+            f"\n\n## Terms\n\n{terms_table}\n\n## Recipes\n\n{recipes_table}"
             f"\n\n## References\n\n{references_table}\n\n## Rules (project-wide)\n\n{rules_table}"
         )
+
+    if name == 'load_workflow':
+        result = resolver.load_workflow(path)
+        if 'error' in result:
+            return result['error']
+        return (f"# @{result['name']}\n\n## As this project configures it\n\n"
+                f"```\n{result['configuration'].rstrip()}\n```\n\n"
+                + _format_term_blocks(result['terms']))
 
     if name == 'list_terms':
         terms = resolver.list_terms(path, include_all=include_all)
@@ -409,14 +438,17 @@ def _call(name: str, arguments: dict) -> str:
     if name == 'remove_element':
         return resolver.remove_element(path, arguments['ref'])
 
-    if name == "add_rule":
-        return resolver.add_rule(path, arguments["term_name"], arguments["block"], arguments["text"])
+    if name == "add_item":
+        return resolver.add_item(path, arguments["ref"], arguments["text"], arguments.get("after"))
 
-    if name == "remove_rule":
-        return resolver.remove_rule(path, arguments["term_name"], arguments["block"], arguments["match"])
+    if name == "set_item":
+        return resolver.set_item(path, arguments["ref"], arguments["match"], arguments["text"])
 
-    if name == "move_rule":
-        return resolver.move_rule(path, arguments["term_name"], arguments["from_block"], arguments["to_block"], arguments["match"])
+    if name == "remove_item":
+        return resolver.remove_item(path, arguments["ref"], arguments["match"])
+
+    if name == "move_item":
+        return resolver.move_item(path, arguments["from_ref"], arguments["to_ref"], arguments["match"])
 
     if name == "create_term":
         return resolver.create_term(path, arguments["term_name"], arguments["description"], arguments.get('extends', 'Term'))

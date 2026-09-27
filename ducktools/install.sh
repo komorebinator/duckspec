@@ -10,7 +10,7 @@ if [ $# -ne 1 ]; then
 fi
 
 CLONE_PATH="$1"
-REPO_URL="git@github.com:komorebinator/duckspec.git"
+REPO_URL="https://github.com/komorebinator/duckspec.git"
 SETTINGS_DIR="$HOME/.duckspec"
 
 # Pick whichever conventional bin dir is already on PATH (covers Linux's

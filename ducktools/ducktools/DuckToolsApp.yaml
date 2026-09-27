@@ -6,19 +6,19 @@ tests:
   - id: load-project
     description: loads the root project file content and lists all reachable terms, recipes, cross-project references, and project-wide rules (guidelines + ai_instructions)
     command: "python3 -m ducktools load-project Duckspec.yaml"
-    expect: output contains the root file content followed by Terms, Recipes, References, and Rules (project-wide) markdown tables
+    expect: output contains the root file content followed by a Workflow section naming @DuckspecWorkflow, then Terms, Recipes, References, and Rules (project-wide) markdown tables
   - id: list-terms
     description: lists reachable term names, file paths, and descriptions
     command: "python3 -m ducktools list-terms Duckspec.yaml"
     expect: output contains at least one `| @<TermName> |` row with a non-empty description column
   - id: load-terms
-    description: loads specific terms and their transitive dependencies
+    description: loads specific terms, each with its `extends` chain, naming the other terms it mentions without loading them
     command: "python3 -m ducktools load-terms Duckspec.yaml DuckToolsApp"
-    expect: output contains `--- @DuckToolsApp [` block and its transitive dependencies; does not contain unrelated top-level terms
+    expect: output contains `--- @DuckToolsApp [` followed by the blocks of its ancestors `@Application`, `@Software`, `@DesignPattern` and `@Term`, and a References line naming mentioned terms; contains no `--- @` block for a term outside that chain
   - id: grep
     description: searches term content by keyword and prints matching term names
     command: "python3 -m ducktools grep Duckspec.yaml resolver"
-    expect: output contains a Reference/Line/Match table whose references start with `@DuckToolsApp#`
+    expect: output contains a Reference/Line/Match table in which every reference is a `#`-path opening with a term name, at least one of them starting with `@DuckToolsApp#`
   - id: resolve-path
     description: resolves a Term#path reference to a single nested element's raw block, without loading the whole term or its transitive dependencies
     command: "python3 -m ducktools resolve-path Duckspec.yaml DuckspecProject#validate"
@@ -32,13 +32,13 @@ tests:
     command: "python3 -m ducktools verify-project Duckspec.yaml"
     expect: exits 0 and prints `no findings` — the framework's own spec is internally consistent
   - id: wiring
-    description: every public resolver method is reachable from both front ends — a method can exist, be documented, and still be unreachable from outside, which no spec/code comparison catches because both sides look complete
+    description: "every public resolver method is reachable from both front ends, and every CLI command and MCP tool has a spec entry and every entry names one that exists — a method can exist, be documented, and still be unreachable from outside, and a command can exist and go undescribed, which the source check cannot see since it looks only from the spec towards the code"
     command: "python3 ducktools/check_wiring.py"
-    expect: prints `no orphans` and exits 0; on failure names each front end and the methods it does not call
+    expect: "prints `no orphans` and exits 0; on failure names each front end with the methods it does not call, and each command or tool missing from the spec or described but absent"
   - id: operations
-    description: every public resolver method returns what it claims to on a known project — reachability is check-wiring's job, correctness is this one's
+    description: every public resolver method returns what it claims to on a known project, and every CLI command and MCP tool shows it — reachability is check-wiring's job, correctness is this one's
     command: python3 ducktools/check_operations.py
-    expect: prints one line per method with its verdict, then `all operations pass`, and exits 0; on failure names each method and how its result differed
+    expect: prints one line per method, command and tool with its verdict, then `all operations pass`, and exits 0; on failure names each one and how its result differed, and names any public method, CLI command or listed MCP tool that no check ran
 components:
   - id: resolver
     src: ducktools/src/ducktools/resolver.py
@@ -103,12 +103,14 @@ components:
           - id: value
             description: a filesystem path or the identifier of a project registered in the active workspace
       - id: _resolve_entry
-        description: "Resolves a single `uses:` entry to a local Path. If `sub` starts with `http://` or `https://`, looks it up in the workspace dict (the active workspace's projects, read fresh via _load_settings/_active_projects on every call — never cached, so use_workspace/add_project take effect immediately); prints a warning and returns None if not found. Otherwise resolves `sub` relative to `base` (the directory of the current file) and normalizes it via `.resolve()`, so a `../`-containing entry (e.g. a sub-project's `uses:` circularly referencing back to its own parent) yields the canonical absolute path rather than a literal `ducktools/../Duckspec.yaml`-style string. Returns None if the entry cannot be resolved."
+        description: "Resolves a single `uses:` entry to a local Path. If `sub` starts with `http://` or `https://`, looks it up in `workspace` — the active workspace's projects, which every caller reads fresh via _load_settings/_active_projects rather than caching, so use_workspace/add_project take effect immediately; prints a warning and returns None if not found. Otherwise resolves `sub` relative to `base` (the directory of the current file) and normalizes it via `.resolve()`, so a `../`-containing entry (e.g. a sub-project's `uses:` circularly referencing back to its own parent) yields the canonical absolute path rather than a literal `ducktools/../Duckspec.yaml`-style string. Returns None if the entry cannot be resolved."
         arguments:
           - id: sub
             description: raw string from the `uses:` list — either a relative path or a repository URL
           - id: base
             description: directory of the file containing the `uses:` entry
+          - id: workspace
+            description: repository URL -> local path map to look URL entries up in, as returned by _active_projects
       - id: _collect
         description: "BFS from `project_path`, deduped by resolved path. For each visited file: if it declares `terms_folder:`, records the resolved directory (if it exists) as a term folder; if it has a `uses:` block, resolves each entry via _resolve_entry (against the active workspace's projects) into `project_files` and queues the resolved files for further traversal. Returns `(term_folders, project_files)` — the raw ingredients _build_term_map combines into the name→path map."
         arguments:
@@ -151,13 +153,6 @@ components:
             description: that file's already-read content
           - id: term_map
             description: name→path map, as returned by _build_term_map
-      - id: _reachable_from
-        description: "The same `@<TermName>`-mention BFS as the second half of _reachable, but seeded from an explicit list of files instead of walking `uses:` from a project root — no `uses:` resolution happens here at all, purely reference-chasing from the given seeds. Used by load_terms to find the transitive closure of a specific set of requested term names."
-        arguments:
-          - id: seeds
-            description: list of file paths to start the BFS from
-          - id: term_map
-            description: name→path map, as returned by _build_term_map
       - id: _walk_terms
         description: "Generator that builds the term map and reachable set, then yields (name, path, content) for each reachable term, reading each file exactly once. All content-extraction methods use this as their single traversal primitive to avoid re-reading files. If include_all is true, yields all terms in the term map instead of only reachable ones."
         arguments:
@@ -166,10 +161,20 @@ components:
           - id: include_all
             description: if true, yield all terms in the term map; default false
       - id: load_project
-        description: "Reads the root project file content, then calls _walk_terms() for a single-pass extraction of descriptions, recipes, and references from all reachable terms — but not rules: those come from _project_wide_rules (root's own extends chain + direct `uses:` only), not from every reachable term, to keep a term's own detailed guidelines out of context until that term is actually loaded. Returns a dict {root_content: str, terms: list[{name, path, description}], recipes: list[{term, name, description}], references: list[{term, repository, description}], rules: list[{term, type, text}]} where type is 'Guideline' or 'AI Instruction'. Intended as the primary entry point for AI assistants: gives an overview of the project without loading all term content."
+        description: "Reads the root project file content, then calls _walk_terms() for a single-pass extraction of descriptions, recipes, and references from all reachable terms — but not rules: those come from _project_wide_rules (root's own extends chain + direct `uses:` only), not from every reachable term, to keep a term's own detailed guidelines out of context until that term is actually loaded. Returns a dict {root_content: str, terms: list[{name, path, description}], recipes: list[{term, name, description}], references: list[{term, repository, description}], rules: list[{term, type, text}], workflow: {name, note}} where type is 'Guideline' or 'AI Instruction' and `workflow` names the term describing how work is done here without reading it — see _workflow_hint. Intended as the primary entry point for AI assistants: gives an overview of the project without loading all term content."
         arguments:
           - id: project_path
             description: a @DuckspecProject .yaml file — a filesystem path, or the identifier of a project registered in the active @Workspace (see _resolve_project)
+      - id: _workflow_hint
+        description: "Which term the root's `workflow:` names, plus a note that it has not been read. Opening a project is not the moment to load the workflow: nothing is in hand yet, so its steps and rules would be context spent on a question nobody has asked. The name and the pointer are enough for a reader to fetch it once there is work to place among the steps. Returns {name: str|None, note: str}, with name None when the project declares no workflow or names no type in it."
+        arguments:
+          - id: root_content
+            description: raw text of the root project file
+      - id: load_workflow
+        description: "The project's configured workflow — {name, configuration, terms}, where `configuration` is the root's own `workflow:` block verbatim (the overrides it sets, such as main_branch and versioning) and `terms` is load_terms of the workflow term, so its steps, properties, recipes and rules arrive with the chain they are inherited through. Separate from load_project on purpose: a workflow answers what to do next with work in hand, and there is no work in hand when a project is opened, so its steps would be context spent on a question nobody has asked. Nothing beyond locating the term is done here — which terms come back is load_terms' business, and the two behaving differently would be a difference with no reason behind it. Returns {error} when no workflow is configured or the term it names is absent from the map."
+        arguments:
+          - id: project_path
+            description: a @DuckspecProject .yaml file or a registered project identifier
       - id: list_terms
         description: "Calls _walk_terms() and extracts description from each file's content using regex `^description:\\s*(.+)$` (first match, stripped); returns a list of {name, path, description} sorted by name. If include_all is true, returns all terms in the term map instead of only reachable ones."
         arguments:
@@ -178,7 +183,7 @@ components:
           - id: include_all
             description: if true, return all terms in the term map regardless of @<TermName> mentions; default false
       - id: load_terms
-        description: "Builds the term map from the project, then runs BFS seeded with the files corresponding to the given term_names instead of the project root. Returns a list of {name, path, content} sorted by name, covering only the requested terms and their transitive @<TermName> dependencies. Unrecognised names are silently skipped. Only entries whose name is one of the explicitly requested term_names (not every transitive dependency pulled in for context) also get a `rules` key — the {own, inherited} tree from _rules_tree — so a term's full guidelines/ai_instructions surface exactly when it's deliberately loaded, not merely because it showed up as someone else's dependency."
+        description: "Each requested term followed by its `extends` chain, as a list of {name, path, content} — plus, on the requested terms only, a `rules` key holding the {own, inherited} tree from _rules_tree, and a `references` key naming the terms it mentions without loading them. Unrecognised names are silently skipped. The chain is inlined because a term is incomplete without it: its inherited properties and recipes are its own members. Everything else it mentions is a neighbour, returned by name so the reader can descend into whichever branch the question is actually about. Following those mentions instead, as this did before, made every call return the whole corpus — a mention is not a dependency, and a guideline that lists `@Key` and `@Page` as examples of names taken on GitHub dragged both in as if the workflow were built on them. Measured on this project, reading @WorkflowStep cost 57 terms and 182K characters, the same figure every other term produced, because the reference graph is a dense mesh through the @Term and @DuckspecProject hubs rather than a tree; the chain costs 2 terms and 6.5K. That is what makes the corpus navigable by depth: each call shows where it is possible to step, and only the step taken is paid for."
         arguments:
           - id: project_path
             description: a @DuckspecProject .yaml file — a filesystem path, or the identifier of a project registered in the active @Workspace (see _resolve_project); used to build the term map
@@ -302,7 +307,7 @@ components:
           - id: cache
             description: name->content map, reused and extended so no file is read twice
       - id: verify_project
-        description: "Mechanical consistency pass over the whole project — everything about a spec that can be proven true or false without reading source or judging meaning. Builds the term map once, then calls _walk_terms(include_all=true) for a single-pass traversal, and returns a flat list of {severity, check, term, path, line, message} sorted by severity then path, where severity is 'error' or 'warning', `check` is a stable slug for filtering and CI diffing, and `line` is absent when the originating check does not yield an offset. An empty list means the spec is internally consistent. Complements rather than replaces @DuckspecProject#verify_source, which covers the semantic half — whether descriptions actually match the implementation — that no regex can settle. Checks: `dangling-ref` — an @<TermName> mention with no term of that name in the map; `broken-path-ref` — an @<TermName>#segment#segment reference whose segments do not resolve; `ambiguous-path-ref` — a segment matching more than one entry at the level it is searched, which the resolver would otherwise silently narrow to whichever came first; `unknown-extends` — an `extends:` naming a term absent from the map; `extends-cycle` — an `extends:` chain that revisits a term, which _extends_chain_from otherwise truncates silently; `duplicate-term` — one term name defined in several files, from _duplicate_terms; `unparsed-term` — a `.yaml` in a terms folder with no `description:` at zero indentation, which regex-based extraction would otherwise read as empty rather than as broken; `unknown-field` — a field set on something of known type that no type it has declares, where the schema is composed from the slot's `type:` and the target's own `type:` via _schema. It covers both shapes a typed slot takes: a list of named entries, each checked on its own via _slot_items, and a single mapping such as `settings:`, `workflow:` or `versioning:`, checked as a whole via _slot_mapping, which may name its type in its own `type:` key instead of on the slot. Untyped slots are checked in neither shape — silence about a slot means nothing was verified there, not that it was found correct. A third shape is the term's own top-level fields, read against its `extends` chain: `description`, `extends`, `name` and the declaration blocks (`properties`, `recipes`, `guidelines`, `ai_instructions`) are structural and always allowed, and everything else must be declared by the term or one of its ancestors. Without this the `extends:` mechanism bought nothing at the top level — a term could set any field at all, including a whole slot no type describes, and the report stayed empty; `redeclared-member` — a `properties:` entry an ancestor already declares, which inheritance would replace silently; recipes are deliberately not checked, since re-declaring them is how a subtype implements a base term's contract `unreachable-term` (warning, opt-in via the `unreachable` argument) — a term in the map that no reachable term mentions; off by default because a framework or library project ships terms meant for consumer projects, where every one of them is legitimately unreachable from its own root and would drown the report; `untyped-slot` (warning, opt-in via the `untyped` argument) — a slot holding named entries or a mapping whose element type no type declares, so `unknown-field` skipped it entirely. This is the check that reports the checker's own blind spots: without it a clean run is ambiguous between "everything here is correct" and "nothing here was read", and a slot can hold hundreds of unverified entries while the report stays empty. Off by default because a project mid-migration lights up everywhere. The reference checks carry no exemptions: every `@<Name>` mention must resolve, which is what makes the check trustworthy. Documentation about the reference syntax itself uses the angle-bracket placeholder form (`@<TermName>`) that is deliberately outside the reference grammar, so it never needs one."
+        description: "Mechanical consistency pass over the whole project — everything about a spec that can be proven true or false without reading source or judging meaning. Builds the term map once, then calls _walk_terms(include_all=true) for a single-pass traversal, and returns a flat list of {severity, check, term, path, line, message} sorted by severity then path, where severity is 'error' or 'warning', `check` is a stable slug for filtering and CI diffing, and `line` is absent when the originating check does not yield an offset. An empty list means the spec is internally consistent. Complements rather than replaces @DuckspecProject#verify_source, which covers the semantic half — whether descriptions actually match the implementation — that no regex can settle. Checks: `dangling-ref` — an @<TermName> mention with no term of that name in the map; `broken-path-ref` — an @<TermName>#segment#segment reference whose segments do not resolve; `ambiguous-path-ref` — a segment matching more than one entry at the level it is searched, which the resolver would otherwise silently narrow to whichever came first; `unknown-extends` — an `extends:` naming a term absent from the map; `extends-cycle` — an `extends:` chain that revisits a term, which _extends_chain_from otherwise truncates silently; `duplicate-term` — one term name defined in several files, from _duplicate_terms; `unparsed-term` — a `.yaml` in a terms folder with no `description:` at zero indentation, which regex-based extraction would otherwise read as empty rather than as broken; `broken-uses` — a `uses:` entry that resolves to nothing, split by why: a relative path with no file at the other end is an error, since the path is simply wrong, while a repository URL absent from the active workspace is a warning, since the spec is correct and it is the environment that has not cloned or registered that project. Both were silently skipped before, which is how a sub-project could be dropped from the term map with nothing said: the entry vanished, every term it would have contributed became a dangling reference somewhere else, and the report named those instead of the one line that caused them; `broken-operation` — a workflow step whose `operation` is not a call to a recipe: not in the `@<TermName>#<recipe>(<argument>=<value>, ...)` form, naming something that is not a recipe of that term or its ancestors, or passing an argument the recipe does not declare. A reference that merely resolves is not enough here — `broken-path-ref` accepts a component that describes a pipeline file, and a step pointing at one looks implemented while nothing could ever run it; `unknown-field` — a field set on something of known type that no type it has declares, where the schema is composed from the slot's `type:` and the target's own `type:` via _schema. It covers both shapes a typed slot takes: a list of named entries, each checked on its own via _slot_items, and a single mapping such as `settings:`, `workflow:` or `versioning:`, checked as a whole via _slot_mapping, which may name its type in its own `type:` key instead of on the slot. Untyped slots are checked in neither shape — silence about a slot means nothing was verified there, not that it was found correct. A third shape is the term's own top-level fields, read against its `extends` chain: `description`, `extends`, `name` and the declaration blocks (`properties`, `recipes`, `guidelines`, `ai_instructions`) are structural and always allowed, and everything else must be declared by the term or one of its ancestors. Without this the `extends:` mechanism bought nothing at the top level — a term could set any field at all, including a whole slot no type describes, and the report stayed empty; `redeclared-member` — a `properties:` entry an ancestor already declares, which inheritance would replace silently; recipes are deliberately not checked, since re-declaring them is how a subtype implements a base term's contract; `unreachable-term` (warning, opt-in via the `unreachable` argument) — a term in the map that no reachable term mentions; off by default because a framework or library project ships terms meant for consumer projects, where every one of them is legitimately unreachable from its own root and would drown the report; `untyped-slot` (warning, opt-in via the `untyped` argument) — a slot holding named entries or a mapping whose element type no type declares, so `unknown-field` skipped it entirely. This is the check that reports the checker's own blind spots: without it a clean run is ambiguous between "everything here is correct" and "nothing here was read", and a slot can hold hundreds of unverified entries while the report stays empty. Off by default because a project mid-migration lights up everywhere. The reference checks carry no exemptions: every `@<Name>` mention must resolve, which is what makes the check trustworthy. Documentation about the reference syntax itself uses the angle-bracket placeholder form (`@<TermName>`) that is deliberately outside the reference grammar, so it never needs one."
         arguments:
           - id: project_path
             description: a @DuckspecProject .yaml file — a filesystem path, or the identifier of a project registered in the active @Workspace (see _resolve_project)
@@ -311,7 +316,7 @@ components:
           - id: untyped
             description: if true, also report slots whose contents no check reads; default false
       - id: verify_source
-        description: The mechanical half of @DuckspecProject#verify_source — the part settled without reading code. Walks the terms living under the root project's own directory (a dependency's source is its own project's business) and returns findings shaped like verify_project's. Checks: `missing-src` — a `src:` value with no file or directory at that path, skipping the one under `settings:`, which defines the source root rather than naming somewhere inside it and would otherwise be resolved against itself; `absent-function` — a function entry whose id appears nowhere in the source its nearest enclosing component declares, skipping ids listed in that component's type's `implicit_functions`, which name a role rather than a symbol. The match is a plain word-boundary search, and stays one deliberately: a check that tried to recognise declarations would have to enumerate every way each language lets you write one, and the first idiom it had not thought of would be an error raised against working code. What it does control is which bytes it reads — each candidate file is searched on its own (see _source_files), never as one concatenated blob, so a name defined in one module cannot answer for a component pointing at another, and unreadable files are skipped rather than decoded, so compiled bytecode cannot vouch for a name the sources have dropped. Each term resolves paths against its owning project: for a term at `<dir>/<Name>.yaml` that is `<dir>.yaml`, per the convention that a terms folder sits beside the project file naming it, and the source root is that project's `settings.src` (default `..`). It deliberately does not judge whether a description matches the implementation — the largest part of the recipe, where every contradiction found in the Borshevik audit lived, and which no search settles.
+        description: The mechanical half of @DuckspecProject#verify_source — the part settled without reading code. Walks the terms living under the root project's own directory (a dependency's source is its own project's business) and returns findings shaped like verify_project's. Checks: `missing-src` — a `src:` value with no file or directory at that path, skipping the one under `settings:`, which defines the source root rather than naming somewhere inside it and would otherwise be resolved against itself, and skipping values starting with `~` — a path in the user's home, such as the settings registry, which no repository ships — or `@`, which name a term rather than a path; `absent-function` — a function entry whose id appears nowhere in the source its nearest enclosing component declares, skipping ids listed in that component's type's `implicit_functions`, which name a role rather than a symbol. The match is a plain word-boundary search, and stays one deliberately: a check that tried to recognise declarations would have to enumerate every way each language lets you write one, and the first idiom it had not thought of would be an error raised against working code. What it does control is which bytes it reads — each candidate file is searched on its own (see _source_files), never as one concatenated blob, so a name defined in one module cannot answer for a component pointing at another, and unreadable files are skipped rather than decoded, so compiled bytecode cannot vouch for a name the sources have dropped. Each term resolves paths against its owning project's source root, found by _source_root. It deliberately does not judge whether a description matches the implementation — the largest part of the recipe, where every contradiction found in the Borshevik audit lived, and which no search settles.
         arguments:
           - id: project_path
             description: a @DuckspecProject .yaml file or a registered project identifier
@@ -352,7 +357,7 @@ components:
           - id: slot
             description: the slot whose entries to list
       - id: _locate
-        description: Returns (file, lines, start, end) for the element a `#`-path addresses, or an error string. Narrows segment by segment through _narrow, tracking line numbers so the boundaries can be edited, and refuses an ambiguous step instead of taking the first match. Shared by set_field, add_entry and remove_element, so the three can never disagree about what a path points at.
+        description: Returns (file, lines, start, end) for the element a `#`-path addresses, or an error string. Narrows segment by segment through _narrow, tracking line numbers so the boundaries can be edited, and refuses an ambiguous step instead of taking the first match. Shared by every editing operation — set_field, add_entry, remove_element and the four item operations — so none of them can disagree with another about what a path points at.
         arguments:
           - id: project_path
             description: a @DuckspecProject .yaml file or a registered project identifier
@@ -379,7 +384,7 @@ components:
           - id: entry_id
             description: id for the new entry, unique among the slot's existing entries
           - id: fields
-            description: "mapping of field name to value written under the new entry, e.g. {description: ...}"
+            description: "mapping of field name to value written under the new entry, e.g. {description: ...}; a list or mapping value is written as a nested block via _field_lines, so `arguments: [{id: ..., description: ...}]` becomes named entries"
       - id: remove_element
         description: Removes the element a `#`-path addresses, together with everything nested under it, locating its boundaries through _locate. Removing a block by regex is what left orphaned loop bodies in the resolver mid-migration; boundaries computed from indentation cannot do that. Refuses on an ambiguous path. Returns the file path and the number of lines removed.
         arguments:
@@ -387,64 +392,78 @@ components:
             description: a @DuckspecProject .yaml file or a registered project identifier
           - id: ref
             description: "`TermName#segment#segment...` — a bare term name is refused, since deleting a whole term file is not this operation's job"
-      - id: _rule_block
-        description: "Line range of a named rule block (`guidelines:`, `ai_instructions:`, `goals:`) in a term file, or None. Rule blocks hold bare strings, so none of the entry-oriented helpers locate them."
+      - id: _find_item
+        description: "Line range of the single item matching a substring inside an already-located list, or an error string. Refuses on more than one match, so an item is never edited by position when the caller meant another one. Takes the range rather than a block name because the list has already been resolved by path — which is what lets the item operations reach lists at any depth."
         arguments:
           - id: lines
             description: the file's lines
-          - id: block
-            description: block name to locate
-      - id: _find_rule
-        description: "Line range of the single rule matching a substring inside a block, or an error string. Refuses on more than one match, so a rule is never edited by position when the caller meant another one."
-        arguments:
-          - id: lines
-            description: the file's lines
-          - id: block
-            description: block to search
+          - id: start
+            description: first line of the located list
+          - id: end
+            description: line after the located list
           - id: match
-            description: substring identifying the rule
+            description: substring identifying the item
+      - id: _item_line
+        description: "One list item rendered at the given column. Quotes the value when it holds a colon or a hash, which would otherwise read as structure, and escapes a quote already inside it rather than letting it close the quoting early and leave a line that still looks like valid YAML."
+        arguments:
+          - id: text
+            description: the item text
+          - id: indent
+            description: column to write the item at
+      - id: _item_text
+        description: "The text of one list item, the inverse of _item_line: double quotes are undone together with the escapes inside them, single quotes with their doubled `''`, and a value continued over several lines is joined the way YAML folds it. move_item takes an item's text out and writes it back through add_item, and stripping only the outer quotes left the escapes behind to be escaped a second time, so every quote in a moved rule came back with its escape doubled."
+        arguments:
+          - id: item_lines
+            description: the item's lines, first of which carries the `- ` marker
       - id: _term_file
-        description: "Path of one term's file, or None when the project's term map does not hold it. The lookup every rule and lifecycle operation starts from."
+        description: Path of one term's file, or None when the project's term map does not hold it. Used by remove_term to find the file it deletes.
         arguments:
           - id: project_path
             description: a @DuckspecProject .yaml file or a registered project identifier
           - id: term_name
             description: the term to locate
-      - id: add_rule
-        description: "Appends a rule to a term's `guidelines:`, `ai_instructions:` or `goals:`, creating the block when absent. These hold bare strings rather than named entries, so set_field and remove_element cannot reach them."
+      - id: add_item
+        description: "Appends a bare string to the list a Term#path addresses — a term's `guidelines:`, `ai_instructions:` or `goals:`, a recipe's `instructions:`, a project's `software:` or `uses:` — creating the block when absent, and inserting after a named neighbour when `after` is given. These lists hold strings rather than named entries, so set_field and remove_element have nothing to address; addressing the list by path rather than by term plus block name is what lets the same operation reach a recipe's instructions, which sit two levels down and were previously reachable by nothing."
         arguments:
           - id: project_path
             description: a @DuckspecProject .yaml file or a registered project identifier
-          - id: term_name
-            description: the term to add the rule to
-          - id: block
-            description: guidelines, ai_instructions or goals
+          - id: ref
+            description: TermName#segment... ending at the list to append to
           - id: text
-            description: the rule text, quoted automatically when it would otherwise break the YAML
-      - id: remove_rule
-        description: "Removes the rule matching a substring from one of a term's rule blocks, deleting the block when it empties. Refuses when the substring matches more than one rule rather than removing whichever came first."
+            description: the text to add, quoted automatically when it would otherwise break the line
+          - id: after
+            description: substring identifying the item to insert after; appended at the end when omitted
+      - id: set_item
+        description: "Replaces the text of the item matching a substring, in place. Without it the only way to reword an item is remove plus add, which appends — so an edit silently relocates the item to the end of its block, past whatever it was deliberately grouped with. Refuses an ambiguous match the way remove_item does."
         arguments:
           - id: project_path
             description: a @DuckspecProject .yaml file or a registered project identifier
-          - id: term_name
-            description: the term to remove the rule from
-          - id: block
-            description: guidelines, ai_instructions or goals
+          - id: ref
+            description: TermName#segment... ending at the list holding the item
           - id: match
-            description: substring identifying the rule
-      - id: move_rule
-        description: "Moves a rule verbatim from one of a term's blocks to another. Reclassifying a rule — the test is whether it describes the format or directs the model — is a routine correction that by hand risks dropping or duplicating the text."
+            description: substring identifying the item
+          - id: text
+            description: the replacement text
+      - id: remove_item
+        description: "Removes the item matching a substring, deleting the block when it empties. Refuses when the substring matches more than one item rather than removing whichever came first."
         arguments:
           - id: project_path
             description: a @DuckspecProject .yaml file or a registered project identifier
-          - id: term_name
-            description: the term holding the rule
-          - id: from_block
-            description: block the rule currently sits in
-          - id: to_block
-            description: block to move it to
+          - id: ref
+            description: TermName#segment... ending at the list holding the item
           - id: match
-            description: substring identifying the rule
+            description: substring identifying the item
+      - id: move_item
+        description: "Moves an item verbatim from one list to another, in the same term or a different one. Reclassifying a rule — the test is whether it describes the format or directs the model — is a routine correction that by hand risks dropping or duplicating the text."
+        arguments:
+          - id: project_path
+            description: a @DuckspecProject .yaml file or a registered project identifier
+          - id: from_ref
+            description: TermName#segment... the item currently sits in
+          - id: to_ref
+            description: TermName#segment... to move it to
+          - id: match
+            description: substring identifying the item
       - id: create_term
         description: "Creates a term file in the project's terms folder with a description and a parent. The filename is the identity, so it is derived from the name rather than left to drift apart from it."
         arguments:
@@ -485,7 +504,7 @@ components:
           - id: name
             description: name of an existing workspace to activate
       - id: list_projects
-        description: "Reads the settings file, then for every workspace reads each registered project's own file to extract `name:`/`description:` via regex. Returns `{active_workspace, workspaces: {name: {projects: [{repository, path, name, description}]}}}`. A project whose file is missing or unreadable still lists (`name: None`) rather than being dropped, so a stale registry entry stays visible instead of hidden."
+        description: "Reads the settings file, then for every workspace reads each registered project's own file: `name` is the file's stem — the project's identity, not its `name:` display label — and `description:` is extracted via regex. Returns `{active_workspace, workspaces: {name: {projects: [{repository, path, name, description}]}}}`. A project whose file is missing or unreadable still lists (`name: None`) rather than being dropped, so a stale registry entry stays visible instead of hidden."
       - id: add_project
         description: "Reads `repository:` from the file at `project_path` via regex; returns None (no write) if absent. Otherwise resolves the target workspace (the given `workspace_name`, or the active workspace if omitted; returns None if neither resolves), creates it if missing, and sets `projects[repository] = str(project_path.resolve())`. Returns the repository URL used."
         arguments:
@@ -503,13 +522,22 @@ components:
       - id: _source_files
         description: The files a function id is searched in for the `absent-function` check. Returns the single file when the component points at one, and every file beneath it when it points at a folder — cached per folder, since a package's functions all resolve to the same list. Skips `__pycache__`, `.git` and the other build caches outright. The folder's content used to be concatenated into one string instead, which gave the check two ways to be satisfied by something that is not there: a name defined in a sibling module, and compiled `.pyc` bytecode — stale by days against its own source — still carrying a name the sources had dropped. Returning nothing for a folder is what made the check's first run read none of @DuckToolsApp's 103 functions and still report no findings.
       - id: _source_root
-        description: The directory a term's `src:` values resolve against. Finds the project owning the term by scanning the term folder's siblings for the `.yaml` whose `terms_folder:` names that folder — matching on the declaration rather than on the folder's name, since @DuckTools keeps its terms in `ducktools/` while its file is `DuckTools.yaml`. The root is that project's `settings.src`, defaulting to `..`. Falls back to the term's own directory when no owner declares it.
+        description: The directory a term's `src:` values resolve against. Finds the project owning the term by scanning the term folder's siblings for the `.yaml` whose `terms_folder:` names that folder — matching on the declaration rather than on the folder's name, since @DuckTools keeps its terms in `ducktools/` while its file is `DuckTools.yaml`. The root is that project's `settings.src`, defaulting to `..`. A term no sibling claims — a root project file, which sits beside its terms folder rather than in it — is read as its own project, so its own `settings.src` applies; only a file that cannot be read falls back to the term's own directory.
       - id: _quoted
-        description: Module-level pure function. A value about to be written into a term file, wrapped in double quotes when leaving it bare would read as structure rather than text: a colon-space inside it, a trailing colon, or a leading character carrying YAML meaning. Values already quoted are left alone. Term files are read by regex here, so a bare colon does no damage today; quoting keeps tool-written entries indistinguishable from hand-written ones and keeps the files readable by anything stricter. Used by add_entry.
+        description: Module-level pure function. A value about to be written into a term file, wrapped in double quotes when leaving it bare would read as structure rather than text: a colon-space inside it, a trailing colon, or a leading character carrying YAML meaning. Values already quoted are returned as they are. A bare term reference such as `@Recipe` is the exception and is left unquoted, because every other place in the format writes it that way — `extends: @Term`, `type: @Field` — and when this function quoted it, every parser of `type:` missed the slot's element type, so the slot read as untyped and unknown-field skipped every entry in it. That is how a workflow's steps went unchecked.
       - id: _src_values
         description: Module-level pure function. The paths one `src:` declares, whether it names a single path inline or lists several beneath itself. Both forms are ordinary in a spec — a component points at its own module, while the @Software above it points at every file its code is split across — but only the inline one used to be read, so every function under a list-form `src:` was left with no path at all, and a function with no path is one `absent-function` skips in silence. Five of Borshevik's image-manager functions sat in exactly that position, under a `src:` naming two files at once.
       - id: _element_paths
         description: Module-level pure function. For each line of a term, the `#`-path segments of the element that line belongs to. Keeps a stack of open elements by indentation, pushing both kinds of segment a path can name — a `key:` opening a block, and a `- id:` entry inside one — and popping whatever the current indentation has closed. Used by grep_terms to give every hit an address rather than a bare line.
+      - id: _field_lines
+        description: "Module-level pure function. One field written at a column, with whatever it holds nested beneath it: a mapping as keys two columns in, a list as `- ` items, and a list item that is itself a mapping with its first key on the marker line, the way every entry in the format is written. Scalars go through _quoted. What lets add_entry write an entry with nested blocks — a function with its `arguments`, a component with its `functions` — in one call instead of leaving them to be written by hand."
+        arguments:
+          - id: field
+            description: the field name
+          - id: value
+            description: a scalar, a mapping or a list
+          - id: column
+            description: indentation of the field itself
   - id: settings
     type: @ConfigFile
     format: JSON
@@ -526,10 +554,15 @@ components:
           - id: command
             description: optional command to describe in detail; omitted prints the full reference
       - id: load-project
-        description: "Command `ducktools load-project <project_path>`; calls resolver#load_project; prints the root project file content followed by Terms, Recipes, References, and Rules (project-wide) markdown tables"
+        description: Command `ducktools load-project <project_path>`; calls resolver#load_project; prints the root project file content, then a Workflow section carrying the `workflow` note, followed by Terms, Recipes, References, and Rules (project-wide) markdown tables
         arguments:
           - id: project_path
             description: a @DuckspecProject .yaml file — a filesystem path, or the identifier of a project registered in the active @Workspace (see _resolve_project)
+      - id: load-workflow
+        description: "Command `ducktools load-workflow <project_path>`; calls resolver#load_workflow; prints the workflow term's name as a heading, the root's own `workflow:` block under `## As this project configures it`, then the term blocks load-terms would print for it — or the error when no workflow is configured"
+        arguments:
+          - id: project_path
+            description: a @DuckspecProject .yaml file or a registered project identifier
       - id: list-terms
         description: "Command `ducktools list-terms <project_path> [--all]`; calls resolver#list_terms; prints a markdown table with columns Term, File, and Description"
         arguments:
@@ -538,12 +571,12 @@ components:
           - id: --all
             description: pass to resolver#list_terms as include_all=true
       - id: load-terms
-        description: "Command `ducktools load-terms <project_path> <TermName> [TermName ...]`; calls resolver#load_terms; prints each term as `--- @<TermName> [file_path] ---\\n<yaml content>`, followed by a `## Rules for @<TermName>` own/inherited breakdown for each explicitly requested term (not its transitive dependencies)"
+        description: Command `ducktools load-terms <project_path> <TermName> [TermName ...]`; calls resolver#load_terms; prints each term and each ancestor of its `extends` chain as `--- @<TermName> [file_path] ---\n<yaml content>`, followed, for each explicitly requested term only, by a References line naming the terms it mentions without loading them and a `## Rules for @<TermName>` own/inherited breakdown
         arguments:
           - id: project_path
             description: a @DuckspecProject .yaml file — a filesystem path, or the identifier of a project registered in the active @Workspace (see _resolve_project)
           - id: term_names
-            description: one or more term names (without @) to load with their transitive dependencies
+            description: one or more term names (without @) to load with their `extends` chains
       - id: grep
         description: Command `ducktools grep <project_path> <query> [--all]`; calls resolver#grep_terms; prints a markdown table of Reference, Line and matching text, where the reference is the `#`-path of the element the hit sits in and can be passed straight to resolve-path or set. Only the first three hits per term are printed and the text is cut at 100 characters — a keyword common enough to appear a dozen times in one term would otherwise bury the terms below it.
         arguments:
@@ -586,7 +619,7 @@ components:
           - id: value
             description: the value to set it to
       - id: add
-        description: "Command `ducktools add <project> <ref> <entry_id> [field=value ...]`; calls resolver#add_entry; prints the file touched and the id added. Each trailing argument is split on the first `=`, so `description='...'` reads naturally in a shell."
+        description: "Command `ducktools add <project> <ref> <entry_id> [field=value ...]`; calls resolver#add_entry; prints the file touched and the id added. Each trailing argument is split on the first `=`, so `description='...'` reads naturally in a shell; a value starting with `[` or `{` is read as JSON and becomes a nested block, and one that is not valid JSON is refused with the parse error."
         arguments:
           - id: project_path
             description: a @DuckspecProject .yaml file or a registered project identifier
@@ -603,6 +636,75 @@ components:
             description: a @DuckspecProject .yaml file or a registered project identifier
           - id: ref
             description: "`TermName#segment#segment...`"
+      - id: add-item
+        description: "Command `ducktools add-item <project> <Term#path> <text> [--after M]`; calls resolver#add_item; prints what it returns."
+        arguments:
+          - id: project_path
+            description: a @DuckspecProject .yaml file or a registered project identifier
+          - id: ref
+            description: TermName#segment... ending at the list to append to
+          - id: text
+            description: the text to add
+          - id: --after
+            description: substring identifying the item to insert after
+      - id: set-item
+        description: "Command `ducktools set-item <project> <Term#path> <match> <text>`; calls resolver#set_item; prints what it returns."
+        arguments:
+          - id: project_path
+            description: a @DuckspecProject .yaml file or a registered project identifier
+          - id: ref
+            description: TermName#segment... ending at the list holding the item
+          - id: match
+            description: substring identifying the item
+          - id: text
+            description: the replacement text
+      - id: remove-item
+        description: "Command `ducktools remove-item <project> <Term#path> <match>`; calls resolver#remove_item; prints what it returns."
+        arguments:
+          - id: project_path
+            description: a @DuckspecProject .yaml file or a registered project identifier
+          - id: ref
+            description: TermName#segment... ending at the list holding the item
+          - id: match
+            description: substring identifying the item
+      - id: move-item
+        description: "Command `ducktools move-item <project> <from#path> <to#path> <match>`; calls resolver#move_item; prints what it returns."
+        arguments:
+          - id: project_path
+            description: a @DuckspecProject .yaml file or a registered project identifier
+          - id: from_ref
+            description: TermName#segment... the item currently sits in
+          - id: to_ref
+            description: TermName#segment... to move it to
+          - id: match
+            description: substring identifying the item
+      - id: create-term
+        description: "Command `ducktools create-term <project> <TermName> <description> [--extends T]`; calls resolver#create_term; prints what it returns."
+        arguments:
+          - id: project_path
+            description: a @DuckspecProject .yaml file or a registered project identifier
+          - id: term_name
+            description: CamelCase name, which becomes both the filename and the identity
+          - id: description
+            description: what the term represents
+          - id: --extends
+            description: parent term name; defaults to Term
+      - id: rename-term
+        description: "Command `ducktools rename-term <project> <OldName> <NewName>`; calls resolver#rename_term; prints what it returns."
+        arguments:
+          - id: project_path
+            description: a @DuckspecProject .yaml file or a registered project identifier
+          - id: old_name
+            description: current term name
+          - id: new_name
+            description: new term name
+      - id: remove-term
+        description: "Command `ducktools remove-term <project> <TermName>`; calls resolver#remove_term; prints what it returns."
+        arguments:
+          - id: project_path
+            description: a @DuckspecProject .yaml file or a registered project identifier
+          - id: term_name
+            description: the term to delete
       - id: uses
         description: "Command `ducktools uses <project> <TermName>`; calls resolver#term_uses; prints one line per relation — extended by, typed by, referenced by."
         arguments:
@@ -674,10 +776,15 @@ components:
     description: MCP front end over stdio, exposing the same resolver surface as cli. Implements JSON-RPC 2.0 directly — no SDK, in keeping with the zero-dependency rule — and returns the same markdown the CLI prints, so a model and a terminal see identical output; where the two drifted apart the CLI's wording is the one to match, since it is what a person reads. Each request carries its own project_path, so one server instance serves every registered project. The version it announces in `initialize` is read from the framework's own `version:` field rather than written here, after a hardcoded one told every client 0.1.0 throughout the 0.10 series.
     functions:
       - id: load_project
-        description: "MCP tool `load_project`; calls resolver#load_project; returns the root project file content followed by Terms, Recipes, References, and Rules (project-wide) markdown tables. Primary entry point — call this first when starting work on a project."
+        description: MCP tool `load_project`; calls resolver#load_project; returns the root project file content, a Workflow section carrying the `workflow` note, then Terms, Recipes, References, and Rules (project-wide) markdown tables. Primary entry point — call this first when starting work on a project.
         arguments:
           - id: project_path
             description: a @DuckspecProject .yaml file — a filesystem path, or the identifier of a project registered in the active @Workspace (see _resolve_project)
+      - id: load_workflow
+        description: "MCP tool `load_workflow`; calls resolver#load_workflow; returns the workflow term's name as a heading, the root's own `workflow:` block under `## As this project configures it`, then the same term blocks load_terms returns for it — or the error when no workflow is configured"
+        arguments:
+          - id: project_path
+            description: a @DuckspecProject .yaml file or a registered project identifier
       - id: list_terms
         description: "MCP tool `list_terms`; calls resolver#list_terms; returns a markdown table with columns Term, File, and Description"
         arguments:
@@ -686,7 +793,7 @@ components:
           - id: all
             description: pass to resolver#list_terms as include_all=true; default false
       - id: load_terms
-        description: "MCP tool `load_terms`; calls resolver#load_terms; returns formatted term blocks `--- @<TermName> [path] ---\\n<content>` for the requested terms and their transitive dependencies, with a `## Rules for @<TermName>` own/inherited breakdown appended for each explicitly requested term"
+        description: MCP tool `load_terms`; calls resolver#load_terms; returns formatted term blocks `--- @<TermName> [path] ---\n<content>` for the requested terms and each ancestor of their `extends` chains, with a References line and a `## Rules for @<TermName>` own/inherited breakdown appended for each explicitly requested term
         arguments:
           - id: project_path
             description: a @DuckspecProject .yaml file — a filesystem path, or the identifier of a project registered in the active @Workspace (see _resolve_project)
@@ -751,6 +858,75 @@ components:
             description: a @DuckspecProject .yaml file or a registered project identifier
           - id: ref
             description: "`TermName#segment#segment...`"
+      - id: add_item
+        description: "MCP tool `add_item`; calls resolver#add_item. Prefer it over hand-editing a guideline, instruction or goal list: the item is written at the list's own column and quoted when it would otherwise read as structure."
+        arguments:
+          - id: project_path
+            description: a @DuckspecProject .yaml file or a registered project identifier
+          - id: ref
+            description: TermName#segment... ending at the list to append to
+          - id: text
+            description: the text to add
+          - id: after
+            description: substring identifying the item to insert after; appended at the end when omitted
+      - id: set_item
+        description: "MCP tool `set_item`; calls resolver#set_item."
+        arguments:
+          - id: project_path
+            description: a @DuckspecProject .yaml file or a registered project identifier
+          - id: ref
+            description: TermName#segment... ending at the list holding the item
+          - id: match
+            description: substring identifying the item
+          - id: text
+            description: the replacement text
+      - id: remove_item
+        description: "MCP tool `remove_item`; calls resolver#remove_item."
+        arguments:
+          - id: project_path
+            description: a @DuckspecProject .yaml file or a registered project identifier
+          - id: ref
+            description: TermName#segment... ending at the list holding the item
+          - id: match
+            description: substring identifying the item
+      - id: move_item
+        description: "MCP tool `move_item`; calls resolver#move_item."
+        arguments:
+          - id: project_path
+            description: a @DuckspecProject .yaml file or a registered project identifier
+          - id: from_ref
+            description: TermName#segment... the item currently sits in
+          - id: to_ref
+            description: TermName#segment... to move it to
+          - id: match
+            description: substring identifying the item
+      - id: create_term
+        description: "MCP tool `create_term`; calls resolver#create_term."
+        arguments:
+          - id: project_path
+            description: a @DuckspecProject .yaml file or a registered project identifier
+          - id: term_name
+            description: CamelCase name, which becomes both the filename and the identity
+          - id: description
+            description: what the term represents
+          - id: extends
+            description: parent term name; defaults to Term
+      - id: rename_term
+        description: "MCP tool `rename_term`; calls resolver#rename_term."
+        arguments:
+          - id: project_path
+            description: a @DuckspecProject .yaml file or a registered project identifier
+          - id: old_name
+            description: current term name
+          - id: new_name
+            description: new term name
+      - id: remove_term
+        description: "MCP tool `remove_term`; calls resolver#remove_term."
+        arguments:
+          - id: project_path
+            description: a @DuckspecProject .yaml file or a registered project identifier
+          - id: term_name
+            description: the term to delete
       - id: term_uses
         description: "MCP tool `term_uses`; calls resolver#term_uses; returns one line per relation. Call it before changing a term to see what depends on it."
         arguments:
@@ -817,7 +993,7 @@ components:
     type: @Script
     interpreter: python3
     src: ducktools/check_wiring.py
-    description: "Compares the public methods of resolver.py against the ones cli.py and mcp_server.py actually call, and fails naming the orphans. Exists because comparing the spec with the code confirms a method is *described*, not that it is *reachable*: six operations shipped in 0.10.1 and 0.10.2 fully documented and callable from neither front end."
+    description: "Reachability both ways round. Compares the public methods of resolver.py against the ones cli.py and mcp_server.py actually call, and the CLI commands and MCP tools the front ends define against the function entries of @DuckToolsApp#cli and @DuckToolsApp#mcp_server, failing on anything present on one side only. The first half exists because comparing the spec with the code confirms a method is *described*, not that it is *reachable*: six operations shipped in 0.10.1 and 0.10.2 fully documented and callable from neither front end. The second because verify_source only looks from the spec towards the code, so a command added without a spec entry is invisible to it: eight commands and eight tools went undescribed that way until the code was read by hand."
   - id: install-script
     type: @ShellScript
     interpreter: bash
@@ -827,4 +1003,4 @@ components:
     type: @Script
     interpreter: python3
     src: ducktools/check_operations.py
-    description: Exercises every public resolver method against a throwaway project built in a temp directory, and fails naming the ones whose result was wrong. Complements check-wiring, which proves a method is reachable but never calls it: the operations that write to term files shipped untested, and every defect found in them so far was found by hand. Redirects the settings path at import so the workspace methods cannot touch the real registry.
+    description: Exercises every public resolver method against a throwaway project built in a temp directory, then runs every CLI command and every MCP tool once over the same project — the stdio server included, fed an initialize and a tools/list — and fails naming the ones whose result was wrong, and any method, command or tool it did not run. Complements check-wiring, which proves a method is reachable but never calls it: the operations that write to term files shipped untested, and every defect found in them so far was found by hand. The front-end half exists because a method can be right while what a reader sees is not: load_project returned a pointer to the workflow that neither front end printed. Redirects the settings path at import so the workspace methods cannot touch the real registry.

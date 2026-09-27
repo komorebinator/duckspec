@@ -84,6 +84,17 @@ check('list_terms', any(t['name'] == 'Widget' for t in terms), f'got {terms}')
 blocks = r.load_terms(project, ['Widget'])
 check('load_terms', 'turns the widget once' in str(blocks))
 
+# the chain is inlined because a term is incomplete without it — its inherited members are its
+# own. Everything else it mentions is a neighbour, named rather than loaded: following mentions
+# returned the whole corpus on every call, because a guideline citing @Key as an example of a
+# name taken on GitHub is not a dependency on @Key
+_names = [b['name'] for b in blocks]
+check('load_terms/chain-only',
+      _names == ['Widget', 'Software', 'DesignPattern', 'Term'], f'got {_names}')
+_w = [b for b in blocks if b['name'] == 'Widget'][0]
+check('load_terms/references-named',
+      'references' in _w and 'Gadget' not in _names, f'got {_w.get("references")}')
+
 hits = r.grep_terms(project, 'colour')
 check('grep_terms', any('Widget' == h['name'] for h in hits), f'got {hits}')
 
@@ -108,6 +119,31 @@ check('resolve_path/ambiguous', _amb is not None and 'ambiguous' in _amb.get('er
       f'got {_amb}')
 _twin.unlink()
 
+# the workflow is not carried by load_project — nothing is in hand when a project is opened — so
+# the overview names it and load_workflow fetches it. The chain, not the reference graph: following
+# @TermName mentions out of a workflow's prose reached 57 terms and three times the load_project
+# output, which is the opposite of a targeted call
+_lp = r.load_project(project)
+check('load_project/workflow-hint',
+      _lp['workflow']['name'] is None and 'no `workflow:`' in _lp['workflow']['note'],
+      f"got {_lp['workflow']}")
+check('load_workflow/unconfigured', 'error' in r.load_workflow(project),
+      f'got {r.load_workflow(project)}')
+
+_root = Path(project)
+_before = _root.read_text()
+_root.write_text(_before + 'workflow:\n  type: @GitHubWorkflow\n  main_branch: trunk\n')
+_wf = r.load_workflow(project)
+check('load_workflow',
+      _wf.get('name') == 'GitHubWorkflow'
+      and 'main_branch: trunk' in _wf['configuration']
+      and [t['name'] for t in _wf['terms']] == ['GitHubWorkflow', 'DuckWorkflow', 'DesignPattern', 'Term']
+      and 'rules' in _wf['terms'][0],
+      f"got {_wf.get('name')} / {[t['name'] for t in _wf.get('terms', [])]}")
+check('load_project/workflow-hint-set',
+      r.load_project(project)['workflow']['name'] == 'GitHubWorkflow')
+_root.write_text(_before)
+
 check('verify_project', r.verify_project(project) == [], f'got {r.verify_project(project)}')
 check('verify_source', r.verify_source(project) == [], f'got {r.verify_source(project)}')
 
@@ -120,6 +156,55 @@ _w.write_text(_orig + 'invented_field: nothing declares this\n')
 _top = [f for f in r.verify_project(project)
         if f['check'] == 'unknown-field' and 'invented_field' in f['message']]
 check('verify_project/top-level-field', len(_top) == 1, f'got {r.verify_project(project)}')
+_w.write_text(_orig)
+
+# a `uses:` entry that resolved to nothing was skipped in silence, so the project it named simply
+# left the term map and the report blamed the dangling references that followed. The two ways it
+# fails are different in kind: a wrong relative path is a defect in the spec, while a URL missing
+# from the workspace means the spec is right and this machine has not cloned that project
+_root = Path(project)
+_saved = _root.read_text()
+_root.write_text(_saved.replace('uses:\n', 'uses:\n  - ./nowhere.yaml\n'
+                                '  - https://example.invalid/never-registered\n', 1))
+_bu = [f for f in r.verify_project(project) if f['check'] == 'broken-uses']
+check('verify_project/broken-uses',
+      sorted((f['severity'], 'nowhere' in f['message']) for f in _bu)
+      == [('error', True), ('warning', False)], f'got {_bu}')
+_root.write_text(_saved)
+
+# a file with a `uses:` block is still a term: when the broken-uses check was added it ended in a
+# `continue`, and every project file — the ones every other term hangs off — went unchecked for
+# dangling references from then on while the report stayed empty
+_root.write_text(_saved + 'goals:\n  - Mention @NoSuchTermAnywhere\n')
+_dr = [f for f in r.verify_project(project) if f['check'] == 'dangling-ref']
+check('verify_project/refs-in-project-file',
+      any('NoSuchTermAnywhere' in f['message'] for f in _dr), f'got {_dr}')
+_root.write_text(_saved)
+
+# a step's operation has to be something that can be run. A reference that merely resolves is not
+# enough: a function or a component describing a file resolves fine, and a step pointing at one
+# looks implemented while nothing could perform it
+_flow = Path(project).parent / 'Fixture' / 'Flow.yaml'
+_flow.write_text('description: A workflow for the operation checks.\nextends: @DuckWorkflow\nsteps:\n'
+                 '  - id: good\n    when: always\n    operation: "@Git#push(branch=main)"\n'
+                 '  - id: not_a_recipe\n    when: always\n    operation: "@Widget#spin"\n'
+                 '  - id: bad_argument\n    when: always\n    operation: "@Git#push(bogus=1)"\n'
+                 '  - id: bad_form\n    when: always\n    operation: "@Git#push#deeper"\n')
+_ops = [f for f in r.verify_project(project) if f['check'] == 'broken-operation']
+_hit = sorted(f["message"].split("'")[1] for f in _ops)
+check('verify_project/broken-operation',
+      _hit == ['bad_argument', 'bad_form', 'not_a_recipe'], f'got {_hit}')
+_flow.unlink()
+
+# add_entry once wrote `type: "@X"` and every parser of `type:` expected it bare, so the slot read
+# as untyped and unknown-field skipped every entry in it — a workflow's steps went unchecked. A term
+# reference is now written bare, and a quoted one is still recognised
+r.add_entry(project, 'Widget#properties', 'parts', {'type': '@Gadget', 'description': 'its parts'})
+check('add_entry/bare-term-ref', '    type: @Gadget\n' in _w.read_text(), _w.read_text())
+_w.write_text(_w.read_text().replace('    type: @Gadget\n', '    type: "@Gadget"\n')
+              + 'parts:\n  - id: cog\n    invented: nothing declares this\n')
+_q = [f for f in r.verify_project(project) if f['check'] == 'unknown-field' and 'invented' in f['message']]
+check('verify_project/quoted-type', len(_q) == 1, f'got {r.verify_project(project)}')
 _w.write_text(_orig)
 
 # when the chain cannot be resolved, _schema saw only part of the vocabulary; unknown-extends
@@ -256,18 +341,66 @@ check('add_entry', 'weight' in widget.read_text() and '"how heavy: quite"' in wi
       'a value with a colon must be quoted')
 check('add_entry/duplicate', 'refused' in r.add_entry(project, 'Widget#properties', 'weight', {}))
 
+# a function with arguments could not be added at all: fields were written as scalars only, so a
+# nested block — `arguments:` with entries of its own — had to be written by hand after the call
+r.add_entry(project, 'Widget#functions', 'wobble', {
+    'description': 'tilts the widget',
+    'arguments': [{'id': 'angle', 'description': 'how far: in degrees'}, {'id': 'axis'}],
+    'notes': ['first', 'second'],
+})
+_arg = r.resolve_path(project, 'Widget#wobble#arguments#angle')
+check('add_entry/nested',
+      _arg is not None and '"how far: in degrees"' in _arg['content']
+      and r.resolve_path(project, 'Widget#wobble#axis') is not None
+      and '    notes:\n      - first\n      - second\n' in widget.read_text(),
+      widget.read_text())
+r.remove_element(project, 'Widget#functions#wobble')
+
 r.remove_element(project, 'Widget#weight')
 check('remove_element', 'weight' not in widget.read_text())
 
-r.add_rule(project, 'Widget', 'guidelines', 'A widget spins clockwise.')
-check('add_rule', 'clockwise' in widget.read_text())
+r.add_item(project, 'Widget#guidelines', 'A widget spins clockwise.')
+check('add_item', 'clockwise' in widget.read_text())
 
-r.move_rule(project, 'Widget', 'guidelines', 'ai_instructions', 'clockwise')
-check('move_rule', re.search(r'ai_instructions:\n  - A widget spins clockwise\.', widget.read_text())
-      is not None, widget.read_text())
+# the list is addressed by path, not by term plus block name, so the same operation reaches a
+# recipe's instructions two levels down — which nothing could edit before
+r.add_item(project, 'Widget#spin#instructions', 'Turn it once and stop.')
+check('add_item/nested', 'Turn it once and stop.' in widget.read_text(), widget.read_text())
 
-r.remove_rule(project, 'Widget', 'ai_instructions', 'clockwise')
-check('remove_rule', 'clockwise' not in widget.read_text())
+# `after` puts an item where it belongs rather than at the end
+r.add_item(project, 'Widget#guidelines', 'A widget is round.', after='clockwise')
+check('add_item/after',
+      re.search(r'clockwise\.\n  - A widget is round\.', widget.read_text()) is not None,
+      widget.read_text())
+
+# rewording must not relocate: remove-plus-add would have moved this to the end of the block, past
+# the guideline it was deliberately written before
+r.set_item(project, 'Widget#guidelines', 'clockwise', 'A widget spins the other way.')
+check('set_item',
+      re.search(r'other way\.\n  - A widget is round\.', widget.read_text()) is not None
+      and 'clockwise' not in widget.read_text(), widget.read_text())
+
+# a block that does not exist yet is created rather than refused
+r.add_item(project, 'Widget#goals', 'Spin reliably.')
+check('add_item/creates-block',
+      re.search(r'^goals:\n  - Spin reliably\.', widget.read_text(), re.M) is not None,
+      widget.read_text())
+
+r.move_item(project, 'Widget#guidelines', 'Widget#ai_instructions', 'other way')
+check('move_item', re.search(r'ai_instructions:\n  - A widget spins the other way\.',
+                             widget.read_text()) is not None, widget.read_text())
+
+r.remove_item(project, 'Widget#ai_instructions', 'other way')
+check('remove_item', 'other way' not in widget.read_text())
+
+# moving takes the item's text out and writes it back, so the quoting has to be undone on the way
+# out: stripping only the outer quotes left the escapes inside, and writing escaped them again
+_said = 'Say "spin": never "rotate"'
+r.add_item(project, 'Widget#guidelines', _said)
+r.move_item(project, 'Widget#guidelines', 'Widget#ai_instructions', 'never')
+_moved = r.resolve_path(project, 'Widget#ai_instructions')['content']
+check('move_item/quoted', R.Resolver._item_line(_said, 2).rstrip('\n') in _moved, _moved)
+r.remove_item(project, 'Widget#ai_instructions', 'never')
 
 r.create_term(project, 'Sprocket', 'A sprocket.', '@Term')
 sprocket = Path(project).parent / 'Fixture' / 'Sprocket.yaml'
@@ -279,6 +412,117 @@ check('rename_term', (Path(project).parent / 'Fixture' / 'Cog.yaml').is_file() a
 
 r.remove_term(project, 'Cog')
 check('remove_term', not (Path(project).parent / 'Fixture' / 'Cog.yaml').exists())
+
+# --- front ends --------------------------------------------------------------
+# The methods above can all be right while what a reader sees is wrong: load_project returned a
+# pointer to the workflow that neither front end printed, and nothing here ran either of them.
+# Every CLI command and every MCP tool runs once, in an order that leaves the fixture as it was,
+# and a command or tool this section does not run is itself a failure.
+import contextlib, io, json  # noqa: E401,E402
+from ducktools import cli, mcp_server  # noqa: E402
+
+_root_file = Path(project)
+_before = _root_file.read_text()
+_root_file.write_text(_before + 'workflow:\n  type: @GitHubWorkflow\n')
+
+# (command, argv after the command, tool, arguments, text the output must contain — or a tuple
+# of alternatives, for the checks whose verdict depends on what earlier sections left behind)
+_P = {'project_path': project}
+FRONT = [
+    ('load-project', [project], 'load_project', _P, '## Workflow'),
+    ('load-workflow', [project], 'load_workflow', _P, '# @GitHubWorkflow'),
+    ('list-terms', [project], 'list_terms', _P, '@Widget'),
+    ('load-terms', [project, 'Widget'], 'load_terms', {**_P, 'term_names': 'Widget'}, '--- @Software'),
+    ('grep', [project, 'colour'], 'grep_terms', {**_P, 'query': 'colour'}, 'Widget#properties#colour'),
+    ('resolve-path', [project, 'Widget#spin'], 'resolve_path', {**_P, 'ref': 'Widget#spin'}, 'turns the widget'),
+    ('verify-project', [project], 'verify_project', _P, ('no findings', '| Severity |')),
+    ('verify-source', [project], 'verify_source', _P, ('no findings', '| Severity |')),
+    ('uses', [project, 'Widget'], 'term_uses', {**_P, 'term_name': 'Widget'}, '@Gadget'),
+    ('schema', [project, 'Widget'], 'term_schema', {**_P, 'term_name': 'Widget'}, 'colour'),
+    ('query', [project, '--extending', 'Widget'], 'query_terms', {**_P, 'extending': 'Widget'}, '@Gadget'),
+    ('entries', [project, 'Widget#properties'], 'slot_entries',
+     {**_P, 'term_name': 'Widget', 'slot': 'properties'}, 'colour'),
+    ('create-term', [project, 'Gear', 'A gear.'], 'create_term',
+     {**_P, 'term_name': 'Cam', 'description': 'A cam.'}, 'created'),
+    ('set', [project, 'Gear', 'description', 'A toothed gear.'], 'set_field',
+     {**_P, 'ref': 'Cam', 'field': 'description', 'value': 'A lobed cam.'}, 'replaced description'),
+    ('add', [project, 'Widget#properties', 'size', 'description=how big'], 'add_entry',
+     {**_P, 'ref': 'Widget#properties', 'entry_id': 'weight', 'fields': {'description': 'how heavy'}}, 'added'),
+    ('remove', [project, 'Widget#properties#size'], 'remove_element',
+     {**_P, 'ref': 'Widget#properties#weight'}, 'removed'),
+    ('add-item', [project, 'Gear#guidelines', 'Mesh cleanly.'], 'add_item',
+     {**_P, 'ref': 'Cam#guidelines', 'text': 'Lift smoothly.'}, 'added'),
+    ('set-item', [project, 'Gear#guidelines', 'Mesh', 'Mesh quietly.'], 'set_item',
+     {**_P, 'ref': 'Cam#guidelines', 'match': 'Lift', 'text': 'Lift gently.'}, 'replaced'),
+    ('move-item', [project, 'Gear#guidelines', 'Gear#ai_instructions', 'Mesh'], 'move_item',
+     {**_P, 'from_ref': 'Cam#guidelines', 'to_ref': 'Cam#ai_instructions', 'match': 'Lift'}, 'added'),
+    ('remove-item', [project, 'Gear#ai_instructions', 'Mesh'], 'remove_item',
+     {**_P, 'ref': 'Cam#ai_instructions', 'match': 'Lift'}, 'removed'),
+    ('rename-term', [project, 'Gear', 'Cog'], 'rename_term',
+     {**_P, 'old_name': 'Cam', 'new_name': 'Eccentric'}, '->'),
+    ('remove-term', [project, 'Cog'], 'remove_term', {**_P, 'term_name': 'Eccentric'}, 'removed'),
+    ('create-workspace', ['front-ws'], 'create_workspace', {'name': 'front-ws-mcp'}, 'created workspace'),
+    ('use-workspace', ['front-ws'], 'use_workspace', {'name': 'front-ws'}, 'active workspace'),
+    ('add-project', [project], 'add_project', _P, 'example.invalid/fixture'),
+    ('list-projects', [], 'list_projects', {}, 'front-ws'),
+    ('remove-project', ['https://example.invalid/fixture'], 'remove_project',
+     {'repository': 'https://example.invalid/fixture'}, 'example.invalid/fixture'),
+]
+
+
+def _run_cli(argv: list[str]) -> str:
+    out = io.StringIO()
+    old = sys.argv
+    sys.argv = ['ducktools'] + argv
+    try:
+        with contextlib.redirect_stdout(out):
+            try:
+                cli.main()
+            except SystemExit:
+                pass
+    finally:
+        sys.argv = old
+    return out.getvalue()
+
+
+def _shows(expect, text: str) -> bool:
+    return any(e in text for e in (expect if isinstance(expect, tuple) else (expect,)))
+
+
+for command, argv, tool, arguments, expect in FRONT:
+    printed = _run_cli([command] + argv)
+    check(f'cli/{command}', _shows(expect, printed), printed[:300])
+    try:
+        returned = mcp_server._call(tool, arguments)
+    except Exception as e:  # noqa: BLE001 — any exception is the finding
+        returned = f'raised {e!r}'
+    check(f'mcp/{tool}', _shows(expect, returned), returned[:300])
+
+check('cli/help', 'load-workflow' in _run_cli(['help']) and 'usage: ducktools add-item'
+      in _run_cli(['help', 'add-item']))
+
+# serve: the stdio loop itself, fed an initialize and a tools/list as a client would send them
+_stdin = io.StringIO('{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n'
+                     '{"jsonrpc":"2.0","id":2,"method":"tools/list"}\n')
+_out = io.StringIO()
+_old_stdin = sys.stdin
+sys.stdin = _stdin
+try:
+    with contextlib.redirect_stdout(_out):
+        mcp_server.run_server()
+finally:
+    sys.stdin = _old_stdin
+_replies = [json.loads(l) for l in _out.getvalue().splitlines() if l.strip()]
+_listed = {t['name'] for t in _replies[1]['result']['tools']} if len(_replies) == 2 else set()
+check('cli/serve', len(_replies) == 2 and _replies[0]['result']['serverInfo']['name'] == 'ducktools',
+      _out.getvalue()[:300])
+
+_commands = {c[0] for _, group in cli._COMMAND_GROUPS for c in group}
+_ran_cli = {c.split('/')[1] for c in checked if c.startswith('cli/')}
+_ran_mcp = {c.split('/')[1] for c in checked if c.startswith('mcp/')}
+check('front-ends/all-commands', _commands <= _ran_cli, f'not run: {sorted(_commands - _ran_cli)}')
+check('front-ends/all-tools', _listed <= _ran_mcp, f'not run: {sorted(_listed - _ran_mcp)}')
+_root_file.write_text(_before)
 
 # --- workspace registry (redirected settings file) ---------------------------
 r.create_workspace('fixture-ws')
