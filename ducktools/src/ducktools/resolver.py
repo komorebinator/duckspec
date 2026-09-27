@@ -652,7 +652,7 @@ class Resolver:
         references = [{'term': root.stem, **r} for r in _parse_references(root_content)]
         rules = self._project_wide_rules(root, root_content, term_map)
         terms = []
-        vocabulary: dict[str, list[str]] = {}
+        vocabulary: dict[str, list[dict]] = {}
 
         # A term is this project's own when its file lies under the root file's directory.
         # Anything else came in through another project's `uses:`, and is attributed to the
@@ -669,12 +669,13 @@ class Resolver:
             resolved = p.resolve()
             if resolved == root:
                 continue
+            m = _DESCRIPTION.search(content)
+            entry = {'name': name, 'path': str(p), 'description': m.group(1).strip() if m else ''}
             if resolved.is_relative_to(root_dir):
-                m = _DESCRIPTION.search(content)
-                terms.append({'name': name, 'path': str(p), 'description': m.group(1).strip() if m else ''})
+                terms.append(entry)
             else:
                 source = next((f.stem for f in sources if resolved.is_relative_to(f.parent)), 'other')
-                vocabulary.setdefault(source, []).append(name)
+                vocabulary.setdefault(source, []).append(entry)
             recipes += [{'term': name, **r} for r in _parse_recipes(content)]
             references += [{'term': name, **r} for r in _parse_references(content)]
 

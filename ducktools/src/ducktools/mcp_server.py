@@ -15,7 +15,7 @@ _PROJECT_PATH_PROP = {
 _TOOLS = [
     {
         'name': 'load_project',
-        'description': 'Load the root project file: this project\'s own terms with descriptions, the vocabulary it uses from other projects by name, recipes and project-wide rules. Call this first when starting work on a project.',
+        'description': 'Load the root project file and list all reachable terms with descriptions — this project\'s own first, then those of each project it uses — with recipes and project-wide rules. Call this first when starting work on a project.',
         'inputSchema': {
             'type': 'object',
             'properties': _PROJECT_PATH_PROP,
@@ -303,13 +303,8 @@ def _format_terms_table(terms: list[dict]) -> str:
 
 
 def _format_vocabulary(vocabulary: list[dict]) -> str:
-    """The Vocabulary section, or '' when the project uses no terms from other projects."""
-    if not vocabulary:
-        return ''
-    lines = ['## Vocabulary from other projects', '',
-             'Terms this project uses from other projects, by name — load_terms gives any of them in full.', '']
-    lines += [f"- @{v['project']}: " + ', '.join(f'@{t}' for t in v['terms']) for v in vocabulary]
-    return '\n'.join(lines)
+    """One `Terms from @<project>` table per used project, or '' when there are none."""
+    return '\n\n'.join(f"## Terms from @{v['project']}\n\n{_format_terms_table(v['terms'])}" for v in vocabulary)
 
 
 def _format_recipes_table(recipes: list[dict]) -> str:

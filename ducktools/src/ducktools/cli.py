@@ -12,13 +12,10 @@ def _print_terms_table(terms: list[dict]) -> None:
 
 
 def _print_vocabulary(vocabulary: list[dict]) -> None:
-    """The Vocabulary section; prints nothing when the project uses no terms from other projects."""
-    if not vocabulary:
-        return
-    print('\n## Vocabulary from other projects\n')
-    print('Terms this project uses from other projects, by name — load-terms gives any of them in full.\n')
+    """One `Terms from @<project>` table per used project; prints nothing when there are none."""
     for v in vocabulary:
-        print(f"- @{v['project']}: " + ', '.join(f'@{t}' for t in v['terms']))
+        print(f"\n## Terms from @{v['project']}\n")
+        _print_terms_table(v['terms'])
 
 
 def _format_rules_tree(term_name: str, tree: dict) -> str:
