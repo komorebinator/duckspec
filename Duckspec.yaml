@@ -12,7 +12,7 @@ uses:
   - duckspec/DuckArch.yaml
   - duckspec/DuckFlow.yaml
   - ducktools/DuckTools.yaml
-version: 0.12.0
+version: 0.12.1
 repository: https://github.com/komorebinator/duckspec
 settings:
   readme: README.md
