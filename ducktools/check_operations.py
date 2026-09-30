@@ -366,6 +366,29 @@ check('add_entry/nested',
       widget.read_text())
 r.remove_element(project, 'Widget#functions#wobble')
 
+# a slot whose order is its meaning — a workflow's steps — could only be extended at its end, so
+# an entry belonging in the middle was written by hand; `after` and `before` name the neighbour
+def _ids() -> list[str]:
+    block = re.search(r'^properties:\n(.*?)(?=^\S|\Z)', widget.read_text(), re.M | re.S)
+    return re.findall(r'^  - id: (\S+)', block.group(1), re.M)
+
+
+_first = _ids()[0]
+r.add_entry(project, 'Widget#properties', 'girth', {'description': 'how wide'}, after=_first)
+check('add_entry/after', _ids()[:2] == [_first, 'girth'], widget.read_text())
+r.add_entry(project, 'Widget#properties', 'height', {'description': 'how tall'}, before=_first)
+check('add_entry/before', _ids()[:3] == ['height', _first, 'girth'], widget.read_text())
+r.add_entry(project, 'Widget#properties', 'depth', {}, after=_ids()[-1])
+check('add_entry/after-last', _ids()[-1] == 'depth', widget.read_text())
+_kept = widget.read_text()
+check('add_entry/unknown-anchor',
+      'refused' in r.add_entry(project, 'Widget#properties', 'span', {}, after='no-such-entry')
+      and 'refused' in r.add_entry(project, 'Widget#properties', 'span', {}, after=_first, before=_first)
+      and 'refused' in r.add_entry(project, 'Widget#no_such_slot', 'span', {}, after=_first)
+      and widget.read_text() == _kept, widget.read_text())
+for _id in ('girth', 'height', 'depth'):
+    r.remove_element(project, f'Widget#properties#{_id}')
+
 r.remove_element(project, 'Widget#weight')
 check('remove_element', 'weight' not in widget.read_text())
 
@@ -597,6 +620,16 @@ for command, argv, tool, arguments, expect in FRONT:
     except Exception as e:  # noqa: BLE001 — any exception is the finding
         returned = f'raised {e!r}'
     check(f'mcp/{tool}', _shows(expect, returned), returned[:300])
+
+# placement has to survive both front ends, not only the resolver: a flag argparse never declared,
+# or a tool argument the dispatch drops, would put the entry last without saying so
+_head = _ids()[0]
+_run_cli(['add', project, 'Widget#properties', 'girth', '--before', _head])
+check('cli/add --before', _ids()[:2] == ['girth', _head], widget.read_text())
+mcp_server._call('add_entry', {**_P, 'ref': 'Widget#properties', 'entry_id': 'depth', 'after': _head})
+check('mcp/add_entry after', _ids()[:3] == ['girth', _head, 'depth'], widget.read_text())
+for _id in ('girth', 'depth'):
+    r.remove_element(project, f'Widget#properties#{_id}')
 
 check('cli/help', 'load-workflow' in _run_cli(['help']) and 'usage: ducktools add-item'
       in _run_cli(['help', 'add-item']))

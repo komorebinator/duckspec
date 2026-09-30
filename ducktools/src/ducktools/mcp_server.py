@@ -173,11 +173,13 @@ _TOOLS = [
     },
     {
         'name': 'add_entry',
-        'description': 'Append a named entry to the slot a Term#path addresses (e.g. MyTerm#properties). Derives the item column from the entries already there instead of guessing indentation, and refuses an id the slot already has',
+        'description': 'Append a named entry to the slot a Term#path addresses (e.g. MyTerm#properties), or insert it next to a sibling named by `after` or `before` where the slot\'s order matters (a workflow\'s steps). Derives the item column from the entries already there instead of guessing indentation, and refuses an id the slot already has',
         'inputSchema': {'type': 'object', 'properties': {**_PROJECT_PATH_PROP,
             'ref': {'type': 'string', 'description': 'TermName#segment... ending at the slot to append to'},
             'entry_id': {'type': 'string', 'description': 'id for the new entry'},
-            'fields': {'type': 'object', 'description': 'field name to value, written under the new entry; a list or object value is written as a nested block (a list of objects as named entries, e.g. arguments)'}},
+            'fields': {'type': 'object', 'description': 'field name to value, written under the new entry; a list or object value is written as a nested block (a list of objects as named entries, e.g. arguments)'},
+            'after': {'type': 'string', 'description': 'id of the sibling entry to insert directly after; appended at the end when neither this nor `before` is given'},
+            'before': {'type': 'string', 'description': 'id of the sibling entry to insert directly before; cannot be combined with `after`'}},
             'required': ['project_path', 'ref', 'entry_id']},
     },
     {
@@ -466,7 +468,8 @@ def _call(name: str, arguments: dict) -> str:
 
     if name == 'add_entry':
         return resolver.add_entry(path, arguments['ref'], arguments['entry_id'],
-                                  arguments.get('fields') or {})
+                                  arguments.get('fields') or {},
+                                  arguments.get('after'), arguments.get('before'))
     if name == 'remove_element':
         return resolver.remove_element(path, arguments['ref'])
 

@@ -1576,14 +1576,21 @@ class Resolver:
         return self.set_field(project_path, ref, field, text.replace(old, new))
 
     def add_entry(self, project_path: str, ref: str, entry_id: str,
-                  fields: dict | None = None) -> str:
+                  fields: dict | None = None, after: str | None = None,
+                  before: str | None = None) -> str:
         """Appends a named entry to the slot `ref` addresses. The item column comes from the
         entries already in the slot, so a nested slot lands at its own depth instead of a guessed
         one — hand-written indentation is what put a field outside its block during the identity
         migration. A slot that does not exist yet is created on the element the rest of the path
-        addresses, the way add_item creates a missing list."""
+        addresses, the way add_item creates a missing list. `after` or `before` names the sibling
+        the entry goes next to, for a slot whose order is its meaning — a workflow's steps."""
+        if after is not None and before is not None:
+            return 'refused: `after` and `before` both given — an entry has one place'
+        anchor = after if after is not None else before
         located = self._locate(project_path, ref, slot=True)
         if isinstance(located, str):
+            if anchor is not None and located.startswith('not found'):
+                return f"refused: '{anchor}' is not an entry of {ref}, which does not exist yet"
             parent_ref, _, slot_name = ref.rpartition('#')
             if not parent_ref or not located.startswith('not found') or slot_name.isdigit():
                 return located
@@ -1629,6 +1636,20 @@ class Resolver:
         at = end
         while at > start + 1 and not lines[at - 1].strip():
             at -= 1   # keep trailing blank lines below the slot, not inside it
+        if anchor is not None:
+            # siblings are the `- ` lines at the slot's own item column; anything deeper belongs
+            # to one of them, so a nested entry carrying the same id is never taken for the anchor
+            siblings = [i for i in range(start + 1, at)
+                        if re.match(rf'^ {{{column}}}- ', lines[i])]
+            hit = next((n for n, i in enumerate(siblings)
+                        if (m := re.match(r'^\s*- id:\s*(\S.*)$', lines[i]))
+                        and m.group(1).strip().strip('\'"') == anchor), None)
+            if hit is None:
+                return f"refused: '{anchor}' is not an entry of {ref}"
+            if before is not None:
+                at = siblings[hit]
+            elif hit + 1 < len(siblings):
+                at = siblings[hit + 1]   # the anchor's own block ends where the next one starts
         lines[at:at] = block
         path.write_text(''.join(lines))
         return f'{path}: added {entry_id} to {ref}'

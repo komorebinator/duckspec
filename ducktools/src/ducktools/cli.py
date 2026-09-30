@@ -134,10 +134,12 @@ _COMMAND_GROUPS = [
          'Replace one piece of a field\'s text, leaving the rest; the piece must occur exactly once',
          [('project', _PROJECT_ARG), ('ref', _REF_ARG), ('field', 'the field to edit'),
           ('old', 'the exact text to replace'), ('new', 'the text to put in its place')]),
-        ('add', 'add <project> <ref> <id> [field=value ...]',
-         'Append a named entry to the addressed slot',
+        ('add', 'add <project> <ref> <id> [field=value ...] [--after ID | --before ID]',
+         'Append a named entry to the addressed slot, or insert it next to a sibling',
          [('project', _PROJECT_ARG), ('ref', 'a reference of the form `TermName#slot`'),
-          ('id', 'id for the new entry'), ('field=value', 'fields to write under it')]),
+          ('id', 'id for the new entry'), ('field=value', 'fields to write under it'),
+          ('--after', 'insert directly after the sibling entry with this id'),
+          ('--before', 'insert directly before the sibling entry with this id')]),
         ('remove', 'remove <project> <ref>',
          'Remove the addressed element and everything nested under it',
          [('project', _PROJECT_ARG), ('ref', _REF_ARG)]),
@@ -364,7 +366,8 @@ def cmd_edit_field(project_path: str, ref: str, field: str, old: str, new: str) 
     print(resolver.edit_field(project_path, ref, field, old, new))
 
 
-def cmd_add_entry(project_path: str, ref: str, entry_id: str, fields: list[str]) -> None:
+def cmd_add_entry(project_path: str, ref: str, entry_id: str, fields: list[str],
+                  after: str | None = None, before: str | None = None) -> None:
     parsed = {}
     for pair in fields:
         if '=' not in pair:
@@ -379,7 +382,7 @@ def cmd_add_entry(project_path: str, ref: str, entry_id: str, fields: list[str])
                 print(f"{field}: not valid JSON ({e})")
                 return
         parsed[field] = value
-    print(resolver.add_entry(project_path, ref, entry_id, parsed))
+    print(resolver.add_entry(project_path, ref, entry_id, parsed, after, before))
 
 
 def cmd_remove_element(project_path: str, ref: str) -> None:
@@ -539,6 +542,7 @@ def main() -> None:
     p = sub.add_parser('add')
     p.add_argument('project_path'); p.add_argument('ref'); p.add_argument('entry_id')
     p.add_argument('fields', nargs='*')
+    p.add_argument('--after'); p.add_argument('--before')
 
     p = sub.add_parser('remove')
     p.add_argument('project_path'); p.add_argument('ref')
@@ -599,7 +603,8 @@ def main() -> None:
     elif args.command == 'entries':
         cmd_entries(args.project_path, args.ref)
     elif args.command == 'add':
-        cmd_add_entry(args.project_path, args.ref, args.entry_id, args.fields)
+        cmd_add_entry(args.project_path, args.ref, args.entry_id, args.fields,
+                      args.after, args.before)
     elif args.command == 'set':
         cmd_set_field(args.project_path, args.ref, args.field, args.value)
     elif args.command == 'edit':

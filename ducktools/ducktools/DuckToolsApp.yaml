@@ -379,7 +379,7 @@ components:
           - id: value
             description: the value to set it to
       - id: add_entry
-        description: "Appends a named entry to the slot a `#`-path addresses — the counterpart of remove_element, and the operation whose absence forced hand-editing whenever a term needed one more property, function or component. The path names the slot, not an entry: `DuckspecProjectSettings#properties`, `ImageManagerApp#progress-window#functions`. When the slot does not exist yet it is created on the element the path's other segments address — at the end of the file for the term itself — the way add_item creates a missing list; refusing instead left a term's first `tests:` or `recipes:`, and every new term's `steps:`, to be written by hand. The cost is that a misspelled slot name is created too, not refused; verify_project reports it as unknown-field, since no type declares the misspelling. The item column is taken from the entries already there, so a nested slot lands at its own depth; an empty or new slot gets the slot's indent plus two. `fields` are written under the new `- id:` in the order given, through _field_lines. Refuses an ambiguous path, and refuses an id already present among the slot's entries rather than creating a second one that `#`-paths could not tell apart. Returns the file path and the id added."
+        description: "Appends a named entry to the slot a `#`-path addresses — the counterpart of remove_element, and the operation whose absence forced hand-editing whenever a term needed one more property, function or component. The path names the slot, not an entry: `DuckspecProjectSettings#properties`, `ImageManagerApp#progress-window#functions`. When the slot does not exist yet it is created on the element the path's other segments address — at the end of the file for the term itself — the way add_item creates a missing list; refusing instead left a term's first `tests:` or `recipes:`, and every new term's `steps:`, to be written by hand. The cost is that a misspelled slot name is created too, not refused; verify_project reports it as unknown-field, since no type declares the misspelling. The item column is taken from the entries already there, so a nested slot lands at its own depth; an empty or new slot gets the slot's indent plus two. `fields` are written under the new `- id:` in the order given, through _field_lines. The entry goes last unless `after` or `before` names a sibling by id, which puts it directly behind or in front of that one, whatever is nested under either. Without this a slot whose order carries meaning — a workflow's `steps:` above all, where the list is the sequence — could only be extended at its end, and a step belonging in the middle had to be written by hand. Naming both, or an id the slot does not hold, is refused rather than falling back to the end, since an entry in the wrong place of an ordered slot is a wrong statement, not a cosmetic one. Refuses an ambiguous path, and refuses an id already present among the slot's entries rather than creating a second one that `#`-paths could not tell apart. Returns the file path and the id added."
         arguments:
           - id: project_path
             description: a @DuckspecProject .yaml file or a registered project identifier
@@ -389,6 +389,10 @@ components:
             description: id for the new entry, unique among the slot's existing entries
           - id: fields
             description: "mapping of field name to value written under the new entry, e.g. {description: ...}; a list or mapping value is written as a nested block via _field_lines, so `arguments: [{id: ..., description: ...}]` becomes named entries"
+          - id: after
+            description: id of the sibling entry to insert directly after; the entry goes last when neither this nor `before` is given
+          - id: before
+            description: id of the sibling entry to insert directly before; cannot be combined with `after`
       - id: remove_element
         description: Removes the element a `#`-path addresses, together with everything nested under it, locating its boundaries through _locate. Removing a block by regex is what left orphaned loop bodies in the resolver mid-migration; boundaries computed from indentation cannot do that. Refuses on an ambiguous path. Returns the file path and the number of lines removed.
         arguments:
@@ -698,7 +702,7 @@ components:
           - id: value
             description: the value to set it to
       - id: add
-        description: "Command `ducktools add <project> <ref> <entry_id> [field=value ...]`; calls resolver#add_entry; prints the file touched and the id added. Each trailing argument is split on the first `=`, so `description='...'` reads naturally in a shell; a value starting with `[` or `{` is read as JSON and becomes a nested block, and one that is not valid JSON is refused with the parse error."
+        description: Command `ducktools add <project> <ref> <entry_id> [field=value ...] [--after ID | --before ID]`; calls resolver#add_entry; prints the file touched and the id added. Each trailing argument is split on the first `=`, so `description='...'` reads naturally in a shell; a value starting with `[` or `{` is read as JSON and becomes a nested block, and one that is not valid JSON is refused with the parse error.
         arguments:
           - id: project_path
             description: a @DuckspecProject .yaml file or a registered project identifier
@@ -708,6 +712,10 @@ components:
             description: id for the new entry
           - id: fields
             description: zero or more `field=value` pairs written under the new entry
+          - id: after
+            description: id of the sibling entry to insert directly after; the entry goes last when neither this nor `--before` is given
+          - id: before
+            description: id of the sibling entry to insert directly before; cannot be combined with `--after`
       - id: remove
         description: "Command `ducktools remove <project> <ref>`; calls resolver#remove_element; prints the file touched and how many lines went."
         arguments:
@@ -947,7 +955,7 @@ components:
           - id: value
             description: the value to set it to
       - id: add_entry
-        description: "MCP tool `add_entry`; calls resolver#add_entry. Prefer it over hand-writing a new `- id:` block: the item column is derived from the slot rather than guessed, and a duplicate id is refused."
+        description: "MCP tool `add_entry`; calls resolver#add_entry. Prefer it over hand-writing a new `- id:` block: the item column is derived from the slot rather than guessed, a duplicate id is refused, and `after` or `before` places the entry among its siblings where the slot's order matters."
         arguments:
           - id: project_path
             description: a @DuckspecProject .yaml file or a registered project identifier
@@ -957,6 +965,10 @@ components:
             description: id for the new entry
           - id: fields
             description: mapping of field name to value written under the new entry
+          - id: after
+            description: id of the sibling entry to insert directly after; the entry goes last when neither this nor `before` is given
+          - id: before
+            description: id of the sibling entry to insert directly before; cannot be combined with `after`
       - id: remove_element
         description: "MCP tool `remove_element`; calls resolver#remove_element. Prefer it over deleting lines by pattern: boundaries come from indentation, so nothing nested is left behind."
         arguments:
