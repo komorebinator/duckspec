@@ -7,7 +7,7 @@ A spec-driven development framework for building complex projects with AI.
 ## How it works
 
 1. Define your project's vocabulary as YAML `@Term` files — each term carries properties, guidelines, and AI directives
-2. Load them into context with `ducktools load` (CLI) or as an MCP server
+2. Load them into context with `ducktools load-project` (CLI) or as an MCP server
 3. The AI knows your domain, follows your rules, and executes `@Recipe` instructions on demand — no re-explaining every session
 
 ## Concepts
@@ -18,6 +18,7 @@ A spec-driven development framework for building complex projects with AI.
 | `extends` | Inheritance — a term inherits all properties and recipes from its parent |
 | `@Recipe` | Named instructions the AI executes; called with `Invoke @TermName#recipe()` |
 | `@DuckArch` | Built-in terms for describing software: `@Software`, `@Function`, `@Server`, `@Script`… |
+| `@DuckWorkflow` | How work moves through a project, from request to release — the AI reads it with `ducktools load-workflow` to know what the change in hand needs next |
 | `DuckTools` | CLI and MCP server that loads terms into the AI's context |
 
 ## Example
@@ -26,11 +27,11 @@ A spec-driven development framework for building complex projects with AI.
 
 ```yaml
 description: Minimal web app showing current weather at the user's location via IP geolocation.
-extends: @Software
+extends: "@Software"
 platform: Python
 components:
   - id: server
-    type: @Server
+    type: "@Server"
     src: server.py
     description: Python HTTP server; serves ui.html at GET / and exposes GET /weather
     functions:
@@ -42,30 +43,30 @@ components:
           (0=Clear, 1-3=Partly cloudy, 45-48=Fog, 51-67=Rain, 71-77=Snow, 80-82=Showers, 95-99=Thunderstorm);
           returns {"temperature": <°C float>, "condition": <string>, "city": <string>}
   - id: ui
-    type: @UserInterface
+    type: "@UserInterface"
     src: ui.html
     views:
       - id: main
-        type: @View
+        type: "@View"
         components:
           - id: refresh_button
-            type: @Button
+            type: "@Button"
             label: Refresh
             signals:
               - id: clicked
                 description: Emitted when the user clicks the button
           - id: weather_display
-            type: @View
+            type: "@View"
             description: Hidden until first data load
             components:
               - id: city_label
-                type: @Label
+                type: "@Label"
                 description: Displays the city name
               - id: temperature_label
-                type: @Label
+                type: "@Label"
                 description: Displays the temperature in °C
               - id: condition_label
-                type: @Label
+                type: "@Label"
                 description: Displays the weather condition string
     functions:
       - id: request_weather
@@ -95,7 +96,7 @@ reference from the tool itself, and `ducktools help <command>` details one comma
 ```sh
 ducktools load-project Duckspec              # start here: root file, term list, recipes, rules
 ducktools list-terms Duckspec                # every reachable term with its description
-ducktools load-terms Duckspec DuckToolsApp   # one term and its transitive dependencies
+ducktools load-terms Duckspec DuckToolsApp   # one term with its extends chain
 ducktools resolve-path Duckspec DuckspecProject#validate   # one element, nothing else
 ducktools grep Duckspec resolver             # search across term content
 ```
