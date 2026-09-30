@@ -42,8 +42,12 @@ steps:
     when: an open pull request against the official repository carries the change
     operation: "@GitHub#merge_pull_request"
   - id: on_main
-    description: The change is on main and has already reached consumers on their next update, but no version names it yet. Changes accumulate here until a release.
+    description: "The change is on main and has already reached consumers on their next update, but no version names it yet. Changes accumulate here until a release. When one is wanted, the README is read first against everything that accumulated: a release is the moment people come to look at the repository, and the version it names should not be described by a README written for the one before."
     when: main carries the change and its `version` is still the one the latest release tag names
+    operation: "@DuckspecProject#update_readme"
+  - id: readme_current
+    description: "The README has been read against what landed since the latest release and either needed nothing — the ordinary case — or was edited, the edit being a change like any other: committed, verified against consumers and pushed before the version is prepared, so the release tag contains it."
+    when: main carries the change, its `version` is still the one the latest release tag names, and the README has been checked against everything on main since that tag, with any edit it needed already on main
     operation: "@DuckspecProject#prepare_release"
   - id: versioned
     description: A version covering the change is prepared and its bump has itself been committed, verified against consumers and pushed like any change.

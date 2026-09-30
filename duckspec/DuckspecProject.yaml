@@ -65,13 +65,6 @@ recipes:
       - Ask the user which of the inherited characteristics are relevant and what values or descriptions to set
       - Create the file `<terms_folder>/<TermName>.yaml` with the provided content
       - Invoke @DuckspecProject#validate()
-  - id: create_readme
-    description: Creates the root description file for the @DuckspecProject and registers it in @DuckspecProjectSettings
-    instructions:
-      - Read the @DuckspecProject term file to get the @DuckspecProject's name, description, and goals
-      - "Ask the user where to create the file (default: README.md)"
-      - Create the file with the @DuckspecProject name as the H1 heading, description as the opening line, and goals as a bullet list under a "Goals" heading
-      - Save the file path to `settings.readme`
   - id: term_map
     description: Displays the current term map as a markdown table with descriptions
     instructions:
@@ -88,12 +81,14 @@ recipes:
       - "Write or overwrite the file at `settings.agents` (default `AGENTS.md`, next to this @DuckspecProject file) with, in order: (1) an H1 with this project's name; (2) one short paragraph stating the project is built with @Duckspec, that its structure/guidelines/conventions live in @Term files rather than this document, and that DuckTools reads them via an MCP server or the `ducktools` CLI, both exposing the same operations; (3) the command to load this project, in both MCP and CLI form, via @DuckToolsApp#resolver#load_project(project_path=<this project's identifier>) — the first thing to run before any work — followed by one line saying that where the project is not registered in the active workspace yet, the same command takes the project file's path relative to the repository root instead; (4) the command to see every project registered across all workspaces, in both MCP and CLI form, via @DuckToolsApp#resolver#list_projects(). Never write an absolute path into the file: AGENTS.md is committed and read on other machines and by other people, where a path from this one points nowhere and discloses its layout. The identifier works from any directory on any machine the project is registered on, because @DuckToolsApp#resolver#_resolve_project looks it up in the active @Workspace; the repository-relative path is the fallback for a clone that has not been registered."
       - Keep it brief — do not enumerate other DuckTools operations; load_project's own output (its recipes and term list) is where the rest surfaces once the project is actually loaded
   - id: update_readme
-    description: Updates the root description file to reflect the current @DuckspecProject definition
+    description: Writes the project's README when there is none, and otherwise checks the existing one against the project and proposes edits only where it has clearly fallen behind. The README is written for someone opening the repository, not for whoever develops the project, and once it exists it is the author's to edit freely — this recipe does not regenerate it or keep it in step with the spec field by field.
     instructions:
-      - Read the @DuckspecProject term file to get the @DuckspecProject's name, description, and goals
-      - Read `settings.readme` from @DuckspecProjectSettings; if it is not set, ask the user whether to set an existing path or Invoke @DuckspecProject#create_readme()
-      - If the file at `settings.readme` does not exist, Invoke @DuckspecProject#create_readme()
-      - If the file exists, apply only the necessary edits to bring its name, description, and goals in sync with the @DuckspecProject definition; leave all other content untouched
+      - "Gather what a README is written from: this project's name, description and goals; each entry of `software` with its platform and its install and run recipes; and the sources themselves wherever the spec does not say how something is installed or used"
+      - Read `settings.readme` from @DuckspecProjectSettings. If it is not set, look for an existing README in the root of the source tree and set `settings.readme` to it; if there is none, the file to write is `README.md` in that root unless the user names another place
+      - "If there is no file yet, draft one for a person opening the repository: what the project is and who it is for, what it does, how to install and run it, and one line pointing anyone who wants to change it to the guide @DuckspecProject#update_agents writes. Goals shape the opening rather than being listed, and how work is done is not retold — it lives in the project's @DuckWorkflow, and a copy here would be the first thing to go stale. Leave out any section there is nothing true to put in: a project with nothing to install yet gets no installation section. Show the draft to the user, take their corrections, write the file and save its path to `settings.readme`. A correction that states something about the project the spec does not say goes into the spec as well — the draft is also how a misunderstanding of the project surfaces"
+      - "If the file exists, read it against what was gathered and look for three things only: a statement that is no longer true — a feature renamed or removed, an install or run step that no longer works, a name or description that has changed; a major feature or part of the project it does not mention at all; and, where the README has a goals section, goals that differ from the project's `goals`"
+      - "Propose an edit only for what that reading found. Wording, tone, structure, section order and level of detail are the author's and are never grounds for one, and neither is a minor feature going unmentioned. Finding nothing is the ordinary result: say the README is current and change nothing — an edit proposed so the recipe has something to show costs the author a review and teaches them to skim the next one"
+      - Show each proposed edit with what prompted it, apply the ones the user accepts, and leave everything else in the file untouched
   - id: assess_coverage
     description: Analyzes source files and generates or updates @Term definitions that, read alongside the repository, let a reader understand how the project works and why — its parts, how they connect, its main flows and the behaviour it promises, and the reasons and constraints no file states; also detects and fills in project-level metadata (`repository`, `workflow`) when not yet set, registering the project in the active workspace once a repository is known. Idempotent — can be run multiple times to refine or update existing terms; a later run fills in what the spec is missing and trims what it copied from files, under the rules for removing spec text.
     instructions:

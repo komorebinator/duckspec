@@ -2,7 +2,7 @@ description: Configuration for an @DuckspecProject.
 extends: "@Settings"
 properties:
   - id: readme
-    description: path to the root description file of the @Project (e.g. README.md); relative to the @DuckspecProject term file's location
+    description: path to the root description file of the @Project (e.g. README.md); relative to the @DuckspecProject term file's location. It records where the file is, not that the spec owns it — the README is edited by hand, and what the spec does with it is @DuckspecProject#update_readme's
   - id: src
     description: path to the source root of the project; relative to the @DuckspecProject term file's location; defaults to `..` (the repository root)
   - id: agents

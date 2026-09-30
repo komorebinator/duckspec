@@ -106,7 +106,7 @@ recipes:
       - If a README or other description file exists, set `settings.readme` to its path (relative to the @DuckspecProject term file)
       - "Create the @DuckspecProject term file named `<ProjectName>.yaml` — the filename is the project's identity — with only `name` (when the user gave one), `description`, `goals`, `terms_folder`, and `uses` set to `https://github.com/komorebinator/duckspec`; leave `repository`, `workflow`, and `software` unset entirely"
       - Create the terms folder on disk at the path set in `terms_folder`
-      - Invoke @DuckspecProject#create_readme() if no readme exists yet, else @DuckspecProject#update_readme()
+      - "Invoke @DuckspecProject#update_readme() — unless `context_path` was given: then there is existing source the spec does not describe yet, and the caller invokes it once the spec does, so the README is written from the project rather than from its one-line description"
       - Invoke @DuckspecProject#update_agents() — so AGENTS.md exists from the moment the project does, before @DuckspecProject#assess_coverage ever runs against it
       - "Report the created file's path back to the caller. This project is not yet registered in any workspace — it has no `repository` for @Workspace#add_project to key on. @DuckspecProject#assess_coverage registers it once one is found."
   - id: import_project
@@ -119,6 +119,7 @@ recipes:
       - Invoke @Duckspec#create_project(context_path=<source_path>)
       - "Set `settings.src` on the created project to `source_path`, expressed relative to the @DuckspecProject file's location (skip this if it already resolves to the default `..`)"
       - Invoke @DuckspecProject#assess_coverage() on the created project
+      - Invoke @DuckspecProject#update_readme() on the created project — after the coverage analysis, not before, so it has the project's parts and how it is installed to work from; where the codebase already has a README, this only checks it
   - id: verify_consumers
     description: Verifies every registered project that uses @Duckspec against the framework as it stands in this working copy — the check that has to pass before anything reaches main_branch, because main_branch is what those projects receive.
     instructions:

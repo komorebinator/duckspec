@@ -22,7 +22,7 @@ tests:
   - id: resolve-path
     description: resolves a Term#path reference to a single nested element's raw block, without loading the whole term or its transitive dependencies
     command: "python3 -m ducktools resolve-path Duckspec.yaml DuckspecProject#validate"
-    expect: "output contains the `- id: validate` block and its `instructions:`, and does not contain unrelated recipes such as `create_readme`"
+    expect: "output contains the `- id: validate` block and its `instructions:`, and does not contain unrelated recipes such as `update_readme`"
   - id: list-projects
     description: lists every registered project grouped by workspace, as a markdown table, read-only
     command: "python3 -m ducktools list-projects"
