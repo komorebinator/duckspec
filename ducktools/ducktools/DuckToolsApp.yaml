@@ -629,7 +629,7 @@ components:
   - id: cli
     src: ducktools/src/ducktools/cli.py
     type: "@Application"
-    description: Command-line front end. Parses argv with argparse, dispatches to the matching resolver method, and prints the result as markdown tables or raw term blocks. The two verify commands carry an exit status — 1 when any finding is an error, 0 otherwise — so either can serve as a CI or pre-commit gate; every other command exits 0.
+    description: Command-line front end. Parses argv with argparse, dispatches to the matching resolver method, and prints the result as markdown tables or raw term blocks. A command's arguments are listed under the names the code reads them by — a flag `--all` as `all`, the attribute argparse stores it in; its dashes belong to the usage line in the command's description, never to an id, which is a name and not command-line syntax. The two verify commands carry an exit status — 1 when any finding is an error, 0 otherwise — so either can serve as a CI or pre-commit gate; every other command exits 0.
     functions:
       - id: help
         description: "Command `ducktools help [command]`; prints the command reference held in cli itself. With no argument: a note that every project-taking command accepts either a path to a .yaml file or a registered project identifier, then a Command/Purpose markdown table per group (reading, structure, checking, editing, workspace, other). With a command name: that command's usage line, its purpose, and an Argument/Description table. An unknown name prints `no such command: <name>` and falls back to the full reference. Reads no project file and no settings, so it answers before anything is registered."
@@ -651,7 +651,7 @@ components:
         arguments:
           - id: project_path
             description: a @DuckspecProject .yaml file — a filesystem path, or the identifier of a project registered in the active @Workspace (see _resolve_project)
-          - id: --all
+          - id: all
             description: pass to resolver#list_terms as include_all=true
       - id: load-terms
         description: Command `ducktools load-terms <project_path> <TermName> [TermName ...]`; calls resolver#load_terms; prints each term and each ancestor of its `extends` chain as `--- @<TermName> [file_path] ---\n<yaml content>`, followed, for each explicitly requested term only, by a References line naming the terms it mentions without loading them and a `## Rules for @<TermName>` own/inherited breakdown
@@ -667,7 +667,7 @@ components:
             description: a @DuckspecProject .yaml file — a filesystem path, or the identifier of a project registered in the active @Workspace (see _resolve_project)
           - id: query
             description: substring to search for (case-insensitive)
-          - id: --all
+          - id: all
             description: pass to resolver#grep_terms as include_all=true
       - id: resolve-path
         description: "Command `ducktools resolve-path <project_path> <ref>`; calls resolver#resolve_path; prints `--- <ref> [file_path] ---\\n<content>`, `not found: <ref>` when nothing resolves, or the ambiguity message when a segment matches more than one element — which is a defect in the spec rather than in the reference, and says so."
@@ -677,13 +677,13 @@ components:
           - id: ref
             description: "reference in the form `TermName#segment#segment...`"
       - id: verify-project
-        description: "Command `ducktools verify-project <project_path>`; calls resolver#verify_project; prints a markdown table of Severity, Check, Term, Location (path with `:line` appended when present), and Message, or `no findings` when the list is empty. Exits 1 if any finding has severity 'error', 0 otherwise, so it can be used directly as a CI or pre-commit gate."
+        description: Command `ducktools verify-project <project_path> [--unreachable] [--untyped]`; calls resolver#verify_project; prints a markdown table of Severity, Check, Term, Location (path with `:line` appended when present), and Message, or `no findings` when the list is empty. Exits 1 if any finding has severity 'error', 0 otherwise, so it can be used directly as a CI or pre-commit gate.
         arguments:
           - id: project_path
             description: a @DuckspecProject .yaml file — a filesystem path, or the identifier of a project registered in the active @Workspace (see _resolve_project)
-          - id: --unreachable
+          - id: unreachable
             description: pass to resolver#verify_project as unreachable=true
-          - id: --untyped
+          - id: untyped
             description: pass to resolver#verify_project as untyped=true
       - id: verify-source
         description: "Command `ducktools verify-source <project>`; calls resolver#verify_source; prints the same Severity/Check/Term/Location/Message table verify-project prints, or `no findings`. Exits 1 when any finding is an error, so it can gate a commit alongside verify-project."
@@ -732,7 +732,7 @@ components:
             description: TermName#segment... ending at the list to append to
           - id: text
             description: the text to add
-          - id: --after
+          - id: after
             description: substring identifying the item to insert after
       - id: set-item
         description: "Command `ducktools set-item <project> <Term#path> <match> <text>`; calls resolver#set_item; prints what it returns."
@@ -774,7 +774,7 @@ components:
             description: CamelCase name, which becomes both the filename and the identity
           - id: description
             description: what the term represents
-          - id: --extends
+          - id: extends
             description: parent term name; defaults to Term
       - id: rename-term
         description: "Command `ducktools rename-term <project> <OldName> <NewName>`; calls resolver#rename_term; prints what it returns."
@@ -811,13 +811,13 @@ components:
         arguments:
           - id: project_path
             description: a @DuckspecProject .yaml file or a registered project identifier
-          - id: --rootless
+          - id: rootless
             description: only terms declaring no `extends`
-          - id: --extending
+          - id: extending
             description: only terms whose `extends` chain includes this term
-          - id: --declaring
+          - id: declaring
             description: only terms declaring a member of this id
-          - id: --folder
+          - id: folder
             description: only terms whose path contains this fragment
       - id: entries
         description: "Command `ducktools entries <project> <TermName>#<slot>`; calls resolver#slot_entries; prints an Id/Fields table."
@@ -848,14 +848,14 @@ components:
         arguments:
           - id: project_path
             description: path to the @DuckspecProject file to register
-          - id: --workspace
+          - id: workspace
             description: workspace to add to; defaults to the active workspace
       - id: remove-project
         description: "Command `ducktools remove-project <repository> [--workspace NAME]`; calls resolver#remove_project"
         arguments:
           - id: repository
             description: repository URL of the project to remove
-          - id: --workspace
+          - id: workspace
             description: workspace to remove from; defaults to the active workspace
       - id: normalize
         description: "Command `ducktools normalize <project>`; calls resolver#normalize; prints each file changed with the number of values quoted, or `nothing to change`."
