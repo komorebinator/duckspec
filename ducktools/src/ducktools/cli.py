@@ -182,7 +182,7 @@ _COMMAND_GROUPS = [
         ('list-projects', 'list-projects',
          'Every registered project across all workspaces, marking the active one', []),
         ('add-project', 'add-project <project_path> [--workspace NAME]',
-         'Register a project, keyed by its own `repository` URL',
+         'Register a project, keyed by its own `repository` URL, or by its file:// URI while it has none',
          [('project_path', 'path to the project .yaml file to register'),
           ('--workspace', 'workspace to add to; defaults to the active one')]),
         ('remove-project', 'remove-project <repository> [--workspace NAME]',
@@ -467,7 +467,7 @@ def cmd_list_projects() -> None:
 def cmd_add_project(project_path: str, workspace_name: str | None = None) -> None:
     repository = resolver.add_project(project_path, workspace_name)
     if repository is None:
-        print(f'could not register {project_path} — missing `repository` field or no active workspace')
+        print(f'could not register {project_path} — no active workspace')
     else:
         print(f'registered {repository} -> {project_path}')
 

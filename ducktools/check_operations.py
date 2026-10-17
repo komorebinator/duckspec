@@ -669,6 +669,20 @@ check('add_project', registered == 'https://example.invalid/fixture'
       and registered in R._load_settings()['workspaces']['fixture-ws']['projects'],
       f'got {registered}')
 
+# A project with no repository yet is registered by its file, and re-keyed once it has one
+_fresh = TMP / 'fresh' / 'Fresh.yaml'
+_fresh.parent.mkdir()
+_fresh.write_text('description: fresh\nextends: "@DuckspecProject"\n', encoding='utf-8')
+_file_key = r.add_project(str(_fresh))
+check('add_project/file-uri', _file_key == _fresh.resolve().as_uri()
+      and _file_key in R._load_settings()['workspaces']['fixture-ws']['projects'], f'got {_file_key}')
+_fresh.write_text(_fresh.read_text(encoding='utf-8') + 'repository: https://example.invalid/fresh\n',
+                  encoding='utf-8')
+r.add_project(str(_fresh))
+_projects = R._load_settings()['workspaces']['fixture-ws']['projects']
+check('add_project/rekeys', 'https://example.invalid/fresh' in _projects and _file_key not in _projects,
+      f'got {sorted(_projects)}')
+
 check('list_projects', 'fixture-ws' in str(r.list_projects()))
 
 r.remove_project('https://example.invalid/fixture')

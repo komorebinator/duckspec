@@ -271,7 +271,7 @@ _TOOLS = [
     },
     {
         'name': 'add_project',
-        'description': "Register a project (by its own `repository` field) in a workspace",
+        'description': "Register a project in a workspace, by its own `repository` field or, while it has none, by its file's file:// URI",
         'inputSchema': {
             'type': 'object',
             'properties': {
@@ -409,7 +409,7 @@ def _call(name: str, arguments: dict) -> str:
     if name == 'add_project':
         repository = resolver.add_project(arguments['project_path'], arguments.get('workspace'))
         if repository is None:
-            return f"could not register {arguments['project_path']} — missing `repository` field or no active workspace"
+            return f"could not register {arguments['project_path']} — no active workspace"
         return f"registered {repository} -> {arguments['project_path']}"
 
     if name == 'remove_project':

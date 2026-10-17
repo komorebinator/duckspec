@@ -514,7 +514,7 @@ components:
       - id: list_projects
         description: "Reads the settings file, then for every workspace reads each registered project's own file: `name` is the file's stem — the project's identity, not its `name:` display label — and `description:` is extracted via regex. Returns `{active_workspace, workspaces: {name: {projects: [{repository, path, name, description}]}}}`. A project whose file is missing or unreadable still lists (`name: None`) rather than being dropped, so a stale registry entry stays visible instead of hidden."
       - id: add_project
-        description: "Reads `repository:` from the file at `project_path` via regex; returns None (no write) if absent. Otherwise resolves the target workspace (the given `workspace_name`, or the active workspace if omitted; returns None if neither resolves), creates it if missing, and sets `projects[repository] = str(project_path.resolve())`. Returns the repository URL used."
+        description: Reads `repository:` from the file at `project_path` via regex; when it is absent, keys the project by the file's `file://` URI instead, so a project is registered from the moment @Duckspec#create_project makes it rather than only once it has a remote. Resolves the target workspace (the given `workspace_name`, or the active workspace if omitted; returns None if neither resolves), creates it if missing, drops any other key in it that points at the same file — the `file://` entry a project was registered under before its repository was set, which would otherwise linger as a second, stale registration — and sets `projects[key] = str(project_path.resolve())`. Returns the key used.
         arguments:
           - id: project_path
             description: path to the @DuckspecProject file to register

@@ -2,15 +2,15 @@ description: A named group of @DuckspecProject files that reference each other w
 extends: "@Settings"
 properties:
   - id: projects
-    description: map of repository URL to the local path of that project's @DuckspecProject file
+    description: map of repository URL to the local path of that project's @DuckspecProject file; a project with no `repository` yet is keyed by its file's `file://` URI instead, so it can be registered — and named by its identifier — from the moment it is created
 recipes:
   - id: add_project
-    description: Registers a project in this workspace, keyed by its own repository URL
+    description: Registers a project in this workspace, keyed by its own repository URL, or by its file's `file://` URI while it has none
     arguments:
       - id: project_path
         description: path to the @DuckspecProject file to register
     instructions:
-      - Invoke @DuckToolsApp#resolver#add_project(project_path=<project_path>); it reads `repository` from the file itself, so ask the user for the URL only if it reports the field missing
+      - Invoke @DuckToolsApp#resolver#add_project(project_path=<project_path>); it reads `repository` from the file itself
   - id: remove_project
     description: Removes a project from this workspace
     arguments:

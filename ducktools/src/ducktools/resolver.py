@@ -1941,24 +1941,29 @@ class Resolver:
         return {'active_workspace': settings.get('active_workspace'), 'workspaces': workspaces}
 
     def add_project(self, project_path: str, workspace_name: str | None = None) -> str | None:
-        """Registers project_path under its own `repository` in workspace_name (or the active workspace). Returns the repository URL used, or None if the project has no `repository` field."""
+        """Registers project_path under its own `repository` in workspace_name (or the active
+        workspace) — or under its file's file:// URI while it has none, so a project is registered
+        from the moment it is created. Any other key pointing at the same file is dropped: that is
+        the file:// entry left from before the repository was set. Returns the key used, or None
+        if no workspace resolves."""
+        path = Path(project_path).resolve()
         try:
-            content = Path(project_path).read_text(encoding='utf-8')
+            content = path.read_text(encoding='utf-8')
         except Exception:
             content = ''
         m = _REPOSITORY.search(content)
-        if not m:
-            return None
-        repository = m.group(1)
+        key = m.group(1) if m else path.as_uri()
 
         settings = _load_settings()
         name = workspace_name or settings.get('active_workspace')
         if name is None:
             return None
-        settings['workspaces'].setdefault(name, {'projects': {}})
-        settings['workspaces'][name].setdefault('projects', {})[repository] = str(Path(project_path).resolve())
+        projects = settings['workspaces'].setdefault(name, {'projects': {}}).setdefault('projects', {})
+        for stale in [k for k, p in projects.items() if k != key and Path(p).resolve() == path]:
+            del projects[stale]
+        projects[key] = str(path)
         _save_settings(settings)
-        return repository
+        return key
 
     def remove_project(self, repository: str, workspace_name: str | None = None) -> bool:
         settings = _load_settings()

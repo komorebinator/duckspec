@@ -93,7 +93,7 @@ recipes:
       - "If the version changed, read the notes of every released version after the old one up to the new one, oldest first, through the recipe named by `release_notes` on @DuckspecWorkflow. Tell the user what changed, and carry out — or, for projects not in hand, report — whatever each set of notes says a consuming project must do to move onto it. The pull has already delivered the new framework; the notes are the only place that says what it now asks of its consumers"
       - Invoke @DuckspecProject#validate()
   - id: create_project
-    description: Creates a minimal @DuckspecProject term file — only what's required plus whatever context supplies. Repository, workflow, workspace registration, and everything else are deferred to @DuckspecProject#assess_coverage, which has real project context to fill them in correctly instead of guessing now.
+    description: Creates a minimal @DuckspecProject term file — only what's required plus whatever context supplies — and registers it in the active workspace. Repository, workflow and everything else are deferred to @DuckspecProject#assess_coverage, which has real project context to fill them in correctly instead of guessing now.
     arguments:
       - id: context_path
         description: optional path to existing source the project is being created for (e.g. passed by @Duckspec#import_project); used only to help infer the identifier, description and README, not to set `settings.src` — that's the caller's job
@@ -108,7 +108,7 @@ recipes:
       - Create the terms folder on disk at the path set in `terms_folder`
       - "Invoke @DuckspecProject#update_readme() — unless `context_path` was given: then there is existing source the spec does not describe yet, and the caller invokes it once the spec does, so the README is written from the project rather than from its one-line description"
       - Invoke @DuckspecProject#update_agents() — so AGENTS.md exists from the moment the project does, before @DuckspecProject#assess_coverage ever runs against it
-      - "Report the created file's path back to the caller. This project is not yet registered in any workspace — it has no `repository` for @Workspace#add_project to key on. @DuckspecProject#assess_coverage registers it once one is found."
+      - Invoke @Workspace#add_project(project_path=<path to the created file>) on the active workspace, so the project can be named by its identifier from now on — in AGENTS.md, in every command, from any directory. It has no `repository` yet, so it is registered under its file's `file://` URI; @DuckspecProject#assess_coverage registers it again under its URL once one is found, which replaces that entry. Report the created file's path back to the caller
   - id: import_project
     description: Brings an existing codebase under Duckspec management — creates a minimal project pointed at it via @Duckspec#create_project, then runs a full coverage analysis to fill in the rest
     arguments:
