@@ -6,7 +6,8 @@ from typing import Iterator
 
 _TERM_REF = re.compile(r'@([A-Z][A-Za-z]+)')
 _TERMS_FOLDER = re.compile(r'^\s*terms_folder:\s*(\S+)', re.MULTILINE)
-_USES_BLOCK = re.compile(r'^uses:\n((?:[ \t]+-[ \t]+\S+\n?)+)', re.MULTILINE)
+# Items at column 0 are valid YAML too; missing them dropped the framework from a project silently
+_USES_BLOCK = re.compile(r'^uses:\n((?:[ \t]*-[ \t]+\S+\n?)+)', re.MULTILINE)
 _LIST_ITEM = re.compile(r'-\s+(\S+)')
 _REPOSITORY = re.compile(r'^repository:\s*(\S+)', re.MULTILINE)
 _DESCRIPTION = re.compile(r'^description:\s*(.+)$', re.MULTILINE)

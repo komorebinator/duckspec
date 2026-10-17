@@ -700,6 +700,13 @@ check('_register_framework', _framework.get('https://github.com/komorebinator/du
 _again = R._register_framework('framework-ws')
 check('_register_framework/keeps-existing', _again is not None and _again[2] is False, f'got {_again}')
 
+# `uses:` items at column 0 are valid YAML, and missing them dropped the whole framework silently
+_col0 = TMP / 'col0' / 'Col0.yaml'
+_col0.parent.mkdir()
+_col0.write_text('description: c\nextends: "@DuckspecProject"\nuses:\n- https://github.com/komorebinator/duckspec\n',
+                 encoding='utf-8')
+check('uses/column-0', any(t['name'] == 'DuckspecProject' for t in r.list_terms(str(_col0), include_all=True)))
+
 # --- report ------------------------------------------------------------------
 public = set(re.findall(r'^    def ([a-z][a-z_0-9]*)',
                         (Path(__file__).resolve().parent / 'src' / 'ducktools'
