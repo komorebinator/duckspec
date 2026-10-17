@@ -142,6 +142,10 @@ ducktools use-workspace side-project
 
 ## Installation
 
-Copy and send to your AI assistant:
+duckspec is installed once per machine, not per project. Copy and send to your AI assistant:
 
-> Install duckspec in this project: https://github.com/komorebinator/duckspec/blob/main/Duckspec.yaml
+> Install duckspec on this machine by following the `install` recipe in https://github.com/komorebinator/duckspec/blob/main/Duckspec.yaml
+
+The assistant clones the framework into a folder you choose, sets up `ducktools` (and its MCP
+server, if your assistant supports MCP), then asks whether to bring one of your existing projects
+under duckspec or start a new one.
