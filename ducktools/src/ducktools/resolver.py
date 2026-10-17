@@ -1,5 +1,6 @@
 import json
 import re
+import sys
 from pathlib import Path
 from typing import Iterator
 
@@ -590,7 +591,7 @@ def _resolve_entry(sub: str, base: Path, workspace: dict[str, Path]) -> Path | N
     if sub.startswith('https://') or sub.startswith('http://'):
         path = workspace.get(sub)
         if path is None:
-            print(f'warning: no workspace entry for "{sub}" — skipping')
+            print(f'warning: no workspace entry for "{sub}" — skipping', file=sys.stderr)
         return path
     return (base / sub).resolve()
 
@@ -639,7 +640,7 @@ class Resolver:
             for f in sorted(folder.glob('*.yaml')):
                 name = f.stem
                 if name in term_map and term_map[name] != f:
-                    print(f'warning: duplicate term "{name}" at {f} (already at {term_map[name]})')
+                    print(f'warning: duplicate term "{name}" at {f} (already at {term_map[name]})', file=sys.stderr)
                 else:
                     term_map[name] = f
         return term_map
