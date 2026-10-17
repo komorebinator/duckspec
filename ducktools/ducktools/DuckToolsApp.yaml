@@ -41,7 +41,7 @@ tests:
     expect: prints one line per method, command and tool with its verdict, then `all operations pass`, and exits 0; on failure names each one and how its result differed, and names any public method, CLI command or listed MCP tool that no check ran
   - id: yaml-valid
     description: "every term file of the framework parses as YAML — what the Term format rule promises and what a bare `@` reference used to break everywhere. Needs PyYAML, which ducktools itself never imports; where it is missing the test cannot run and says so."
-    command: "python3 -c \"import glob, yaml; [yaml.safe_load(open(f)) for f in glob.glob('**/*.yaml', recursive=True)]; print('all term files parse')\""
+    command: python3 -c "import glob, yaml; [yaml.safe_load(open(f, encoding='utf-8')) for f in glob.glob('**/*.yaml', recursive=True)]; print('all term files parse')"
     expect: prints `all term files parse` and exits 0; on failure PyYAML names the file, line and column it could not read
 components:
   - id: resolver

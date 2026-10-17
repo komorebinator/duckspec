@@ -551,7 +551,7 @@ def _load_settings() -> dict:
     if not _SETTINGS_PATH.is_file():
         return {'active_workspace': None, 'workspaces': {}, 'ducktools': {}}
     try:
-        settings = json.loads(_SETTINGS_PATH.read_text())
+        settings = json.loads(_SETTINGS_PATH.read_text(encoding='utf-8'))
     except Exception:
         return {'active_workspace': None, 'workspaces': {}, 'ducktools': {}}
     settings.setdefault('active_workspace', None)
@@ -562,7 +562,7 @@ def _load_settings() -> dict:
 
 def _save_settings(settings: dict) -> None:
     _SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    _SETTINGS_PATH.write_text(json.dumps(settings, indent=2) + '\n')
+    _SETTINGS_PATH.write_text(json.dumps(settings, indent=2) + '\n', encoding='utf-8', newline='')
 
 
 def _active_projects(settings: dict) -> dict[str, Path]:
@@ -612,7 +612,7 @@ class Resolver:
                 continue
             visited.add(key)
             try:
-                text = path.read_text()
+                text = path.read_text(encoding='utf-8')
             except Exception:
                 continue
             m = _TERMS_FOLDER.search(text)
@@ -655,7 +655,7 @@ class Resolver:
                 continue
             visited.add(key)
             try:
-                content = path.read_text()
+                content = path.read_text(encoding='utf-8')
             except Exception:
                 continue
             m = _USES_BLOCK.search(content)
@@ -685,7 +685,7 @@ class Resolver:
             if term_path is None:
                 break
             try:
-                content = term_path.read_text()
+                content = term_path.read_text(encoding='utf-8')
             except Exception:
                 break
             chain.append((name, content))
@@ -699,7 +699,7 @@ class Resolver:
         if term_path is None:
             return {'own': [], 'inherited': []}
         try:
-            content = term_path.read_text()
+            content = term_path.read_text(encoding='utf-8')
         except Exception:
             return {'own': [], 'inherited': []}
         chain = self._extends_chain_from(term_name, content, term_map)
@@ -729,7 +729,7 @@ class Resolver:
                     continue
                 seen.add(sub_path.stem)
                 try:
-                    use_content = sub_path.read_text()
+                    use_content = sub_path.read_text(encoding='utf-8')
                 except Exception:
                     continue
                 rules += _own_rules(use_content, sub_path.stem)
@@ -742,7 +742,7 @@ class Resolver:
         source = term_map if include_all else self._reachable(path, term_map)
         for name, p in sorted(source.items()):
             try:
-                content = p.read_text()
+                content = p.read_text(encoding='utf-8')
             except Exception:
                 content = ''
             yield name, p, content
@@ -763,7 +763,7 @@ class Resolver:
         """
         project_path = _resolve_project(project_path)
         root = Path(project_path).resolve()
-        root_content = root.read_text()
+        root_content = root.read_text(encoding='utf-8')
         term_map = self._build_term_map(root)
 
         recipes = [{'term': root.stem, **r} for r in _parse_recipes(root_content)]
@@ -830,7 +830,7 @@ class Resolver:
     def load_workflow(self, project_path: str) -> dict:
         """The project's configured workflow in full, with the root's overrides beside it."""
         root = Path(_resolve_project(project_path)).resolve()
-        root_content = root.read_text()
+        root_content = root.read_text(encoding='utf-8')
         hint = self._workflow_hint(root_content)
         if hint['name'] is None:
             return {'error': hint['note']}
@@ -862,7 +862,7 @@ class Resolver:
         seen: set[str] = set()
         for n in requested:
             try:
-                own = term_map[n].read_text()
+                own = term_map[n].read_text(encoding='utf-8')
             except Exception:
                 own = ''
             for name, content in self._extends_chain_from(n, own, term_map):
@@ -911,7 +911,7 @@ class Resolver:
             return None
 
         try:
-            content = term_path.read_text()
+            content = term_path.read_text(encoding='utf-8')
         except Exception:
             return None
 
@@ -968,7 +968,7 @@ class Resolver:
             content = cache.get(current)
             if content is None:
                 try:
-                    content = term_map[current].read_text()
+                    content = term_map[current].read_text(encoding='utf-8')
                 except Exception:
                     break
                 cache[current] = content
@@ -1001,7 +1001,7 @@ class Resolver:
         def read(name: str) -> str:
             if name not in cache:
                 try:
-                    cache[name] = term_map[name].read_text()
+                    cache[name] = term_map[name].read_text(encoding='utf-8')
                 except Exception:
                     cache[name] = ''
             return cache[name]
@@ -1189,7 +1189,7 @@ class Resolver:
                     continue                      # dangling-ref already names it
                 block = None
                 for _, anc in self._extends_chain_from(target, cache.get(target) or
-                                                       term_map[target].read_text(), term_map):
+                                                       term_map[target].read_text(encoding='utf-8'), term_map):
                     rb = _RECIPES_BLOCK.search(anc)
                     found = _find_named_blocks(rb.group(0), recipe) if rb else []
                     if found:
@@ -1248,7 +1248,7 @@ class Resolver:
         project = term_path
         for candidate in sorted(folder.parent.glob('*.yaml')):
             try:
-                declared = re.search(r'(?m)^terms_folder:\s*(\S+)\s*$', candidate.read_text())
+                declared = re.search(r'(?m)^terms_folder:\s*(\S+)\s*$', candidate.read_text(encoding='utf-8'))
             except OSError:
                 continue
             if declared and (candidate.parent / declared.group(1).strip('\'"').rstrip('/')
@@ -1256,7 +1256,7 @@ class Resolver:
                 project = candidate    # the file naming this terms folder owns what is in it
                 break
         try:
-            content = project.read_text()
+            content = project.read_text(encoding='utf-8')
         except OSError:
             return term_path.parent
         m = re.search(r'(?m)^settings:\s*$((?:\n[ \t]+.*|\n\s*)*)', content)
@@ -1290,7 +1290,7 @@ class Resolver:
         project_path = _resolve_project(project_path)
         root = Path(project_path).resolve()
         term_map = self._build_term_map(root)
-        cache = {name: path.read_text() for name, path in term_map.items()}
+        cache = {name: path.read_text(encoding='utf-8') for name, path in term_map.items()}
         self._search_cache.clear()   # sources may have changed since the last run
         findings: list[dict] = []
 
@@ -1365,7 +1365,7 @@ class Resolver:
                 for target in targets:
                     for source_file in self._source_files(target):
                         try:
-                            text = source_file.read_text()
+                            text = source_file.read_text(encoding='utf-8')
                         except (OSError, UnicodeDecodeError):
                             continue      # binary, or unreadable — it defines nothing
                         if needle.search(text):
@@ -1392,7 +1392,7 @@ class Resolver:
             if name == term_name:
                 continue
             try:
-                content = path.read_text()
+                content = path.read_text(encoding='utf-8')
             except Exception:
                 continue
             if _parse_extends(content) == term_name:
@@ -1409,7 +1409,7 @@ class Resolver:
         term_map = self._build_term_map(Path(project_path).resolve())
         if term_name not in term_map:
             return []
-        chain = self._extends_chain_from(term_name, term_map[term_name].read_text(), term_map)
+        chain = self._extends_chain_from(term_name, term_map[term_name].read_text(encoding='utf-8'), term_map)
         seen, out = set(), []
         for ancestor, content in chain:
             for member in _member_names(content, _PROPERTIES_BLOCK):
@@ -1426,7 +1426,7 @@ class Resolver:
         out = []
         for name, path in sorted(term_map.items()):
             try:
-                content = path.read_text()
+                content = path.read_text(encoding='utf-8')
             except Exception:
                 continue
             if rootless and _parse_extends(content):
@@ -1448,7 +1448,7 @@ class Resolver:
         term_map = self._build_term_map(Path(project_path).resolve())
         if term_name not in term_map:
             return []
-        content = term_map[term_name].read_text()
+        content = term_map[term_name].read_text(encoding='utf-8')
         out = []
         for item_id, item, indent in _slot_items(content, slot):
             fields = re.findall(rf'^{" " * (indent + 2)}([a-z_]+):', item, re.MULTILINE)
@@ -1467,7 +1467,7 @@ class Resolver:
         if term_name not in term_map:
             return f'unknown term: @{term_name}'
         path = term_map[term_name]
-        lines = path.read_text().splitlines(keepends=True)
+        lines = path.read_text(encoding='utf-8').splitlines(keepends=True)
         start, end = 0, len(lines)
         for n, segment in enumerate(segments):
             window = ''.join(lines[start:end])
@@ -1535,14 +1535,14 @@ class Resolver:
         span = self._field_span(lines, start, end, field)
         if span is None:
             lines.insert(start + 1, f'{" " * self._field_column(lines[start])}{field}: {value}\n')
-            path.write_text(''.join(lines))
+            path.write_text(''.join(lines), encoding='utf-8', newline='')
             return f'{path}: added {field}'
         i, j, column = span
         on_head = re.match(rf'^(\s*-\s+){re.escape(field)}:', lines[i])
         # A value continued on the lines below belongs to this field too, and replacing only the
         # first line of it would leave the rest stranded under the new value.
         lines[i:j] = [f'{on_head.group(1) if on_head else " " * column}{field}: {value}\n']
-        path.write_text(''.join(lines))
+        path.write_text(''.join(lines), encoding='utf-8', newline='')
         return f'{path}: replaced {field}'
 
     def edit_field(self, project_path: str, ref: str, field: str, old: str, new: str) -> str:
@@ -1609,7 +1609,7 @@ class Resolver:
                 while at > p_start + 1 and not lines[at - 1].strip():
                     at -= 1
             lines.insert(at, f'{" " * column}{slot_name}:\n')
-            path.write_text(''.join(lines))
+            path.write_text(''.join(lines), encoding='utf-8', newline='')
             located = self._locate(project_path, ref, slot=True)
             if isinstance(located, str):
                 return located
@@ -1651,7 +1651,7 @@ class Resolver:
             elif hit + 1 < len(siblings):
                 at = siblings[hit + 1]   # the anchor's own block ends where the next one starts
         lines[at:at] = block
-        path.write_text(''.join(lines))
+        path.write_text(''.join(lines), encoding='utf-8', newline='')
         return f'{path}: added {entry_id} to {ref}'
 
     def remove_element(self, project_path: str, ref: str) -> str:
@@ -1662,7 +1662,7 @@ class Resolver:
             return located
         path, lines, start, end = located
         del lines[start:end]
-        path.write_text(''.join(lines))
+        path.write_text(''.join(lines), encoding='utf-8', newline='')
         return f'{path}: removed {end - start} line(s)'
 
     @staticmethod
@@ -1723,7 +1723,7 @@ class Resolver:
                                if l.startswith(("properties:", "recipes:"))), len(lines))
             lines[anchor:anchor] = [f"{' ' * indent}{block}:\n",
                                     self._item_line(text, indent + 2)]
-            path.write_text("".join(lines))
+            path.write_text("".join(lines), encoding='utf-8', newline='')
             return f"{path}: created {block} and added to it"
         path, lines, start, end = located
         indent = len(lines[start]) - len(lines[start].lstrip()) + 2
@@ -1734,7 +1734,7 @@ class Resolver:
                 return found
             at = found[1]
         lines.insert(at, self._item_line(text, indent))
-        path.write_text("".join(lines))
+        path.write_text("".join(lines), encoding='utf-8', newline='')
         return f"{path}: added to {ref}"
 
     def set_item(self, project_path: str, ref: str, match: str, text: str) -> str:
@@ -1748,7 +1748,7 @@ class Resolver:
         i, j = found
         indent = len(lines[i]) - len(lines[i].lstrip())
         lines[i:j] = [self._item_line(text, indent)]
-        path.write_text("".join(lines))
+        path.write_text("".join(lines), encoding='utf-8', newline='')
         return f"{path}: replaced in {ref}"
 
     def remove_item(self, project_path: str, ref: str, match: str) -> str:
@@ -1763,7 +1763,7 @@ class Resolver:
         del lines[i:j]
         if end - start == j - i + 1:          # the block held only that item
             del lines[start]
-        path.write_text("".join(lines))
+        path.write_text("".join(lines), encoding='utf-8', newline='')
         return f"{path}: removed from {ref}"
 
     def move_item(self, project_path: str, from_ref: str, to_ref: str, match: str) -> str:
@@ -1784,7 +1784,7 @@ class Resolver:
     def create_term(self, project_path: str, term_name: str, description: str,
                     extends: str = 'Term') -> str:
         root = Path(_resolve_project(project_path)).resolve()
-        m = _TERMS_FOLDER.search(root.read_text())
+        m = _TERMS_FOLDER.search(root.read_text(encoding='utf-8'))
         if not m:
             return 'project declares no terms_folder'
         folder = root.parent / m.group(1)
@@ -1793,7 +1793,8 @@ class Resolver:
         if path.exists():
             return f'already exists: {path}'
         path.write_text(f'description: {_quoted(description)}\n'
-                        f'extends: {_quoted("@" + extends.lstrip("@"))}\n')
+                        f'extends: {_quoted("@" + extends.lstrip("@"))}\n',
+                        encoding='utf-8', newline='')
         return f'{path}: created'
 
     def _own_files(self, root: Path) -> list[Path]:
@@ -1821,12 +1822,12 @@ class Resolver:
         changed = []
         for path in self._own_files(root):
             try:
-                text = path.read_text()
+                text = path.read_text(encoding='utf-8')
             except Exception:
                 continue
             new, count = self._normalized(text)
             if count:
-                path.write_text(new)
+                path.write_text(new, encoding='utf-8', newline='')
                 changed.append({'path': str(path), 'quoted': count})
         return changed
 
@@ -1838,7 +1839,7 @@ class Resolver:
         if not _DESCRIPTION.search(content):
             return 'refused: the content has no top-level description:, which every term needs'
         new, _ = self._normalized(content if content.endswith('\n') else content + '\n')
-        path.write_text(new)
+        path.write_text(new, encoding='utf-8', newline='')
         return f'{path}: replaced'
 
     def rename_term(self, project_path: str, old_name: str, new_name: str) -> str:
@@ -1852,12 +1853,12 @@ class Resolver:
         touched = 0
         for name, path in term_map.items():
             try:
-                content = path.read_text()
+                content = path.read_text(encoding='utf-8')
             except Exception:
                 continue
             updated = re.sub(rf'@{re.escape(old_name)}\b', f'@{new_name}', content)
             if updated != content:
-                path.write_text(updated)
+                path.write_text(updated, encoding='utf-8', newline='')
                 touched += 1
         old_path.rename(old_path.with_name(f'{new_name}.yaml'))
         return f'@{old_name} -> @{new_name}; {touched} file(s) updated'
@@ -1902,7 +1903,7 @@ class Resolver:
                 name = None
                 description = ''
                 try:
-                    content = Path(path).read_text()
+                    content = Path(path).read_text(encoding='utf-8')
                     name = Path(path).stem
                     m = _DESCRIPTION.search(content)
                     description = m.group(1).strip() if m else ''
@@ -1915,7 +1916,7 @@ class Resolver:
     def add_project(self, project_path: str, workspace_name: str | None = None) -> str | None:
         """Registers project_path under its own `repository` in workspace_name (or the active workspace). Returns the repository URL used, or None if the project has no `repository` field."""
         try:
-            content = Path(project_path).read_text()
+            content = Path(project_path).read_text(encoding='utf-8')
         except Exception:
             content = ''
         m = _REPOSITORY.search(content)

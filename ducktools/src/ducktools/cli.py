@@ -1,5 +1,6 @@
 import argparse
 import json
+import sys
 
 from .resolver import resolver
 
@@ -479,6 +480,12 @@ def cmd_remove_project(repository: str, workspace_name: str | None = None) -> No
 
 
 def main() -> None:
+    # Python before 3.15 gives the standard streams the locale's encoding — on Windows a legacy
+    # code page that cannot print most of what term files hold. The MCP server runs through here too.
+    for stream in (sys.stdin, sys.stdout, sys.stderr):
+        if hasattr(stream, 'reconfigure'):
+            stream.reconfigure(encoding='utf-8')
+
     parser = argparse.ArgumentParser(prog='ducktools')
     sub = parser.add_subparsers(dest='command', required=True)
 

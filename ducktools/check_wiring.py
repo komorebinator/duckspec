@@ -9,17 +9,17 @@ import re, pathlib, sys
 d = pathlib.Path('ducktools/src/ducktools')
 sys.path.insert(0, str(d.parent))
 
-pub = set(re.findall(r'^    def ([a-z][a-z_0-9]*)', (d/'resolver.py').read_text(), re.M))
+pub = set(re.findall(r'^    def ([a-z][a-z_0-9]*)', (d/'resolver.py').read_text(encoding='utf-8'), re.M))
 problems = []
 for f in ('cli.py', 'mcp_server.py'):
-    wired = set(re.findall(r'resolver\.([a-z_]+)\(', (d/f).read_text()))
+    wired = set(re.findall(r'resolver\.([a-z_]+)\(', (d/f).read_text(encoding='utf-8')))
     missing = sorted(pub - wired)
     if missing:
         problems.append(f'{f} calls no: {", ".join(missing)}')
 
 from ducktools import cli, mcp_server  # noqa: E402
 
-spec = pathlib.Path('ducktools/ducktools/DuckToolsApp.yaml').read_text()
+spec = pathlib.Path('ducktools/ducktools/DuckToolsApp.yaml').read_text(encoding='utf-8')
 
 
 def described(component: str) -> set[str]:

@@ -33,7 +33,7 @@ def fixture() -> Path:
     root = TMP / 'project'
     (root / 'Fixture').mkdir(parents=True)
     (root / 'src').mkdir()
-    (root / 'src' / 'widget.py').write_text('def spin():\n    return 1\n')
+    (root / 'src' / 'widget.py').write_text('def spin():\n    return 1\n', encoding='utf-8')
     # `uses:` the real framework so @Term and @DuckspecProject resolve — a fixture that
     # cannot pass verify_project would test the checker against a broken project.
     duckspec = Path(__file__).resolve().parent.parent / 'Duckspec.yaml'
@@ -50,7 +50,7 @@ def fixture() -> Path:
         '  - "@Widget"\n'
         'guidelines:\n'
         '  - Keep the fixture small.\n'
-    )
+    , encoding='utf-8')
     (root / 'Fixture' / 'Widget.yaml').write_text(
         'description: A widget, described for the fixture.\n'
         # @Software, not @Term: the fixture lists it in `software:` and gives it `src:` and
@@ -63,11 +63,11 @@ def fixture() -> Path:
         'functions:\n'
         '  - id: spin\n'
         '    description: turns the widget once\n'
-    )
+    , encoding='utf-8')
     (root / 'Fixture' / 'Gadget.yaml').write_text(
         'description: A gadget, built on @Widget.\n'
         'extends: "@Widget"\n'
-    )
+    , encoding='utf-8')
     return root / 'Fixture.yaml'
 
 
@@ -120,7 +120,7 @@ check('resolve_path', resolved is not None and 'turns the widget once' in resolv
 _twin = Path(project).parent / 'Fixture' / 'Twin.yaml'
 _twin.write_text('description: Two entries share an id.\nextends: "@Term"\n'
                  'properties:\n  - id: dup\n    description: first\n'
-                 'functions:\n  - id: dup\n    description: second\n')
+                 'functions:\n  - id: dup\n    description: second\n', encoding='utf-8')
 _amb = r.resolve_path(project, 'Twin#dup')
 check('resolve_path/ambiguous', _amb is not None and 'ambiguous' in _amb.get('error', ''),
       f'got {_amb}')
@@ -138,8 +138,8 @@ check('load_workflow/unconfigured', 'error' in r.load_workflow(project),
       f'got {r.load_workflow(project)}')
 
 _root = Path(project)
-_before = _root.read_text()
-_root.write_text(_before + 'workflow:\n  type: "@GitHubWorkflow"\n  main_branch: trunk\n')
+_before = _root.read_text(encoding='utf-8')
+_root.write_text(_before + 'workflow:\n  type: "@GitHubWorkflow"\n  main_branch: trunk\n', encoding='utf-8')
 _wf = r.load_workflow(project)
 check('load_workflow',
       _wf.get('name') == 'GitHubWorkflow'
@@ -149,7 +149,7 @@ check('load_workflow',
       f"got {_wf.get('name')} / {[t['name'] for t in _wf.get('terms', [])]}")
 check('load_project/workflow-hint-set',
       r.load_project(project)['workflow']['name'] == 'GitHubWorkflow')
-_root.write_text(_before)
+_root.write_text(_before, encoding='utf-8')
 
 check('verify_project', r.verify_project(project) == [], f'got {r.verify_project(project)}')
 check('verify_source', r.verify_source(project) == [], f'got {r.verify_source(project)}')
@@ -158,35 +158,35 @@ check('verify_source', r.verify_source(project) == [], f'got {r.verify_source(pr
 # nothing at that level: a term could invent a field — or a whole slot no type describes, holding
 # any number of unread entries — and verify_project still reported an empty list
 _w = Path(project).parent / 'Fixture' / 'Widget.yaml'
-_orig = _w.read_text()
-_w.write_text(_orig + 'invented_field: nothing declares this\n')
+_orig = _w.read_text(encoding='utf-8')
+_w.write_text(_orig + 'invented_field: nothing declares this\n', encoding='utf-8')
 _top = [f for f in r.verify_project(project)
         if f['check'] == 'unknown-field' and 'invented_field' in f['message']]
 check('verify_project/top-level-field', len(_top) == 1, f'got {r.verify_project(project)}')
-_w.write_text(_orig)
+_w.write_text(_orig, encoding='utf-8')
 
 # a `uses:` entry that resolved to nothing was skipped in silence, so the project it named simply
 # left the term map and the report blamed the dangling references that followed. The two ways it
 # fails are different in kind: a wrong relative path is a defect in the spec, while a URL missing
 # from the workspace means the spec is right and this machine has not cloned that project
 _root = Path(project)
-_saved = _root.read_text()
+_saved = _root.read_text(encoding='utf-8')
 _root.write_text(_saved.replace('uses:\n', 'uses:\n  - ./nowhere.yaml\n'
-                                '  - https://example.invalid/never-registered\n', 1))
+                                '  - https://example.invalid/never-registered\n', 1), encoding='utf-8')
 _bu = [f for f in r.verify_project(project) if f['check'] == 'broken-uses']
 check('verify_project/broken-uses',
       sorted((f['severity'], 'nowhere' in f['message']) for f in _bu)
       == [('error', True), ('warning', False)], f'got {_bu}')
-_root.write_text(_saved)
+_root.write_text(_saved, encoding='utf-8')
 
 # a file with a `uses:` block is still a term: when the broken-uses check was added it ended in a
 # `continue`, and every project file — the ones every other term hangs off — went unchecked for
 # dangling references from then on while the report stayed empty
-_root.write_text(_saved + 'goals:\n  - Mention @NoSuchTermAnywhere\n')
+_root.write_text(_saved + 'goals:\n  - Mention @NoSuchTermAnywhere\n', encoding='utf-8')
 _dr = [f for f in r.verify_project(project) if f['check'] == 'dangling-ref']
 check('verify_project/refs-in-project-file',
       any('NoSuchTermAnywhere' in f['message'] for f in _dr), f'got {_dr}')
-_root.write_text(_saved)
+_root.write_text(_saved, encoding='utf-8')
 
 # a step's operation has to be something that can be run. A reference that merely resolves is not
 # enough: a function or a component describing a file resolves fine, and a step pointing at one
@@ -196,7 +196,7 @@ _flow.write_text('description: A workflow for the operation checks.\nextends: "@
                  '  - id: good\n    when: always\n    operation: "@Git#push(branch=main)"\n'
                  '  - id: not_a_recipe\n    when: always\n    operation: "@Widget#spin"\n'
                  '  - id: bad_argument\n    when: always\n    operation: "@Git#push(bogus=1)"\n'
-                 '  - id: bad_form\n    when: always\n    operation: "@Git#push#deeper"\n')
+                 '  - id: bad_form\n    when: always\n    operation: "@Git#push#deeper"\n', encoding='utf-8')
 _ops = [f for f in r.verify_project(project) if f['check'] == 'broken-operation']
 _hit = sorted(f["message"].split("'")[1] for f in _ops)
 check('verify_project/broken-operation',
@@ -208,21 +208,21 @@ _flow.unlink()
 # readers expected bare, the slot read as untyped and unknown-field skipped every entry in it — and
 # the bare form files written before still carry is read too
 r.add_entry(project, 'Widget#properties', 'parts', {'type': '@Gadget', 'description': 'its parts'})
-check('add_entry/quoted-term-ref', '    type: "@Gadget"\n' in _w.read_text(), _w.read_text())
-_w.write_text(_w.read_text() + 'parts:\n  - id: cog\n    invented: nothing declares this\n')
+check('add_entry/quoted-term-ref', '    type: "@Gadget"\n' in _w.read_text(encoding='utf-8'), _w.read_text(encoding='utf-8'))
+_w.write_text(_w.read_text(encoding='utf-8') + 'parts:\n  - id: cog\n    invented: nothing declares this\n', encoding='utf-8')
 _q = [f for f in r.verify_project(project) if f['check'] == 'unknown-field' and 'invented' in f['message']]
 check('verify_project/quoted-type', len(_q) == 1, f'got {r.verify_project(project)}')
-_w.write_text(_w.read_text().replace('    type: "@Gadget"\n', '    type: @Gadget\n'))
+_w.write_text(_w.read_text(encoding='utf-8').replace('    type: "@Gadget"\n', '    type: @Gadget\n'), encoding='utf-8')
 _q = [f for f in r.verify_project(project) if f['check'] == 'unknown-field' and 'invented' in f['message']]
 check('verify_project/bare-type', len(_q) == 1, f'got {r.verify_project(project)}')
-_w.write_text(_orig)
+_w.write_text(_orig, encoding='utf-8')
 
 # when the chain cannot be resolved, _schema saw only part of the vocabulary; unknown-extends
 # reports that, and the top-level check must stay quiet rather than bury it under one finding per
 # inherited field the term legitimately carries
 _orphan = Path(project).parent / 'Fixture' / 'Orphan.yaml'
 _orphan.write_text('description: Extends a term that is not in the map.\n'
-                   'extends: "@NotAThing"\nplatform: python\n')
+                   'extends: "@NotAThing"\nplatform: python\n', encoding='utf-8')
 _of = r.verify_project(project)
 check('verify_project/broken-chain-quiet',
       any(f['check'] == 'unknown-extends' for f in _of)
@@ -249,20 +249,20 @@ def absent_project() -> tuple[str, dict]:
         '    print("only_a_string")\n'
         '    return only_a_call()\n'
         'CLI = ["command-name"]\n'
-    )
+    , encoding='utf-8')
     (pkg / 'real.js').write_text(
         'import { imported_only } from "./other.js";\n'
         'export function declared_js(a) { return a; }\n'
         'export class Thing {\n'
         '  declared_method() { return 2; }\n'
         '}\n'
-    )
+    , encoding='utf-8')
     (pkg / 'real.sh').write_text(
         '#!/bin/sh\n'
         'declared_sh() {\n'
         '  echo hi\n'
         '}\n'
-    )
+    , encoding='utf-8')
     # bytecode: unreadable as text, and stale by construction — must never satisfy anything
     (pkg / '__pycache__').mkdir()
     (pkg / '__pycache__' / 'real.cpython-313.pyc').write_bytes(
@@ -276,7 +276,7 @@ def absent_project() -> tuple[str, dict]:
         'repository: https://example.invalid/absent\n'
         f'uses:\n  - {duckspec}\n'
         'settings:\n  src: .\n'
-    )
+    , encoding='utf-8')
     (root / 'Absent' / 'Cases.yaml').write_text(
         'description: Function entries checked against a whole package.\n'
         'extends: "@Term"\n'
@@ -288,7 +288,7 @@ def absent_project() -> tuple[str, dict]:
         '  - id: declared_sh\n    description: a real shell definition\n'
         '  - id: command-name\n    description: a command name, present only in quotes\n'
         '  - id: deleted_long_ago\n    description: survives only inside stale bytecode\n'
-    )
+    , encoding='utf-8')
     # a list-form `src:` — the form that used to read as no path at all, skipping every
     # function under it without a word
     (root / 'Absent' / 'Split.yaml').write_text(
@@ -301,7 +301,7 @@ def absent_project() -> tuple[str, dict]:
         '  - id: declared_js\n    description: lives in the first file\n'
         '  - id: declared_sh\n    description: lives in the second\n'
         '  - id: in_neither\n    description: lives in neither, and must be reported\n'
-    )
+    , encoding='utf-8')
     findings = R.Resolver().verify_source(str(root / 'Absent.yaml'))
     return str(root / 'Absent.yaml'), {
         f['message'].split("'")[1]: (f['check'], f['severity']) for f in findings}
@@ -335,19 +335,19 @@ check('slot_entries', [e['id'] for e in entries] == ['colour'], f'got {entries}'
 
 # --- editing -----------------------------------------------------------------
 r.set_field(project, 'Widget#colour', 'description', 'the colour, restated')
-check('set_field', 'restated' in Path(project).parent.joinpath('Fixture/Widget.yaml').read_text())
+check('set_field', 'restated' in Path(project).parent.joinpath('Fixture/Widget.yaml').read_text(encoding='utf-8'))
 
 # an entry's own `id` sits on the `- ` line, two columns left of its siblings; setting it must
 # rewrite that line rather than append a second `id:` under it
 r.set_field(project, 'Widget#colour', 'id', 'hue')
 _widget = Path(project).parent / 'Fixture' / 'Widget.yaml'
-check('set_field/id', _widget.read_text().count('id: hue') == 1
-      and 'id: colour' not in _widget.read_text(), _widget.read_text())
+check('set_field/id', _widget.read_text(encoding='utf-8').count('id: hue') == 1
+      and 'id: colour' not in _widget.read_text(encoding='utf-8'), _widget.read_text(encoding='utf-8'))
 r.set_field(project, 'Widget#hue', 'id', 'colour')
 
 r.add_entry(project, 'Widget#properties', 'weight', {'description': 'how heavy: quite'})
 widget = Path(project).parent / 'Fixture' / 'Widget.yaml'
-check('add_entry', 'weight' in widget.read_text() and '"how heavy: quite"' in widget.read_text(),
+check('add_entry', 'weight' in widget.read_text(encoding='utf-8') and '"how heavy: quite"' in widget.read_text(encoding='utf-8'),
       'a value with a colon must be quoted')
 check('add_entry/duplicate', 'refused' in r.add_entry(project, 'Widget#properties', 'weight', {}))
 
@@ -362,69 +362,69 @@ _arg = r.resolve_path(project, 'Widget#wobble#arguments#angle')
 check('add_entry/nested',
       _arg is not None and '"how far: in degrees"' in _arg['content']
       and r.resolve_path(project, 'Widget#wobble#axis') is not None
-      and '    notes:\n      - first\n      - second\n' in widget.read_text(),
-      widget.read_text())
+      and '    notes:\n      - first\n      - second\n' in widget.read_text(encoding='utf-8'),
+      widget.read_text(encoding='utf-8'))
 r.remove_element(project, 'Widget#functions#wobble')
 
 # a slot whose order is its meaning — a workflow's steps — could only be extended at its end, so
 # an entry belonging in the middle was written by hand; `after` and `before` name the neighbour
 def _ids() -> list[str]:
-    block = re.search(r'^properties:\n(.*?)(?=^\S|\Z)', widget.read_text(), re.M | re.S)
+    block = re.search(r'^properties:\n(.*?)(?=^\S|\Z)', widget.read_text(encoding='utf-8'), re.M | re.S)
     return re.findall(r'^  - id: (\S+)', block.group(1), re.M)
 
 
 _first = _ids()[0]
 r.add_entry(project, 'Widget#properties', 'girth', {'description': 'how wide'}, after=_first)
-check('add_entry/after', _ids()[:2] == [_first, 'girth'], widget.read_text())
+check('add_entry/after', _ids()[:2] == [_first, 'girth'], widget.read_text(encoding='utf-8'))
 r.add_entry(project, 'Widget#properties', 'height', {'description': 'how tall'}, before=_first)
-check('add_entry/before', _ids()[:3] == ['height', _first, 'girth'], widget.read_text())
+check('add_entry/before', _ids()[:3] == ['height', _first, 'girth'], widget.read_text(encoding='utf-8'))
 r.add_entry(project, 'Widget#properties', 'depth', {}, after=_ids()[-1])
-check('add_entry/after-last', _ids()[-1] == 'depth', widget.read_text())
-_kept = widget.read_text()
+check('add_entry/after-last', _ids()[-1] == 'depth', widget.read_text(encoding='utf-8'))
+_kept = widget.read_text(encoding='utf-8')
 check('add_entry/unknown-anchor',
       'refused' in r.add_entry(project, 'Widget#properties', 'span', {}, after='no-such-entry')
       and 'refused' in r.add_entry(project, 'Widget#properties', 'span', {}, after=_first, before=_first)
       and 'refused' in r.add_entry(project, 'Widget#no_such_slot', 'span', {}, after=_first)
-      and widget.read_text() == _kept, widget.read_text())
+      and widget.read_text(encoding='utf-8') == _kept, widget.read_text(encoding='utf-8'))
 for _id in ('girth', 'height', 'depth'):
     r.remove_element(project, f'Widget#properties#{_id}')
 
 r.remove_element(project, 'Widget#weight')
-check('remove_element', 'weight' not in widget.read_text())
+check('remove_element', 'weight' not in widget.read_text(encoding='utf-8'))
 
 r.add_item(project, 'Widget#guidelines', 'A widget spins clockwise.')
-check('add_item', 'clockwise' in widget.read_text())
+check('add_item', 'clockwise' in widget.read_text(encoding='utf-8'))
 
 # the list is addressed by path, not by term plus block name, so the same operation reaches a
 # recipe's instructions two levels down — which nothing could edit before
 r.add_item(project, 'Widget#spin#instructions', 'Turn it once and stop.')
-check('add_item/nested', 'Turn it once and stop.' in widget.read_text(), widget.read_text())
+check('add_item/nested', 'Turn it once and stop.' in widget.read_text(encoding='utf-8'), widget.read_text(encoding='utf-8'))
 
 # `after` puts an item where it belongs rather than at the end
 r.add_item(project, 'Widget#guidelines', 'A widget is round.', after='clockwise')
 check('add_item/after',
-      re.search(r'clockwise\.\n  - A widget is round\.', widget.read_text()) is not None,
-      widget.read_text())
+      re.search(r'clockwise\.\n  - A widget is round\.', widget.read_text(encoding='utf-8')) is not None,
+      widget.read_text(encoding='utf-8'))
 
 # rewording must not relocate: remove-plus-add would have moved this to the end of the block, past
 # the guideline it was deliberately written before
 r.set_item(project, 'Widget#guidelines', 'clockwise', 'A widget spins the other way.')
 check('set_item',
-      re.search(r'other way\.\n  - A widget is round\.', widget.read_text()) is not None
-      and 'clockwise' not in widget.read_text(), widget.read_text())
+      re.search(r'other way\.\n  - A widget is round\.', widget.read_text(encoding='utf-8')) is not None
+      and 'clockwise' not in widget.read_text(encoding='utf-8'), widget.read_text(encoding='utf-8'))
 
 # a block that does not exist yet is created rather than refused
 r.add_item(project, 'Widget#goals', 'Spin reliably.')
 check('add_item/creates-block',
-      re.search(r'^goals:\n  - Spin reliably\.', widget.read_text(), re.M) is not None,
-      widget.read_text())
+      re.search(r'^goals:\n  - Spin reliably\.', widget.read_text(encoding='utf-8'), re.M) is not None,
+      widget.read_text(encoding='utf-8'))
 
 r.move_item(project, 'Widget#guidelines', 'Widget#ai_instructions', 'other way')
 check('move_item', re.search(r'ai_instructions:\n  - A widget spins the other way\.',
-                             widget.read_text()) is not None, widget.read_text())
+                             widget.read_text(encoding='utf-8')) is not None, widget.read_text(encoding='utf-8'))
 
 r.remove_item(project, 'Widget#ai_instructions', 'other way')
-check('remove_item', 'other way' not in widget.read_text())
+check('remove_item', 'other way' not in widget.read_text(encoding='utf-8'))
 
 # moving takes the item's text out and writes it back, so the quoting has to be undone on the way
 # out: stripping only the outer quotes left the escapes inside, and writing escaped them again
@@ -437,8 +437,8 @@ r.remove_item(project, 'Widget#ai_instructions', 'never')
 
 r.create_term(project, 'Sprocket', 'A sprocket.', '@Term')
 sprocket = Path(project).parent / 'Fixture' / 'Sprocket.yaml'
-check('create_term', sprocket.is_file() and 'extends: "@Term"\n' in sprocket.read_text(),
-      sprocket.read_text() if sprocket.is_file() else 'not created')
+check('create_term', sprocket.is_file() and 'extends: "@Term"\n' in sprocket.read_text(encoding='utf-8'),
+      sprocket.read_text(encoding='utf-8') if sprocket.is_file() else 'not created')
 
 r.rename_term(project, 'Sprocket', 'Cog')
 check('rename_term', (Path(project).parent / 'Fixture' / 'Cog.yaml').is_file() and not sprocket.exists())
@@ -467,44 +467,44 @@ _said = r.replace_term(project, 'Knot',
                        '  - note: first\n'
                        '  - note: second\n'
                        'name: a knot: the tight kind\n')
-check('replace_term', 'replaced' in _said and 'extends: "@Term"\n' in knot.read_text()
-      and 'name: "a knot: the tight kind"\n' in knot.read_text(), knot.read_text())
+check('replace_term', 'replaced' in _said and 'extends: "@Term"\n' in knot.read_text(encoding='utf-8')
+      and 'name: "a knot: the tight kind"\n' in knot.read_text(encoding='utf-8'), knot.read_text(encoding='utf-8'))
 check('replace_term/needs-description',
-      'refused' in r.replace_term(project, 'Knot', 'extends: "@Term"\n'), knot.read_text())
+      'refused' in r.replace_term(project, 'Knot', 'extends: "@Term"\n'), knot.read_text(encoding='utf-8'))
 
 # replacing a value takes its continuation lines with it, and a block scalar's whole body, blank
 # lines inside it included — leaving them turned the next line into garbage for any parser
 r.set_field(project, 'Knot', 'description', 'A knot: tied for the checks.')
 r.set_field(project, 'Knot#properties#guidelines', 'description', 'shares a name')
 check('set_field/continuation',
-      'description: "A knot: tied for the checks."\nextends:' in knot.read_text()
-      and 'with the slot below' not in knot.read_text()
-      and '    description: shares a name\nguidelines:' in knot.read_text(), knot.read_text())
+      'description: "A knot: tied for the checks."\nextends:' in knot.read_text(encoding='utf-8')
+      and 'with the slot below' not in knot.read_text(encoding='utf-8')
+      and '    description: shares a name\nguidelines:' in knot.read_text(encoding='utf-8'), knot.read_text(encoding='utf-8'))
 
 # one piece of a value changes and the rest stays, whether the value was written bare or quoted with
 # escapes inside — the piece is matched against the text as it reads, not as it is stored
-knot.write_text(knot.read_text().replace('name: "a knot: the tight kind"\n',
-                                         'name: "a \\"knot\\": the tight kind"\n'))
+knot.write_text(knot.read_text(encoding='utf-8').replace('name: "a knot: the tight kind"\n',
+                                         'name: "a \\"knot\\": the tight kind"\n'), encoding='utf-8')
 r.edit_field(project, 'Knot', 'name', 'tight', 'slipping')
 r.edit_field(project, 'Knot#properties#guidelines', 'description', 'shares', 'borrows')
-check('edit_field', 'name: "a \\"knot\\": the slipping kind"\n' in knot.read_text()
-      and '    description: borrows a name\n' in knot.read_text(), knot.read_text())
+check('edit_field', 'name: "a \\"knot\\": the slipping kind"\n' in knot.read_text(encoding='utf-8')
+      and '    description: borrows a name\n' in knot.read_text(encoding='utf-8'), knot.read_text(encoding='utf-8'))
 check('edit_field/once',
       'refused' in r.edit_field(project, 'Knot', 'name', 'zz', 'y')
-      and 'refused' in r.edit_field(project, 'Knot', 'name', 'k', 'y'), knot.read_text())
+      and 'refused' in r.edit_field(project, 'Knot', 'name', 'k', 'y'), knot.read_text(encoding='utf-8'))
 
 # the list the operation edits is the key, not the property entry of the same name
 r.add_item(project, 'Knot#guidelines', 'Tie it twice.')
-check('add_item/prefers-key', '  - Pull it tight.\n  - Tie it twice.\n' in knot.read_text(),
-      knot.read_text())
+check('add_item/prefers-key', '  - Pull it tight.\n  - Tie it twice.\n' in knot.read_text(encoding='utf-8'),
+      knot.read_text(encoding='utf-8'))
 
 # an entry with no id is reached by its position
 _second = r.resolve_path(project, 'Knot#references#1')
 check('resolve_path/position', _second is not None and 'second' in _second['content']
       and 'first' not in _second['content'], f'got {_second}')
 r.set_field(project, 'Knot#references#0', 'note', 'the first: kept')
-check('set_field/position', '  - note: "the first: kept"\n  - note: second\n' in knot.read_text(),
-      knot.read_text())
+check('set_field/position', '  - note: "the first: kept"\n  - note: second\n' in knot.read_text(encoding='utf-8'),
+      knot.read_text(encoding='utf-8'))
 
 # a slot that is not there yet is created rather than refused, at the top level and inside an entry
 r.add_entry(project, 'Knot#recipes', 'tie', {'description': 'ties it'})
@@ -512,20 +512,20 @@ r.add_entry(project, 'Knot#tie#arguments', 'rope', {'description': 'which rope'}
 check('add_entry/creates-slot',
       re.search(r'^recipes:\n  - id: tie\n    description: ties it\n'
                 r'    arguments:\n      - id: rope\n        description: which rope\n',
-                knot.read_text(), re.M) is not None, knot.read_text())
+                knot.read_text(encoding='utf-8'), re.M) is not None, knot.read_text(encoding='utf-8'))
 
 # a value YAML would misread is a finding, and normalize fixes it and only it
-knot.write_text(knot.read_text() + 'goals:\n  - @Widget first\n  - "@Gadget"\n  - plain\n'
-                "  - 'Spin' it, then stop\n  - 'spanning\n    lines'\n")
+knot.write_text(knot.read_text(encoding='utf-8') + 'goals:\n  - @Widget first\n  - "@Gadget"\n  - plain\n'
+                "  - 'Spin' it, then stop\n  - 'spanning\n    lines'\n", encoding='utf-8')
 _bare = [f for f in r.verify_project(project) if f['check'] == 'unquoted-scalar']
 check('verify_project/unquoted-scalar',
       [(f['term'], f['line']) for f in _bare]
-      == [('Knot', knot.read_text().splitlines().index(l) + 1) for l in ('  - @Widget first', "  - 'Spin' it, then stop")],
+      == [('Knot', knot.read_text(encoding='utf-8').splitlines().index(l) + 1) for l in ('  - @Widget first', "  - 'Spin' it, then stop")],
       f'got {_bare}')
 _fixed = r.normalize(project)
 check('normalize', [Path(c['path']).name for c in _fixed] == ['Knot.yaml']
-      and '  - "@Widget first"\n  - "@Gadget"\n  - plain\n  - "\'Spin\' it, then stop"\n  - \'spanning\n' in knot.read_text()
-      and r.normalize(project) == [], f'got {_fixed}\n{knot.read_text()}')
+      and '  - "@Widget first"\n  - "@Gadget"\n  - plain\n  - "\'Spin\' it, then stop"\n  - \'spanning\n' in knot.read_text(encoding='utf-8')
+      and r.normalize(project) == [], f'got {_fixed}\n{knot.read_text(encoding='utf-8')}')
 
 r.remove_term(project, 'Knot')
 
@@ -538,14 +538,14 @@ import contextlib, io, json  # noqa: E401,E402
 from ducktools import cli, mcp_server  # noqa: E402
 
 _root_file = Path(project)
-_before = _root_file.read_text()
-_root_file.write_text(_before + 'workflow:\n  type: "@GitHubWorkflow"\n')
+_before = _root_file.read_text(encoding='utf-8')
+_root_file.write_text(_before + 'workflow:\n  type: "@GitHubWorkflow"\n', encoding='utf-8')
 
 # (command, argv after the command, tool, arguments, text the output must contain — or a tuple
 # of alternatives, for the checks whose verdict depends on what earlier sections left behind)
 _P = {'project_path': project}
 _gear_file = TMP / 'gear.yaml'
-_gear_file.write_text('description: A toothed gear.\nextends: @Term\n')
+_gear_file.write_text('description: A toothed gear.\nextends: @Term\n', encoding='utf-8')
 FRONT = [
     ('load-project', [project], 'load_project', _P, '## Workflow'),
     ('load-workflow', [project], 'load_workflow', _P, '# @GitHubWorkflow'),
@@ -625,9 +625,9 @@ for command, argv, tool, arguments, expect in FRONT:
 # or a tool argument the dispatch drops, would put the entry last without saying so
 _head = _ids()[0]
 _run_cli(['add', project, 'Widget#properties', 'girth', '--before', _head])
-check('cli/add --before', _ids()[:2] == ['girth', _head], widget.read_text())
+check('cli/add --before', _ids()[:2] == ['girth', _head], widget.read_text(encoding='utf-8'))
 mcp_server._call('add_entry', {**_P, 'ref': 'Widget#properties', 'entry_id': 'depth', 'after': _head})
-check('mcp/add_entry after', _ids()[:3] == ['girth', _head, 'depth'], widget.read_text())
+check('mcp/add_entry after', _ids()[:3] == ['girth', _head, 'depth'], widget.read_text(encoding='utf-8'))
 for _id in ('girth', 'depth'):
     r.remove_element(project, f'Widget#properties#{_id}')
 
@@ -655,7 +655,7 @@ _ran_cli = {c.split('/')[1] for c in checked if c.startswith('cli/')}
 _ran_mcp = {c.split('/')[1] for c in checked if c.startswith('mcp/')}
 check('front-ends/all-commands', _commands <= _ran_cli, f'not run: {sorted(_commands - _ran_cli)}')
 check('front-ends/all-tools', _listed <= _ran_mcp, f'not run: {sorted(_listed - _ran_mcp)}')
-_root_file.write_text(_before)
+_root_file.write_text(_before, encoding='utf-8')
 
 # --- workspace registry (redirected settings file) ---------------------------
 r.create_workspace('fixture-ws')
@@ -678,7 +678,7 @@ check('remove_project', 'https://example.invalid/fixture'
 # --- report ------------------------------------------------------------------
 public = set(re.findall(r'^    def ([a-z][a-z_0-9]*)',
                         (Path(__file__).resolve().parent / 'src' / 'ducktools'
-                         / 'resolver.py').read_text(), re.M))
+                         / 'resolver.py').read_text(encoding='utf-8'), re.M))
 untested = sorted(public - {c.split('/')[0] for c in checked})
 shutil.rmtree(TMP, ignore_errors=True)
 

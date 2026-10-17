@@ -22,6 +22,7 @@ guidelines:
   - Zero external dependencies; only Python stdlib is allowed for all features including the MCP server.
   - "@DuckspecProject files and @Term files are read as plain text; field extraction is done with regex, not a YAML parser. The files are nonetheless kept valid YAML (see @Term), so the regexes accept a value both quoted and bare, and everything the resolver writes is quoted wherever YAML requires it."
   - The MCP server implements the JSON-RPC 2.0 wire protocol directly over stdio without using an MCP SDK.
+  - "Every file is read and written as UTF-8, named explicitly on each call, and the CLI's and MCP server's standard streams are switched to UTF-8 at start. Python before 3.15 otherwise uses the locale's encoding, which on Windows is a legacy code page: term files there would come back garbled, and one the code page cannot decode at all would be skipped as unreadable — @DuckspecProject.yaml is such a file, so every project would silently lose its recipes and rules."
 recipes:
   - id: build
     description: Creates or updates source files in `src/` to match this @Software's specification

@@ -305,7 +305,7 @@ def _version() -> str:
     if src:
         root = Path(src).parent / 'Duckspec.yaml'
         if root.is_file():
-            m = re.search(r'(?m)^version:\s*(\S+)', root.read_text())
+            m = re.search(r'(?m)^version:\s*(\S+)', root.read_text(encoding='utf-8'))
             if m:
                 return m.group(1)
     return 'unknown'
