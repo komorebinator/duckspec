@@ -587,6 +587,31 @@ def _resolve_project(value: str) -> str:
     return value
 
 
+def _register_framework(workspace_name: str | None = None) -> tuple[str, str, bool] | None:
+    """Registers the framework clone at `ducktools.src` in workspace_name (or the active one)
+    unless the workspace already has an entry for its repository. Every project names the
+    framework in `uses:` by URL, so a workspace without it loses the framework's terms; an
+    existing entry is kept, since on a developer's machine it points at their working copy."""
+    settings = _load_settings()
+    src = settings['ducktools'].get('src')
+    if not src:
+        return None
+    framework = (Path(src).parent / 'Duckspec.yaml').resolve()
+    try:
+        m = _REPOSITORY.search(framework.read_text(encoding='utf-8'))
+    except Exception:
+        return None
+    workspace = settings['workspaces'].get(workspace_name or settings.get('active_workspace'))
+    if m is None or workspace is None:
+        return None
+    projects = workspace.setdefault('projects', {})
+    if m.group(1) in projects:
+        return m.group(1), projects[m.group(1)], False
+    projects[m.group(1)] = str(framework)
+    _save_settings(settings)
+    return m.group(1), str(framework), True
+
+
 def _resolve_entry(sub: str, base: Path, workspace: dict[str, Path]) -> Path | None:
     if sub.startswith('https://') or sub.startswith('http://'):
         path = workspace.get(sub)
@@ -1881,6 +1906,7 @@ class Resolver:
         if activate or settings.get('active_workspace') is None:
             settings['active_workspace'] = name
         _save_settings(settings)
+        _register_framework(name)
 
     def use_workspace(self, name: str) -> bool:
         settings = _load_settings()

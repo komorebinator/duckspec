@@ -48,7 +48,7 @@ recipes:
     instructions:
       - Ask the user for `method` if not provided; execute the chosen method from installation-methods
   - id: create_workspace
-    description: Adds a new named, empty workspace to the shared registry
+    description: Adds a new named workspace to the shared registry, holding only the framework itself until projects are added to it
     arguments:
       - id: name
         description: unique name for the new workspace

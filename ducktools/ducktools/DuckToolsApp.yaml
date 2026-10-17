@@ -500,7 +500,7 @@ components:
           - id: term_name
             description: the term to delete
       - id: create_workspace
-        description: "Adds `name` to `workspaces` in the settings file with an empty `projects` map (no-op if it already exists). Sets `active_workspace` to `name` if `activate` is true or there was no active workspace yet."
+        description: Adds `name` to `workspaces` in the settings file with an empty `projects` map (no-op if it already exists), then calls _register_framework on it, so a new workspace starts with the framework already registered — without it, switching to a fresh workspace drops the framework out of every project's `uses:`. Sets `active_workspace` to `name` if `activate` is true or there was no active workspace yet.
         arguments:
           - id: name
             description: unique name for the new workspace
@@ -520,6 +520,11 @@ components:
             description: path to the @DuckspecProject file to register
           - id: workspace_name
             description: workspace to add to; defaults to the active workspace
+      - id: _register_framework
+        description: "Registers the framework clone that `ducktools.src` points at — the `Duckspec.yaml` beside its `ducktools/` directory, keyed by that file's own `repository` — in `workspace_name` (or the active workspace), unless that workspace already has an entry for the framework's repository URL. Every project @Duckspec#create_project makes names the framework in `uses:` by that URL, which resolves only through the workspace, so a workspace without the entry leaves every project in it with the framework's terms missing. An existing entry is left as it is: on a framework developer's machine it points at their working copy. Returns `(repository, path, added)`, or None when `ducktools.src` is unset, its `Duckspec.yaml` is missing or names no `repository`, or no workspace resolves. Module-level rather than a resolver method, since it is no command of its own: it runs where a workspace comes into being — install-script and create_workspace."
+        arguments:
+          - id: workspace_name
+            description: workspace to register in; defaults to the active workspace
       - id: remove_project
         description: "Deletes `repository` from the resolved workspace's `projects` (given `workspace_name`, or the active workspace). Returns false without writing if the workspace or the entry does not exist; true otherwise."
         arguments:

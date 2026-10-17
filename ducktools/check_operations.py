@@ -675,6 +675,17 @@ r.remove_project('https://example.invalid/fixture')
 check('remove_project', 'https://example.invalid/fixture'
       not in R._load_settings()['workspaces']['fixture-ws']['projects'])
 
+# A new workspace starts with the framework the settings point at, so `uses:` by URL resolves
+_settings = R._load_settings()
+_settings['ducktools']['src'] = str(Path(__file__).resolve().parent)
+R._save_settings(_settings)
+r.create_workspace('framework-ws')
+_framework = R._load_settings()['workspaces']['framework-ws']['projects']
+check('_register_framework', _framework.get('https://github.com/komorebinator/duckspec')
+      == str(Path(__file__).resolve().parent.parent / 'Duckspec.yaml'), f'got {_framework}')
+_again = R._register_framework('framework-ws')
+check('_register_framework/keeps-existing', _again is not None and _again[2] is False, f'got {_again}')
+
 # --- report ------------------------------------------------------------------
 public = set(re.findall(r'^    def ([a-z][a-z_0-9]*)',
                         (Path(__file__).resolve().parent / 'src' / 'ducktools'
