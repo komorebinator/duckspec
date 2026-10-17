@@ -15,6 +15,7 @@ uses:
 version: 0.14.1
 repository: https://github.com/komorebinator/duckspec
 settings:
+  src: .
   readme: README.md
 workflow:
   type: "@DuckspecWorkflow"
