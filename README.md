@@ -18,6 +18,7 @@ A spec-driven development framework for building complex projects with AI.
 | `extends` | Inheritance — a term inherits all properties and recipes from its parent |
 | `@Recipe` | Named instructions the AI executes; called with `Invoke @TermName#recipe()` |
 | `@DuckArch` | Built-in terms for describing software: `@Software`, `@Function`, `@Server`, `@Script`… |
+| `@Behaviour` | A rule your software keeps toward its users, with `@Scenario` cases (given / when / then) showing where it applies; a `@Test` names the ones it checks in `verifies` |
 | `@DuckWorkflow` | How work moves through a project, from request to release — the AI reads it with `ducktools load-workflow` to know what the change in hand needs next |
 | `DuckTools` | CLI and MCP server that loads terms into the AI's context |
 
