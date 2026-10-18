@@ -91,9 +91,9 @@ def _parse_references(content: str) -> list[dict]:
 
 
 def _find_named_blocks(content: str, name: str) -> list[str]:
-    """Every entry with this id, at any depth. `#`-paths are allowed to skip levels, so the search
-    cannot be restricted to immediate children; counting the matches is what tells an unambiguous
-    path from one that silently resolved to whichever entry came first."""
+    """The entries with this id at the shallowest depth any of them has. `#`-paths skip levels, so
+    the search reaches every depth, but an entry nested below another is no rival of it; counting
+    what is left is what tells an unambiguous path from one that resolved to whichever came first."""
     lines = content.splitlines()
     target = re.compile(r'^-\s+(?:id|name):\s*[\'"]?' + re.escape(name) + r'[\'"]?\s*$')
     blocks = []
@@ -108,8 +108,12 @@ def _find_named_blocks(content: str, name: str) -> list[str]:
             if len(lines[j]) - len(lines[j].lstrip()) <= item_indent:
                 end = j
                 break
-        blocks.append('\n'.join(lines[i:end]).rstrip())
-    return blocks
+        blocks.append((item_indent, '\n'.join(lines[i:end]).rstrip()))
+    # an entry deep inside another's subtree is no rival of one higher up: keep the shallowest
+    if not blocks:
+        return []
+    top = min(indent for indent, _ in blocks)
+    return [block for indent, block in blocks if indent == top]
 
 
 def _extract_named_block(content: str, name: str) -> str | None:
@@ -124,11 +128,9 @@ def _extract_key_block(content: str, name: str) -> str | None:
     line plus every following line indented deeper than it. A scalar key yields just its own line."""
     lines = content.splitlines()
     target = re.compile(r'^(\s*)' + re.escape(name) + r':(\s|$)')
-    for i, line in enumerate(lines):
-        m = target.match(line)
-        if m is None:
-            continue
-        key_indent = len(m.group(1))
+    # the shallowest match is the element's own key; one nested in an entry below it comes later
+    found = [(len(m.group(1)), i) for i, line in enumerate(lines) if (m := target.match(line))]
+    for key_indent, i in sorted(found)[:1]:
         end = len(lines)
         for j in range(i + 1, len(lines)):
             if not lines[j].strip():
@@ -408,6 +410,64 @@ def _unquoted_scalars(lines: list[str]) -> list[tuple[int, str, str]]:
                 continue   # a bare value folded onto the next line: rewriting one line would break it
         found.append((i, prefix, value))
     return found
+
+
+def _quote_close(lines: list[str], i: int, value: str) -> int | None:
+    """The line a quoted value opening on line `i` closes on: `i` itself when `value` is complete
+    there, a later line when it is continued, None when it never closes. Read the way
+    _unquoted_scalars reads a continued value, so _field_span and _stray_text agree with it."""
+    quote = value[0]
+    if (_DOUBLE_QUOTED if quote == '"' else _SINGLE_QUOTED).match(value):
+        return i
+    for j in range(i + 1, len(lines)):
+        body = lines[j].strip()
+        if quote == '"' and re.search(r'(?<!\\)(?:\\\\)*"\s*$', body):
+            return j
+        if quote == "'" and body.endswith("'") and not body.endswith("''"):
+            return j
+    return None
+
+
+def _stray_text(lines: list[str]) -> list[int]:
+    """Indexes of the lines that belong to no field: text indented under a field whose quoted
+    value has already closed, being neither a field nor a list item. YAML reads nothing after a
+    closing quote but a comment, while the resolver's regexes read past such a line silently."""
+    stray: list[int] = []
+    closed_at = None          # indentation of the line whose quoted value has closed
+    skip_deeper_than = None   # inside a block scalar: every line indented past this is its text
+    i = 0
+    while i < len(lines):
+        line = lines[i].rstrip('\n')
+        if not line.strip() or line.lstrip().startswith('#'):
+            i += 1
+            continue
+        indent = len(line) - len(line.lstrip())
+        if skip_deeper_than is not None:
+            if indent > skip_deeper_than:
+                i += 1
+                continue
+            skip_deeper_than = None
+        if closed_at is not None:
+            if (indent > closed_at and not line.lstrip().startswith('-')
+                    and not re.match(r'^\s*[A-Za-z_][\w.-]*:(\s|$)', line)):
+                stray.append(i)
+                i += 1
+                continue
+            closed_at = None
+        m = _KEY_VALUE.match(line) or _BARE_ITEM.match(line)
+        if m is not None:
+            value = m.group(2)
+            if _BLOCK_SCALAR.fullmatch(value):
+                skip_deeper_than = indent
+            elif value[0] in '"\'':
+                end = _quote_close(lines, i, value)
+                if end is None:
+                    break   # never closes: past this point the file cannot be read at all
+                closed_at = indent
+                i = end + 1
+                continue
+        i += 1
+    return stray
 
 
 def _field_lines(field: str, value, column: int) -> list[str]:
@@ -1051,6 +1111,13 @@ class Resolver:
 
             # Only this project's own files: a term reached from another project is fixed there.
             if Path(path).resolve() in own_paths:
+                for i in _stray_text(content.splitlines(keepends=True)):
+                    text = content.splitlines()[i].strip()
+                    shown = text if len(text) <= 60 else text[:57] + '...'
+                    add('error', 'stray-text', name, path,
+                        f"'{shown}' belongs to no field — it follows a quoted value that has "
+                        f"already closed, so no YAML parser can read the file. Usually what an edit "
+                        f"left of an older value: fold it into the value it belongs to, or delete it", i + 1)
                 for i, _prefix, value in _unquoted_scalars(content.splitlines(keepends=True)):
                     shown = value if len(value) <= 60 else value[:57] + '...'
                     add('error', 'unquoted-scalar', name, path,
@@ -1499,6 +1566,21 @@ class Resolver:
         for n, segment in enumerate(segments):
             window = ''.join(lines[start:end])
             prefer_key = slot and n == len(segments) - 1
+            if prefer_key and not segment.isdigit():
+                # The slot a list operation writes into is the element's own, never one nested
+                # deeper: with no `fields:` of its own, `Term#fields` used to land in the first
+                # component's fields. Not found here means the caller creates it on the element.
+                column = 0 if n == 0 else self._field_column(lines[start])
+                own = re.compile(rf'^ {{{column}}}{re.escape(segment)}:(\s|$)')
+                hit = next((i for i in range(start + (n > 0), end) if own.match(lines[i])), None)
+                if hit is None:
+                    return f"not found: '{segment}' in {ref}"
+                stop = next((j for j in range(hit + 1, end) if lines[j].strip()
+                             and len(lines[j]) - len(lines[j].lstrip()) <= column), end)
+                while stop > hit + 1 and not lines[stop - 1].strip():
+                    stop -= 1
+                start, end = hit, stop
+                continue
             keyed = prefer_key and _extract_key_block(window, segment) is not None
             if (not segment.isdigit() and not keyed
                     and len(_find_named_blocks(window, segment)) > 1):
@@ -1535,11 +1617,19 @@ class Resolver:
         # its siblings. Matching only the sibling column meant `id` was never found on an entry
         # and a second `id:` was appended below the first, leaving two.
         if re.match(rf'^(\s*-\s+){re.escape(field)}:', head):
-            return start, start + 1, column
+            old = head.split(':', 1)[1].strip()
+            close = _quote_close(lines, start, old) if old[:1] in ('"', "'") else None
+            return start, (close if close is not None and close < end else start) + 1, column
         pattern = re.compile(rf'^{" " * column}{re.escape(field)}:')
         for i in range(start, end):
             if pattern.match(lines[i]):
                 old = lines[i].split(':', 1)[1].strip()
+                # A quoted value runs to its closing quote, paragraphs and all; stopping at its
+                # first blank line stranded the rest of it after the new value.
+                if old[:1] in ('"', "'"):
+                    close = _quote_close(lines, i, old)
+                    if close is not None and close < end:
+                        return i, close + 1, column
                 block_scalar = bool(_BLOCK_SCALAR.fullmatch(old))
                 j = i + 1
                 while j < end and (block_scalar and not lines[j].strip()
@@ -1650,7 +1740,11 @@ class Resolver:
         column = (len(existing[0]) - len(existing[0].lstrip()) if existing
                   else len(head) - len(head.lstrip()) + 2)
 
+        # only the slot's own entries: an argument or nested entry deeper down carrying the same id
+        # belongs to one of them and is reached by a different #-path
         for line in existing:
+            if len(line) - len(line.lstrip()) != column:
+                continue
             m = re.match(r'^\s*- id:\s*(\S.*)$', line)
             if m and m.group(1).strip().strip('\'"') == entry_id:
                 return (f"refused: '{entry_id}' is already an entry of {ref} — two entries "

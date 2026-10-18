@@ -364,6 +364,12 @@ check('add_entry/nested',
       and r.resolve_path(project, 'Widget#wobble#axis') is not None
       and '    notes:\n      - first\n      - second\n' in widget.read_text(encoding='utf-8'),
       widget.read_text(encoding='utf-8'))
+# an id nested inside an entry — wobble's argument `angle` — is not an entry of the slot, and
+# taking it for one refused a component named after another component's argument
+_said = r.add_entry(project, 'Widget#functions', 'angle', {'description': 'a function of its own'})
+check('add_entry/nested-id-not-duplicate', 'added angle' in _said
+      and r.resolve_path(project, 'Widget#functions#angle') is not None, _said)
+r.remove_element(project, 'Widget#functions#angle')
 r.remove_element(project, 'Widget#functions#wobble')
 
 # a slot whose order is its meaning — a workflow's steps — could only be extended at its end, so
@@ -480,6 +486,58 @@ check('set_field/continuation',
       'description: "A knot: tied for the checks."\nextends:' in knot.read_text(encoding='utf-8')
       and 'with the slot below' not in knot.read_text(encoding='utf-8')
       and '    description: shares a name\nguidelines:' in knot.read_text(encoding='utf-8'), knot.read_text(encoding='utf-8'))
+
+# a slot a list operation writes into is the element's own: with no `fields:` at the top level,
+# `Holder#fields` wrote into the first component's fields, silently, instead of creating its own
+_holder = Path(project).parent / 'Fixture' / 'Holder.yaml'
+_holder.write_text('description: Holds a part.\nextends: "@Software"\ncomponents:\n  - id: part\n'
+                   '    type: "@Module"\n    fields:\n      - id: inner\n', encoding='utf-8')
+_said = r.add_entry(project, 'Holder#fields', 'outer', {'description': 'the holder\'s own'})
+check('add_entry/own-slot',
+      'added outer' in _said and '\nfields:\n  - id: outer\n' in _holder.read_text(encoding='utf-8')
+      and '    fields:\n      - id: inner\n  ' not in _holder.read_text(encoding='utf-8')
+      and _holder.read_text(encoding='utf-8').count('- id: outer') == 1, _holder.read_text(encoding='utf-8'))
+# reading goes the same way: the term's own `fields:` comes after the component's in this file
+_outer = r.resolve_path(project, 'Holder#fields#outer')
+check('resolve_path/own-slot', _outer is not None and 'the holder' in _outer['content'], f'got {_outer}')
+check('add_entry/nested-slot-by-name',
+      'added deeper' in r.add_entry(project, 'Holder#part#fields', 'deeper', {})
+      and '      - id: inner\n      - id: deeper\n' in _holder.read_text(encoding='utf-8'),
+      _holder.read_text(encoding='utf-8'))
+# an entry named like an entry nested deeper elsewhere is still addressable: the deeper one, inside
+# another component's subtree, is no rival — `Holder#windows` named nothing while a function of
+# another component was called `windows` too
+_holder.write_text('description: Holds parts.\nextends: "@Software"\ncomponents:\n  - id: registry\n'
+                   '    type: "@Module"\n    functions:\n      - id: windows\n        description: lists them\n'
+                   '  - id: windows\n    type: "@Module"\n    description: the adapter\n', encoding='utf-8')
+_win = r.resolve_path(project, 'Holder#windows')
+check('resolve_path/shallowest', _win is not None and 'the adapter' in _win['content'], f'got {_win}')
+check('set_field/shallowest', 'replaced' in r.set_field(project, 'Holder#windows', 'description', 'renamed')
+      and 'description: renamed' in _holder.read_text(encoding='utf-8')
+      and 'description: lists them' in _holder.read_text(encoding='utf-8'), _holder.read_text(encoding='utf-8'))
+_holder.unlink()
+
+# a quoted value with paragraphs — the way _quoted writes any description that has them — is
+# replaced whole: ending its span at the first blank line left the later paragraphs stranded after
+# the new value, where no parser could read the file, and nothing reported it
+_para = Path(project).parent / 'Fixture' / 'Para.yaml'
+_para.write_text('description: "First paragraph: kept apart.\n\n  Second paragraph.\n\n  Third one."\n'
+                 'extends: "@Term"\n', encoding='utf-8')
+r.set_field(project, 'Para', 'description', 'One paragraph now.')
+check('set_field/quoted-paragraphs',
+      _para.read_text(encoding='utf-8') == 'description: One paragraph now.\nextends: "@Term"\n',
+      _para.read_text(encoding='utf-8'))
+
+# text left under a quoted value after it closes belongs to no field: every YAML parser stops
+# there, while the resolver's regexes read past it and verify_project stayed silent about it
+_para.write_text('description: "Closed here."\n\n  Stranded paragraph.\nextends: "@Term"\n'
+                 'properties:\n  - id: shape\n    description: |\n      raw text\n\n      more raw\n'
+                 '  - id: size\n    description: a bare value\n      folded below\n'
+                 '  - id: kind\n    description: "quoted\n\n      across lines"\n', encoding='utf-8')
+_stray = [f for f in r.verify_project(project) if f['check'] == 'stray-text']
+check('verify_project/stray-text',
+      len(_stray) == 1 and _stray[0].get('line') == 3 and _stray[0]['term'] == 'Para', f'got {_stray}')
+_para.unlink()
 
 # one piece of a value changes and the rest stays, whether the value was written bare or quoted with
 # escapes inside — the piece is matched against the text as it reads, not as it is stored
