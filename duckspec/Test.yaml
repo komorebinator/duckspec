@@ -5,3 +5,5 @@ properties:
     description: command to run following the software's `platform` conventions
   - id: expect
     description: expected output or behavior that indicates the test passed
+  - id: verifies
+    description: paths to the @Behaviour or @Scenario entries this test checks — `behaviour#<behaviour_id>` or `behaviour#<behaviour_id>#<scenario_id>` within the same @Software. Naming a behaviour covers every scenario under it. A test that names none checks something below the level of behaviour, such as one function or a file format, which is as it should be; a scenario that no test names is checked by hand (see @Scenario).

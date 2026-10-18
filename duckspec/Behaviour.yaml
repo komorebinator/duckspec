@@ -1,0 +1,6 @@
+description: "A rule a @Software keeps toward the people who use it — what it does, or never does, in every situation the rule covers — stated once together with the reason it is so, and illustrated by the @Scenario entries that show where its edges lie. It differs from a @Guideline in whom it speaks to: a guideline tells whoever writes the spec or the code how to go about it, while a behaviour states what the software promises its users and holds however the code is written. It is where the behaviour a project promises its users lives (see @Duckspec's guidelines on what a spec holds): what one behaviour decides is said there and nowhere else, and the functions, components and other behaviours that rest on it name it by path. Like a @Function it is a requirement — @Software#build writes code that keeps it — but it belongs to the software as a whole rather than to one component, because what a user sees usually comes out of several components working together."
+extends: "@Term"
+properties:
+  - id: scenarios
+    type: "@Scenario"
+    description: the concrete cases this behaviour decides, each with the outcome it promises. A scenario that illustrates two behaviours goes under the one whose decision it mainly shows and is not repeated under the other, which may name it by path.

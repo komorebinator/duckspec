@@ -8,6 +8,9 @@ properties:
     description: URL or path to the @Software's source repository
   - id: platform
     description: language or platform the software is built for (e.g. Python, iOS, web)
+  - id: behaviour
+    type: "@Behaviour"
+    description: "list of @Behaviour — the rules this software keeps toward its users, each with the scenarios that illustrate it. Requirements, as `functions` are: @Software#build writes code that keeps them, and @Software#test reports which of their scenarios no test verifies."
   - id: tests
     type: "@Test"
     description: list of @Test cases for this @Software
@@ -16,6 +19,7 @@ recipes:
     description: Creates or updates source files in `src/` to match this @Software's specification
     instructions:
       - Read the @Software term; resolve each component's type to its @DesignPattern term
+      - "Read `behaviour` as requirements alongside the components, not as documentation: the code must keep every @Behaviour, and the `then` of every @Scenario must follow from its `given` and `when`. Where a component's description and a behaviour seem to disagree, the behaviour is what the software promises its users — stop and ask rather than pick one"
       - Create the folder at `src` if it does not exist
       - "For each component and for the entry point: if the corresponding source file already exists in `src`, read it and apply only the changes needed to bring it in line with the specification, keeping the realization it already has wherever the spec leaves realization free — rewriting what no decision asked to change only produces noise in the diff; if it does not exist, create it, choosing the realization; follow the conventions of `platform`"
   - id: test
@@ -23,6 +27,7 @@ recipes:
     instructions:
       - Read the @Software term to get `platform` and `tests`
       - "For each @Test: run `command` following `platform` conventions; check output against `expect`; record 🟢 when it ran and matched, 🔴 when it ran and did not, 🟡 when it could not be run at all — and the observed output either way"
+      - Then list every @Scenario under `behaviour` that no @Test names in `verifies`, either itself or through the @Behaviour it sits under, and give each a row marked 🟡 manual with its `given`, `when` and `then`, so it can be checked by hand. A manual scenario is not a failure; it is listed so that the suite's result is not taken for a verdict on it
       - "Output a markdown table with columns: Test | Status | Detail, using the same markers @DuckspecProject#validate reports with, since that recipe is where these results end up"
   - id: run
     description: Runs the @Software using the conventions of `platform`

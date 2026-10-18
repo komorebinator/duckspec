@@ -1,0 +1,9 @@
+description: "One concrete situation and what the software does in it — the state things are in (`given`), what happens (`when`), and the outcome the software promises (`then`). It is specification, not verification: it says what must happen whether or not anything checks it, and it is part of what @Software#build writes code to meet. A scenario no @Test names in `verifies` is checked by hand — by setting up `given`, doing `when` and looking for `then` — so the three are written for a person to follow that way. It sits under the @Behaviour it illustrates and does not restate that rule: it names one case the rule decides, so a reader learns the rule from the behaviour and where its edges lie from the scenarios."
+extends: "@Term"
+properties:
+  - id: given
+    description: the situation before anything happens — what exists, where, and in what state. Only what the outcome depends on, so that a person or a test can set it up and nothing else in it can be mistaken for a condition.
+  - id: when
+    description: the one thing that happens — an action of the user, or an event from outside the software. One, because a scenario with several steps decides several things at once and no longer says which of them the outcome follows from; a sequence is several scenarios, each starting where the last one ended.
+  - id: then
+    description: "what the software does as a result, as seen from outside it — what the user sees, what ends up where, what does not happen that might be expected to. Not how the code gets there: that is realization, which @Software#build is free to choose as long as this holds."
