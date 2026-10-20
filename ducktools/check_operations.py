@@ -351,6 +351,22 @@ check('add_entry', 'weight' in widget.read_text(encoding='utf-8') and '"how heav
       'a value with a colon must be quoted')
 check('add_entry/duplicate', 'refused' in r.add_entry(project, 'Widget#properties', 'weight', {}))
 
+# a name the path answers with an entry is not a slot to create: `Widget#spin` names the function,
+# and a top-level `spin:` made beside it — as `preferences:` once appeared at the end of a term,
+# holding what was meant for its component — is a second thing under that name nothing addresses
+_before = widget.read_text(encoding='utf-8')
+_said = r.add_entry(project, 'Widget#spin', 'turn', {'description': 'meant for the function'})
+check('add_entry/entry-not-slot', 'refused' in _said and 'Widget#spin#' in _said
+      and widget.read_text(encoding='utf-8') == _before, _said)
+# but a slot the term's type declares is made even where an entry has its name, as @Term's own
+# `guidelines:` sits beside the `guidelines` entry of its `properties:`
+r.add_entry(project, 'Widget#functions', 'tests', {'description': 'a function named like the slot'})
+_said = r.add_entry(project, 'Widget#tests', 'unit', {'description': 'runs the unit tests'})
+check('add_entry/declared-slot-beside-entry', 'added unit' in _said
+      and re.search(r'^tests:\n  - id: unit\n', widget.read_text(encoding='utf-8'), re.M) is not None,
+      _said + '\n' + widget.read_text(encoding='utf-8'))
+widget.write_text(_before, encoding='utf-8')
+
 # a function with arguments could not be added at all: fields were written as scalars only, so a
 # nested block — `arguments:` with entries of its own — had to be written by hand after the call
 r.add_entry(project, 'Widget#functions', 'wobble', {

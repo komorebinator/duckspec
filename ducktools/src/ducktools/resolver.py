@@ -1692,6 +1692,29 @@ class Resolver:
             return f'refused: the text to replace occurs {count} times in {field}, not once'
         return self.set_field(project_path, ref, field, text.replace(old, new))
 
+    def _entry_not_slot(self, project_path: str, ref: str, parent_ref: str,
+                        slot_name: str) -> str | None:
+        """Why a missing slot must not be created, or None. A name the path already answers with
+        an entry is a slot only when the term's type declares it — @Term's own `guidelines:`
+        beside the `guidelines` entry of its `properties:`; otherwise the entry is what was meant,
+        and a slot of the same name would be a second thing under it that every edit reaches
+        while resolve_path and every reader reach the entry."""
+        if '#' not in parent_ref:
+            declared = {m['member'] for m in self.term_schema(project_path, parent_ref.lstrip('@'))}
+            if slot_name in declared:
+                return None
+        entry = self._locate(project_path, ref)
+        if isinstance(entry, str):
+            return None
+        _, lines, start, end = entry
+        column = self._field_column(lines[start])
+        own = re.compile(rf'^ {{{column}}}([\w-]+):\s*$')
+        slots = [m.group(1) for line in lines[start + 1:end] if (m := own.match(line))]
+        where = (', '.join(f'{ref}#{s}' for s in slots) if slots
+                 else f'{ref}#<slot>, which is created on it')
+        return (f"refused: '{slot_name}' in {ref} is an entry, not a slot, and no type declares a "
+                f"slot of that name — add to one of the entry's slots instead: {where}")
+
     def add_entry(self, project_path: str, ref: str, entry_id: str,
                   fields: dict | None = None, after: str | None = None,
                   before: str | None = None) -> str:
@@ -1714,6 +1737,9 @@ class Resolver:
             parent = self._locate(project_path, parent_ref)
             if isinstance(parent, str):
                 return located
+            refused = self._entry_not_slot(project_path, ref, parent_ref, slot_name)
+            if refused:
+                return refused
             path, lines, p_start, p_end = parent
             if '#' not in parent_ref:
                 column, at = 0, len(lines)   # the term itself: a new top-level slot goes last
