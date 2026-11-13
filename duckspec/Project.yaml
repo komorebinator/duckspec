@@ -13,3 +13,5 @@ properties:
     description: list of @Software terms the @Project contains; each entry must be a @<TermName> reference (e.g. `- @DuckToolsApp`); inline definitions are not allowed — every software piece must be defined as its own term
   - id: uses
     description: list of @Project this @Project uses or depends on
+  - id: codestyle
+    description: "list of rules for how this project's code is written — naming, idioms, error handling, logging, comments — that hold across its parts. Only what no linter or formatter configuration in the repository already enforces: such a configuration is named, not restated. Unlike `guidelines`, which say what the code must or must not do, codestyle says how it is written; @DuckToolsApp#resolver#resolve_path brings it with every component of the project's code, and @Software#build checks the code against it."

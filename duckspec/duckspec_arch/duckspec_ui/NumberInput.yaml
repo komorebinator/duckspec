@@ -1,7 +1,0 @@
-description: A numeric input field.
-extends: "@UserInterfaceElement"
-properties:
-  - id: min
-    description: minimum allowed value
-  - id: max
-    description: maximum allowed value

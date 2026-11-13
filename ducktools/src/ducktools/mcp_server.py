@@ -3,6 +3,7 @@ import re
 import sys
 from pathlib import Path
 
+from . import render
 from .resolver import resolver
 
 _PROJECT_PATH_PROP = {
@@ -15,7 +16,7 @@ _PROJECT_PATH_PROP = {
 _TOOLS = [
     {
         'name': 'load_project',
-        'description': 'Load the root project file and list all reachable terms with descriptions — this project\'s own first, then those of each project it uses — with recipes and project-wide rules. Call this first when starting work on a project.',
+        'description': "The top level of a project: its root file, its parts (the @Software it lists) with their descriptions in full and the terms each refers to and is referred to by, its other terms, connected projects as one node each, its recipes, the framework's vocabulary and the project-wide rules. Call this first when starting work on a project, then go down with expand and resolve_path.",
         'inputSchema': {
             'type': 'object',
             'properties': _PROJECT_PATH_PROP,
@@ -63,14 +64,18 @@ _TOOLS = [
     },
     {
         'name': 'grep_terms',
-        'description': 'Search across term content by keyword',
+        'description': 'Search the spec by words: every element whose own text holds all the words of the query, most matches first, each with the full path that opens it (resolve_path, expand) and the words in context',
         'inputSchema': {
             'type': 'object',
             'properties': {
                 **_PROJECT_PATH_PROP,
                 'query': {
                     'type': 'string',
-                    'description': 'substring to search for (case-insensitive)',
+                    'description': 'one or more words, case-insensitive; an element matches when its own text holds all of them',
+                },
+                'limit': {
+                    'type': 'integer',
+                    'description': 'how many elements to list (default 30)',
                 },
                 'all': {
                     'type': 'boolean',
@@ -81,15 +86,30 @@ _TOOLS = [
         },
     },
     {
-        'name': 'resolve_path',
-        'description': 'Resolve a Term#path reference to a single nested element (e.g. one recipe, function, or component) without loading the whole term',
+        'name': 'expand',
+        'description': "The children of one term or element — each with its id, type, description in full, what it contains and what it refers to — followed by every guideline that applies to it, codestyle for code and the goals of the part it is in. The step between load_project and one element read whole with resolve_path",
         'inputSchema': {
             'type': 'object',
             'properties': {
                 **_PROJECT_PATH_PROP,
                 'ref': {
                     'type': 'string',
-                    'description': 'reference in the form TermName#segment#segment... (e.g. DuckspecProject#validate); leading @ on the term name is optional',
+                    'description': 'a term name, or a full path naming every level, TermName#<slot>#<id>... (e.g. DuckToolsApp#components#resolver); leading @ optional',
+                },
+            },
+            'required': ['project_path', 'ref'],
+        },
+    },
+    {
+        'name': 'resolve_path',
+        'description': 'Resolve a Term#path reference to a single nested element (e.g. one recipe, function, or component) without loading the whole term, together with every guideline that applies to it, for code its codestyle, and the goals of the part it is in',
+        'inputSchema': {
+            'type': 'object',
+            'properties': {
+                **_PROJECT_PATH_PROP,
+                'ref': {
+                    'type': 'string',
+                    'description': 'a full path naming every level, TermName#<slot>#<id>#<slot>#<id>... (e.g. DuckspecProject#recipes#validate, DuckToolsApp#components#resolver#functions#expand); a path that skips a level is refused with the full paths that fit; leading @ optional',
                 },
             },
             'required': ['project_path', 'ref'],
@@ -156,7 +176,7 @@ _TOOLS = [
         'name': 'set_field',
         'description': 'Set a field on the element a Term#path addresses, replacing it if present and inserting it at the element\'s own column if not. Refuses an ambiguous path instead of editing whichever element came first',
         'inputSchema': {'type': 'object', 'properties': {**_PROJECT_PATH_PROP,
-            'ref': {'type': 'string', 'description': 'TermName or TermName#segment#segment...'},
+            'ref': {'type': 'string', 'description': 'TermName, or a full path naming every level: TermName#<slot>#<id>...'},
             'field': {'type': 'string', 'description': 'field to set'},
             'value': {'type': 'string', 'description': 'value to set it to'}},
             'required': ['project_path', 'ref', 'field', 'value']},
@@ -165,7 +185,7 @@ _TOOLS = [
         'name': 'edit_field',
         'description': 'Replace one piece of a field\'s text with another, leaving the rest as it was — for a sentence added to or changed in a long description without retyping all of it. Refuses unless the piece occurs exactly once, and refuses a field spanning paragraphs (a block scalar), which set_field rewrites whole',
         'inputSchema': {'type': 'object', 'properties': {**_PROJECT_PATH_PROP,
-            'ref': {'type': 'string', 'description': 'TermName or TermName#segment#segment...'},
+            'ref': {'type': 'string', 'description': 'TermName, or a full path naming every level: TermName#<slot>#<id>...'},
             'field': {'type': 'string', 'description': 'field to edit'},
             'old': {'type': 'string', 'description': 'the exact text to replace, as it reads — not as it is escaped in the file'},
             'new': {'type': 'string', 'description': 'the text to put in its place'}},
@@ -175,7 +195,7 @@ _TOOLS = [
         'name': 'add_entry',
         'description': 'Append a named entry to the slot a Term#path addresses (e.g. MyTerm#properties), or insert it next to a sibling named by `after` or `before` where the slot\'s order matters (a workflow\'s steps). Derives the item column from the entries already there instead of guessing indentation, and refuses an id the slot already has',
         'inputSchema': {'type': 'object', 'properties': {**_PROJECT_PATH_PROP,
-            'ref': {'type': 'string', 'description': 'TermName#segment... ending at the slot to append to'},
+            'ref': {'type': 'string', 'description': 'a full path naming every level, ending at the slot to append to (e.g. MyTerm#components#parser#functions)'},
             'entry_id': {'type': 'string', 'description': 'id for the new entry'},
             'fields': {'type': 'object', 'description': 'field name to value, written under the new entry; a list or object value is written as a nested block (a list of objects as named entries, e.g. arguments)'},
             'after': {'type': 'string', 'description': 'id of the sibling entry to insert directly after; appended at the end when neither this nor `before` is given'},
@@ -186,13 +206,13 @@ _TOOLS = [
         'name': 'remove_element',
         'description': 'Remove the element a Term#path addresses together with everything nested under it, using indentation for boundaries. Refuses a bare term name and an ambiguous path',
         'inputSchema': {'type': 'object', 'properties': {**_PROJECT_PATH_PROP,
-            'ref': {'type': 'string', 'description': 'TermName#segment#segment...'}},
+            'ref': {'type': 'string', 'description': 'a full path naming every level: TermName#<slot>#<id>...'}},
             'required': ['project_path', 'ref']},
     },
     {
         'name': "add_item",
-        'description': "Append a bare string to the list a Term#path addresses — guidelines, ai_instructions, goals, a recipe's instructions, software, uses; creates the block when absent, inserts after a neighbour when `after` is given",
-        'inputSchema': {'type': 'object', 'properties': {**_PROJECT_PATH_PROP, 'ref': {'type': 'string', 'description': 'TermName#segment... ending at the list'}, 'text': {'type': 'string'}, 'after': {'type': 'string', 'description': 'substring identifying the item to insert after; appended at the end when omitted'}},
+        'description': "Append a bare string to the list a Term#path addresses — guidelines, codestyle, goals, a recipe's instructions, software, uses; creates the block when absent, inserts after a neighbour when `after` is given",
+        'inputSchema': {'type': 'object', 'properties': {**_PROJECT_PATH_PROP, 'ref': {'type': 'string', 'description': 'a full path naming every level, ending at the list'}, 'text': {'type': 'string'}, 'after': {'type': 'string', 'description': 'substring identifying the item to insert after; appended at the end when omitted'}},
             'required': ['project_path', 'ref', 'text']},
     },
     {
@@ -209,7 +229,7 @@ _TOOLS = [
     },
     {
         'name': "move_item",
-        'description': "Move an item verbatim between lists, e.g. reclassifying an ai_instruction as a guideline",
+        'description': "Move an item verbatim between lists, e.g. a guideline that is really codestyle",
         'inputSchema': {'type': 'object', 'properties': {**_PROJECT_PATH_PROP, 'from_ref': {'type': 'string'}, 'to_ref': {'type': 'string'}, 'match': {'type': 'string'}},
             'required': ['project_path', 'from_ref', 'to_ref', 'match']},
     },
@@ -236,6 +256,19 @@ _TOOLS = [
         'description': "Replace a term file's whole content, normalized on the way in so it stays valid YAML. For rewrites too large for field and item edits; prefer those for anything smaller",
         'inputSchema': {'type': 'object', 'properties': {**_PROJECT_PATH_PROP, 'term_name': {'type': 'string'}, 'content': {'type': 'string', 'description': 'the new content of the file'}},
             'required': ['project_path', 'term_name', 'content']},
+    },
+    {
+        'name': 'batch',
+        'description': "Several edits in one call, all or nothing: a list of operations, each {op, ...arguments} where op is an editing tool's name (set_field, edit_field, add_entry, remove_element, add_item, set_item, remove_item, move_item, create_term, remove_term, rename_term) and the arguments are that tool's own, project_path aside. Applied in order; when one is refused every file is put back as it was. Prefer it to many single edits",
+        'inputSchema': {
+            'type': 'object',
+            'properties': {
+                **_PROJECT_PATH_PROP,
+                'operations': {'type': 'array', 'items': {'type': 'object'},
+                               'description': "the operations, in order; each has `op` and that operation's arguments"},
+            },
+            'required': ['project_path', 'operations'],
+        },
     },
     {
         'name': "normalize",
@@ -325,27 +358,10 @@ def _format_terms_table(terms: list[dict]) -> str:
     return '\n'.join(rows)
 
 
-def _format_vocabulary(vocabulary: list[dict]) -> str:
-    """One `Terms from @<project>` table per used project, or '' when there are none."""
-    return '\n\n'.join(f"## Terms from @{v['project']}\n\n{_format_terms_table(v['terms'])}" for v in vocabulary)
 
 
-def _format_recipes_table(recipes: list[dict]) -> str:
-    rows = ['| Recipe | Term | Description |', '|--------|------|-------------|']
-    rows += [f"| {r['name']} | @{r['term']} | {r.get('description', '')} |" for r in recipes]
-    return '\n'.join(rows)
 
 
-def _format_rules_table(rules: list[dict]) -> str:
-    rows = ['| Source | Type | Rule |', '|--------|------|------|']
-    rows += [f"| @{r['term']} | {r['type']} | {r['text']} |" for r in rules]
-    return '\n'.join(rows)
-
-
-def _format_references_table(references: list[dict]) -> str:
-    rows = ['| Term | Repository | Description |', '|------|------------|-------------|']
-    rows += [f"| @{r['term']} | {r['repository']} | {r.get('description', '')} |" for r in references]
-    return '\n'.join(rows)
 
 
 def _format_rules_tree(term_name: str, tree: dict) -> str:
@@ -421,19 +437,7 @@ def _call(name: str, arguments: dict) -> str:
     include_all = bool(arguments.get('all', False))
 
     if name == 'load_project':
-        result = resolver.load_project(path)
-        terms_table = _format_terms_table(result['terms'])
-        vocabulary = _format_vocabulary(result['vocabulary'])
-        recipes_table = _format_recipes_table(result['recipes'])
-        references_table = _format_references_table(result['references'])
-        rules_table = _format_rules_table(result['rules'])
-        return (
-            f"{result['root_content']}\n\n## Workflow\n\n{result['workflow']['note']}"
-            f"\n\n## Terms\n\n{terms_table}"
-            + (f"\n\n{vocabulary}" if vocabulary else '')
-            + f"\n\n## Recipes\n\n{recipes_table}"
-            f"\n\n## References\n\n{references_table}\n\n## Rules (project-wide)\n\n{rules_table}"
-        )
+        return render.load_project(resolver.load_project(path))
 
     if name == 'load_workflow':
         result = resolver.load_workflow(path)
@@ -453,12 +457,8 @@ def _call(name: str, arguments: dict) -> str:
         return _format_term_blocks(terms)
 
     if name == 'grep_terms':
-        query = arguments.get('query', '')
-        results = resolver.grep_terms(path, query, include_all=include_all)
-        rows = ['| Reference | Line | Match |', '|-----------|------|-------|']
-        rows += [f"| @{h['ref']} | {h['line']} | {h['text'][:100]} |"
-                 for r in results for h in r['hits'][:3]]
-        return '\n'.join(rows)
+        return render.search(resolver.grep_terms(path, arguments.get('query', ''), include_all=include_all),
+                             int(arguments.get('limit', 30)))
 
     if name == 'set_field':
         return resolver.set_field(path, arguments['ref'], arguments['field'], arguments['value'])
@@ -528,32 +528,30 @@ def _call(name: str, arguments: dict) -> str:
         rows = resolver.slot_entries(path, arguments['term_name'], arguments['slot'])
         if not rows:
             return '(no entries)'
-        return '\n'.join(['| Id | Fields |', '|----|--------|']
-                          + [f"| {r['id']} | {', '.join(r['fields'])} |" for r in rows])
+        prefix = f"@{arguments['term_name'].lstrip('@')}#{arguments['slot']}"
+        return '\n'.join(['| Element | Fields |', '|---------|--------|']
+                          + [f"| {prefix}#{r['id']} | {', '.join(r['fields'])} |" for r in rows])
 
     if name == 'resolve_path':
         ref = arguments.get('ref', '')
-        result = resolver.resolve_path(path, ref)
-        if result is None:
-            return f'not found: {ref}'
-        if result.get('error'):
-            return result['error']
-        return f"--- {ref} [{result['path']}] ---\n{result['content']}"
+        return render.resolve_path(resolver.resolve_path(path, ref), ref)
+
+    if name == 'batch':
+        result = resolver.batch(path, arguments.get('operations', []))
+        lines = list(result['results'])
+        lines.append('batch applied' if result['ok'] else
+                     f"batch refused at {result['failed']}: {result['results'][-1]} — nothing changed")
+        return '\n'.join(lines)
+
+    if name == 'expand':
+        ref = arguments.get('ref', '')
+        return render.expand(resolver.expand(path, ref), ref)
 
     if name in ('verify_project', 'verify_source'):
         findings = (resolver.verify_source(path) if name == 'verify_source' else
                     resolver.verify_project(path, unreachable=bool(arguments.get('unreachable', False)),
                                             untyped=bool(arguments.get('untyped', False))))
-        if not findings:
-            return 'no findings'
-        rows = ['| Severity | Check | Term | Location | Message |',
-                '|----------|-------|------|----------|---------|']
-        for f in findings:
-            location = f"{f['path']}:{f['line']}" if 'line' in f else f['path']
-            rows.append(f"| {f['severity']} | {f['check']} | @{f['term']} | {location} | {f['message']} |")
-        errors = sum(1 for f in findings if f['severity'] == 'error')
-        rows.append(f"\n{errors} error(s), {len(findings) - errors} warning(s)")
-        return '\n'.join(rows)
+        return render.findings(findings)
 
     raise ValueError(f'unknown tool: {name}')
 

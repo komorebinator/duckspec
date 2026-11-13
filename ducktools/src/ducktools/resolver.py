@@ -7,6 +7,7 @@ from typing import Iterator
 _TERM_REF = re.compile(r'@([A-Z][A-Za-z]+)')
 _TERMS_FOLDER = re.compile(r'^\s*terms_folder:\s*(\S+)', re.MULTILINE)
 # Items at column 0 are valid YAML too; missing them dropped the framework from a project silently
+_SOFTWARE_BLOCK = re.compile(r'^software:\n((?:[ \t]*-[ \t]+.+\n?)+)', re.MULTILINE)
 _USES_BLOCK = re.compile(r'^uses:\n((?:[ \t]*-[ \t]+\S+\n?)+)', re.MULTILINE)
 _LIST_ITEM = re.compile(r'-\s+(\S+)')
 _REPOSITORY = re.compile(r'^repository:\s*(\S+)', re.MULTILINE)
@@ -15,7 +16,6 @@ _EXTENDS = re.compile(r'''^extends:\s*["']?@?([A-Za-z_]\w*)''', re.MULTILINE)
 _RECIPES_BLOCK = re.compile(r'^recipes:\n((?:[ \t].+\n?)*)', re.MULTILINE)
 _REFERENCES_BLOCK = re.compile(r'^references:\n((?:[ \t].+\n?)*)', re.MULTILINE)
 _GUIDELINES_BLOCK = re.compile(r'^guidelines:\n((?:[ \t].+\n?)*)', re.MULTILINE)
-_AI_INSTRUCTIONS_BLOCK = re.compile(r'^ai_instructions:\n((?:[ \t].+\n?)*)', re.MULTILINE)
 _PROPERTIES_BLOCK = re.compile(r'^properties:\n((?:[ \t].+\n?)*)', re.MULTILINE)
 _PATH_REF = re.compile(r'@([A-Z][A-Za-z]+)((?:#[A-Za-z_][\w-]*)+)')
 _TOP_FIELD = re.compile(r'^([a-z_][\w-]*):', re.MULTILINE)
@@ -25,7 +25,7 @@ _TOP_FIELD = re.compile(r'^([a-z_][\w-]*):', re.MULTILINE)
 # to be declared as a `properties:` entry somewhere in the extends chain, or it is an unknown-field.
 _STRUCTURAL_FIELDS = frozenset({
     'description', 'extends', 'name',
-    'properties', 'recipes', 'guidelines', 'ai_instructions',
+    'properties', 'recipes', 'guidelines',
 })
 
 _SETTINGS_PATH = Path.home() / '.duckspec' / 'settings.json'
@@ -36,7 +36,7 @@ def _parse_list_block(content: str, pattern: re.Pattern) -> list[str]:
     if not m:
         return []
     return [
-        line.strip()[2:].strip()
+        _unquote(line.strip()[2:])
         for line in m.group(1).splitlines()
         if line.strip().startswith('- ')
     ]
@@ -48,13 +48,154 @@ def _parse_extends(content: str) -> str | None:
 
 
 def _own_rules(content: str, term_name: str) -> list[dict]:
-    """Guidelines and ai_instructions declared directly on one term's content (no inheritance)."""
-    return (
-        [{'term': term_name, 'type': 'Guideline', 'text': g}
-         for g in _parse_list_block(content, _GUIDELINES_BLOCK)] +
-        [{'term': term_name, 'type': 'AI Instruction', 'text': a}
-         for a in _parse_list_block(content, _AI_INSTRUCTIONS_BLOCK)]
-    )
+    """Guidelines declared directly on one term's content (no inheritance)."""
+    return [{'term': term_name, 'type': 'Guideline', 'text': g}
+            for g in _parse_list_block(content, _GUIDELINES_BLOCK)]
+
+
+_SOFTWARE_NON_CODE_SLOTS = {'behaviour', 'scenarios', 'tests', 'decisions', 'recipes', 'steps',
+                            'branches', 'channels', 'guidelines', 'codestyle'}
+_LOCAL_REF = re.compile(r'(?<![@\w/.`:-])([a-z][a-z0-9_-]*(?:#[A-Za-z0-9_.-]*[A-Za-z0-9_])+)')
+
+
+def _unquote(value: str) -> str:
+    """A scalar as YAML reads it, for the quoting the resolver writes: double quotes with JSON-like
+    escapes, single quotes with '' for a quote, or bare."""
+    v = value.strip()
+    if len(v) >= 2 and v[0] == '"' and v[-1] == '"':
+        try:
+            return json.loads(v)
+        except ValueError:
+            return v[1:-1]
+    if len(v) >= 2 and v[0] == "'" and v[-1] == "'":
+        return v[1:-1].replace("''", "'")
+    return v
+
+
+def _element_fields(block: str) -> list[tuple[str, str, object]]:
+    """The fields an element holds itself — not those of anything nested in it — as
+    (key, kind, value): kind 'scalar' with the text, 'strings' with a list of texts, 'entries'
+    with a list of field lists (one per named entry), or 'mapping' with the raw lines. `block` is
+    a whole term file, a `- id:` list item or a `key:` block as resolve_path narrows it. Written
+    for the subset of YAML term files use, without a YAML parser (see @DuckTools's guidelines)."""
+    lines = block.splitlines()
+    if not lines:
+        return []
+    first = lines[0]
+    stripped = first.lstrip()
+    if stripped.startswith('- '):
+        col = len(first) - len(stripped) + 2
+        lines = [' ' * col + stripped[2:]] + lines[1:]
+    nonblank = [l for l in lines if l.strip()]
+    if not nonblank:
+        return []
+    col = min(len(l) - len(l.lstrip()) for l in nonblank)
+    out: list[tuple[str, str, object]] = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if not line.strip() or len(line) - len(line.lstrip()) != col:
+            i += 1
+            continue
+        m = re.match(r'^\s*([A-Za-z_][\w-]*):(?:\s+(.*))?$', line)
+        if not m:
+            i += 1
+            continue
+        key, inline = m.group(1), (m.group(2) or '').strip()
+        j = i + 1
+        while j < len(lines) and (not lines[j].strip() or len(lines[j]) - len(lines[j].lstrip()) > col):
+            j += 1
+        body = lines[i + 1:j]
+        i = j
+        if inline and inline not in ('|', '>', '|-', '>-'):
+            text = inline
+            if body:   # a plain or quoted scalar continued on the following lines
+                text = ' '.join([inline] + [b.strip() for b in body if b.strip()])
+            out.append((key, 'scalar', _unquote(text)))
+            continue
+        if inline in ('|', '>', '|-', '>-'):
+            rest = [b for b in body]
+            ind = min((len(b) - len(b.lstrip()) for b in rest if b.strip()), default=0)
+            joiner = '\n' if inline.startswith('|') else ' '
+            out.append((key, 'scalar', joiner.join(b[ind:] for b in rest).strip()))
+            continue
+        items = [b for b in body if b.strip()]
+        if not items:
+            out.append((key, 'scalar', ''))
+            continue
+        if not items[0].lstrip().startswith('- '):
+            out.append((key, 'mapping', body))
+            continue
+        icol = len(items[0]) - len(items[0].lstrip())
+        chunks: list[list[str]] = []
+        for b in body:
+            if b.strip() and len(b) - len(b.lstrip()) == icol and b.lstrip().startswith('- '):
+                chunks.append([b])
+            elif chunks:
+                chunks[-1].append(b)
+        if all(re.match(r'^\s*-\s+(?:id|name):', c[0]) for c in chunks):
+            out.append((key, 'entries', [_element_fields('\n'.join(c)) for c in chunks]))
+        else:
+            texts = []
+            for c in chunks:
+                head = c[0].lstrip()[2:]
+                more = [x.strip() for x in c[1:] if x.strip()]
+                texts.append(_unquote(' '.join([head] + more)) if more else _unquote(head))
+            out.append((key, 'strings', texts))
+    return out
+
+
+def _field(fields: list[tuple[str, str, object]], key: str, default=None):
+    for k, _kind, v in fields:
+        if k == key:
+            return v
+    return default
+
+
+def _description(content: str) -> str:
+    """A term's `description` as YAML reads it — unquoted, and whole when written as a block
+    scalar (`|`, `>`) or continued over several lines."""
+    m = _DESCRIPTION.search(content)
+    if not m:
+        return ''
+    head = m.group(1).strip()
+    if head not in ('|', '>', '|-', '>-') and not content[m.end():m.end() + 2].startswith(('\n ', '\n\t')):
+        return _unquote(head)
+    return _field(_element_fields(content), 'description', '') or ''
+
+
+def _term_edges(contents: dict[str, str], known: set[str], skip: set[str],
+                chains: dict[str, set[str]]) -> dict[str, dict[str, list[str]]]:
+    """refers_to / referred_by for the given terms, from their `@<TermName>` mentions."""
+    edges = {n: {'refers_to': [], 'referred_by': []} for n in contents}
+    for name, content in contents.items():
+        seen = []
+        for ref in _TERM_REF.findall(content):
+            if ref in known and ref != name and ref not in skip and ref not in chains.get(name, set()) \
+                    and ref not in seen:
+                seen.append(ref)
+        edges[name]['refers_to'] = seen
+    for name in contents:
+        edges[name]['referred_by'] = [other for other in contents
+                                      if name in edges[other]['refers_to']]
+    return edges
+
+
+_DATE = re.compile(r'\b20\d\d-\d\d-\d\d\b')
+
+
+def _git_root(path: Path) -> Path | None:
+    """The nearest directory at or above `path` holding `.git` — the repository a file is in."""
+    for d in [path.resolve()] + list(path.resolve().parents):
+        if (d / '.git').exists():
+            return d
+    return None
+
+
+def _term_files(folder: Path) -> list[Path]:
+    """Every `.yaml` in a terms folder and its subfolders, at any depth: a project groups its
+    terms in subfolders of one `terms_folder` rather than splitting into sub-projects."""
+    return sorted(folder.rglob('*.yaml'))
 
 
 def _parse_dict_list_block(content: str, pattern: re.Pattern, key_field: str,
@@ -73,7 +214,7 @@ def _parse_dict_list_block(content: str, pattern: re.Pattern, key_field: str,
         if key_m:
             results.append({
                 key_field: key_m.group(1).strip(),
-                'description': desc_m.group(1).strip() if desc_m else '',
+                'description': _unquote(desc_m.group(1)) if desc_m else '',
             })
     return results
 
@@ -116,14 +257,218 @@ def _find_named_blocks(content: str, name: str) -> list[str]:
     return [block for indent, block in blocks if indent == top]
 
 
-def _extract_named_block(content: str, name: str) -> str | None:
-    """The first entry with this id, or None. Thin wrapper over _find_named_blocks."""
-    blocks = _find_named_blocks(content, name)
-    return blocks[0] if blocks else None
+def _child(block: str, segment: str, root: bool = False) -> tuple[str | None, str | None]:
+    """One step of a full `#`-path: the child of `block` named `segment` among its direct children
+    only, as (child, None), or (None, why). `block` is a whole term file (`root`), a `- id:` entry,
+    or a `key:` block. The children of a term or an entry are its own fields, found at its field
+    column and nowhere deeper; those of a key holding a list are its items, by `id`/`name` or by
+    position for a digits-only segment; those of a key holding a mapping are that mapping's keys.
+    Nothing below the next level is looked at, so a name used again elsewhere in the term is never
+    a rival, and two items of one list under one id are refused as ambiguous."""
+    lines = block.splitlines()
+    if not lines:
+        return None, None
+
+    def _indent(s: str) -> int:
+        return len(s) - len(s.lstrip())
+
+    def _until_dedent(i: int, col: int) -> str:
+        end = len(lines)
+        for j in range(i + 1, len(lines)):
+            if lines[j].strip() and _indent(lines[j]) <= col:
+                end = j
+                break
+        return '\n'.join(lines[i:end]).rstrip()
+
+    def _own_key(col: int, first: int) -> tuple[str | None, str | None]:
+        target = re.compile(rf'^ {{{col}}}{re.escape(segment)}:(\s|$)')
+        for i in range(first, len(lines)):
+            if lines[i].strip() and _indent(lines[i]) < col:
+                break
+            if target.match(lines[i]):
+                return _until_dedent(i, col), None
+        return None, None
+
+    if root:
+        return _own_key(0, 0)
+    head = lines[0]
+    if head.lstrip().startswith('- '):
+        col = _indent(head) + 2
+        inline = re.match(rf'^\s*-\s+{re.escape(segment)}:(\s|$)', head)
+        if inline:
+            # the field written on the entry's own first line, `- id: x`, as a line of its own
+            return ' ' * col + head.lstrip()[2:], None
+        return _own_key(col, 1)
+    key = re.match(r'^(\s*)[\w.-]+:\s*(.*)$', head)
+    if key is None or (key.group(2) and key.group(2) not in ('|', '>', '|-', '>-')):
+        return None, None  # a scalar has no children
+    body = [i for i in range(1, len(lines)) if lines[i].strip()]
+    if not body:
+        return None, None
+    col = _indent(lines[body[0]])
+    if not lines[body[0]].lstrip().startswith('- '):
+        return _own_key(col, body[0])
+    items = [i for i in body if _indent(lines[i]) == col and lines[i].lstrip().startswith('- ')]
+    if segment.isdigit():
+        n = int(segment)
+        return (_until_dedent(items[n], col), None) if n < len(items) else (None, None)
+    named = re.compile(r'^-\s+(?:id|name):\s*[\'"]?' + re.escape(segment) + r'[\'"]?\s*$')
+    hits = [i for i in items if named.match(lines[i].strip())]
+    if len(hits) > 1:
+        return None, f"ambiguous: {len(hits)} entries of one list are called '{segment}' — ids must be unique among siblings"
+    return (_until_dedent(hits[0], col), None) if hits else (None, None)
+
+
+def _all_named(content: str, name: str) -> list[str]:
+    """Every entry and every block key called `name` at any depth of `content` — the elements a
+    path that is not a full one may have meant, for the hint a refusal gives."""
+    lines = content.splitlines()
+    pattern = re.compile(r'^(\s*)(?:-\s+(?:id|name):\s*[\'"]?' + re.escape(name) + r'[\'"]?\s*|'
+                         + re.escape(name) + r':(?:\s*|\s+[|>]-?\s*))$')
+    found = []
+    for i, line in enumerate(lines):
+        m = pattern.match(line)
+        if not m:
+            continue
+        col = len(m.group(1))
+        end = len(lines)
+        for j in range(i + 1, len(lines)):
+            if lines[j].strip() and len(lines[j]) - len(lines[j].lstrip()) <= col:
+                end = j
+                break
+        found.append('\n'.join(lines[i:end]).rstrip())
+    return found
+
+
+def _candidate_paths(file_text: str, window: str, blocks: list[str], term_name: str) -> list[str]:
+    """The full `#`-path of each of `blocks` — entries _find_named_blocks found in `window`, a
+    stretch of the term file `file_text` — every slot and parent named, so a reader refused for
+    an ambiguous segment is shown the paths that each reach one of them."""
+    lines = file_text.splitlines()
+    base = max(file_text.find(window), 0)
+    paths = []
+    for block in blocks:
+        offset = file_text.find(block, base)
+        if offset < 0:
+            continue
+        base = offset + 1
+        n = file_text.count('\n', 0, offset)
+        indent = len(lines[n]) - len(lines[n].lstrip())
+        first = lines[n].strip()
+        chain = [first[2:].split(':', 1)[1].strip().strip('\'"') if first.startswith('- ')
+                 else first.split(':', 1)[0]]
+        for k in range(n - 1, -1, -1):
+            s = lines[k]
+            if not s.strip() or len(s) - len(s.lstrip()) >= indent:
+                continue
+            indent = len(s) - len(s.lstrip())
+            m = re.match(r'\s*-\s+(?:id|name):\s*[\'"]?([^\'"\s]+)', s) or re.match(r'\s*([\w.-]+):', s)
+            if m:
+                chain.append(m.group(1))
+            if indent == 0:
+                break
+        paths.append('#'.join([term_name] + chain[::-1]))
+    return paths
+
+
+def _element_owners(content: str) -> list[list[str]]:
+    """For each line of a term, the full-path segments of the innermost named element it belongs
+    to — the entry whose own text it is, slots included, or [] for the term's own lines. A key
+    block inside an entry (`rejected:`, `instructions:`) is part of that entry, not an element."""
+    stack: list[tuple[int, str, bool]] = []
+    owners = []
+    for line in content.splitlines():
+        stripped = line.strip()
+        if stripped:
+            indent = len(line) - len(line.lstrip())
+            while stack and stack[-1][0] >= indent:
+                stack.pop()
+            entry = re.match(r'^-\s+(?:id|name):\s*[\'"]?([^\'"]+?)[\'"]?\s*$', stripped)
+            header = re.match(r'^([\w.-]+):\s*$', stripped)
+            if entry:
+                stack.append((indent, entry.group(1), True))
+            elif header:
+                stack.append((indent, header.group(1), False))
+        last = max((i for i, s in enumerate(stack) if s[2]), default=-1)
+        owners.append([s[1] for s in stack[:last + 1]])
+    return owners
+
+
+def _with_elements(findings: list[dict]) -> list[dict]:
+    """Each finding that has a line gets `ref`: the full path of the element that line belongs
+    to, so the finding can be opened and fixed by path rather than by counting lines."""
+    owners: dict[str, list[list[str]]] = {}
+    for f in findings:
+        if 'line' not in f:
+            continue
+        if f['path'] not in owners:
+            try:
+                owners[f['path']] = _element_owners(Path(f['path']).read_text(encoding='utf-8'))
+            except OSError:
+                owners[f['path']] = []
+        lines = owners[f['path']]
+        if 0 < f['line'] <= len(lines):
+            f['ref'] = '#'.join([Path(f['path']).stem, *lines[f['line'] - 1]])
+    return findings
+
+
+_LINE_LEAD = re.compile(r'^\s*(?:-\s+)?(?:[\w.-]+:(?:\s+|$))?')
+
+
+def _duplicate_ids(content: str) -> list[tuple[int, str]]:
+    """(line index, id) of every entry whose id an earlier entry of the same list already has —
+    the one thing that keeps a full `#`-path from naming exactly one element. Lists are told apart
+    by their item column and by what encloses them: a line less indented than a list closes it."""
+    seen: dict[int, set[str]] = {}
+    out = []
+    for i, line in enumerate(content.splitlines()):
+        if not line.strip():
+            continue
+        col = len(line) - len(line.lstrip())
+        for c in [c for c in seen if c > col]:
+            del seen[c]
+        m = re.match(r'^-\s+(?:id|name):\s*[\'"]?([^\'"]+?)[\'"]?\s*$', line.strip())
+        if not line.lstrip().startswith('- '):
+            seen.pop(col, None)
+            continue
+        ids = seen.setdefault(col, set())
+        if m:
+            if m.group(1) in ids:
+                out.append((i, m.group(1)))
+            ids.add(m.group(1))
+    return out
+
+
+def _fit_paths(file_text: str, window: str, segments: list[str], term_name: str,
+               root: bool = False) -> list[str]:
+    """The full paths a path that may skip levels can mean, carried through to its last segment:
+    each segment is taken as a direct child where there is one and as any element so named below
+    otherwise (_all_named), and the ends are named by _candidate_paths."""
+    def _ends(block: str, rest: list[str], at_root: bool) -> list[str]:
+        if not rest:
+            return [block]
+        child, _why = _child(block, rest[0], root=at_root)
+        found = [child] if child is not None else \
+            [b for b in _all_named(block, rest[0]) if b != block]
+        out: list[str] = []
+        for b in found:
+            out += _ends(b, rest[1:], False)
+        return out
+    return list(dict.fromkeys(_candidate_paths(file_text, window, _ends(window, segments, root), term_name)))
+
+
+def _path_hint(file_text: str, window: str, segments: list[str], term_name: str,
+               root: bool = False) -> str:
+    """For a path that skipped levels, the refusal's pointer to the full paths that fit, so one
+    refusal gives the caller the path to ask for, not just the next level."""
+    paths = _fit_paths(file_text, window, segments, term_name, root)
+    if not paths:
+        return ''
+    return 'a path names every level; the full paths that fit: ' + ', '.join(paths[:6])
 
 
 def _extract_key_block(content: str, name: str) -> str | None:
-    """The counterpart to _extract_named_block for plain mapping keys — `functions:`, `properties:`,
+    """The counterpart to _find_named_blocks for plain mapping keys — `functions:`, `properties:`,
     `guidelines:` — which are not list items and so have no `- name:` to match. Captures the key
     line plus every following line indented deeper than it. A scalar key yields just its own line."""
     lines = content.splitlines()
@@ -140,48 +485,6 @@ def _extract_key_block(content: str, name: str) -> str | None:
                 break
         return '\n'.join(lines[i:end]).rstrip()
     return None
-
-
-def _nth_item(content: str, n: int) -> str | None:
-    """The list item at position n among the items at the first item column below the first line
-    of `content` — what a digits-only segment addresses, for entries that have no id."""
-    lines = content.splitlines()
-    column = None
-    starts: list[int] = []
-    for i, line in enumerate(lines[1:], start=1):
-        if not line.strip():
-            continue
-        indent = len(line) - len(line.lstrip())
-        if column is None:
-            if not line.lstrip().startswith('- '):
-                return None
-            column = indent
-        if indent < column:
-            break
-        if indent == column and line.lstrip().startswith('- '):
-            starts.append(i)
-    if n >= len(starts):
-        return None
-    start = starts[n]
-    end = len(lines)
-    for j in range(start + 1, len(lines)):
-        if lines[j].strip() and len(lines[j]) - len(lines[j].lstrip()) <= column:
-            end = j
-            break
-    return '\n'.join(lines[start:end]).rstrip()
-
-
-def _narrow(content: str, segment: str, prefer_key: bool = False) -> str | None:
-    """Resolves one `#`-path segment. Named list items win over mapping keys of the same name —
-    that ordering is what keeps a component called `settings` addressable in a term that also
-    carries a `settings:` key, and preserves the behaviour from before keys were addressable.
-    `prefer_key` reverses it for the operations that need a list: @Term's own `guidelines:` sits
-    beside the `guidelines` entry of its `properties:`. A digits-only segment picks by position."""
-    if segment.isdigit():
-        return _nth_item(content, int(segment))
-    if prefer_key:
-        return _extract_key_block(content, segment) or _extract_named_block(content, segment)
-    return _extract_named_block(content, segment) or _extract_key_block(content, segment)
 
 
 def _line_of(content: str, pos: int) -> int:
@@ -723,7 +1026,7 @@ class Resolver:
             if f.is_file():
                 term_map.setdefault(f.stem, f)
         for folder in folders:
-            for f in sorted(folder.glob('*.yaml')):
+            for f in _term_files(folder):
                 name = f.stem
                 if name in term_map and term_map[name] != f:
                     print(f'warning: duplicate term "{name}" at {f} (already at {term_map[name]})', file=sys.stderr)
@@ -835,63 +1138,104 @@ class Resolver:
             yield name, p, content
 
     def load_project(self, project_path: str) -> dict:
-        """Returns root file content + term list + aggregated recipes/references + project-wide rules.
-
-        `rules` here is deliberately not every rule from every reachable term — only the root's
-        own extends chain and its direct `uses`. Rules scoped to one specific term (e.g. a single
-        extension's implementation guidelines) travel with that term instead, attached by
-        load_terms, so they surface when the term is actually in play rather than on every load.
-
-        `references` (like `recipes`) aggregates across every reachable term, not just project-wide
-        ones — they're compact identity facts (a repository URL + one line), not verbose guidelines,
-        so there's no bloat concern in showing all of them. This is what keeps a connection to
-        another project visible (e.g. "this installs that GNOME extension") even though the
-        resolver never loads that project's content — `references:` is data, not a graph edge.
-        """
+        """The top level of a project and nothing below it — see @DuckToolsApp#resolver#load_project.
+        Own terms are split into `parts` (named by the root's `software:`) and `terms`, each with
+        its description and its edges; other projects appear once each in `projects`; the
+        framework's terms are the `vocabulary`; recipes are this project's own and those of the
+        framework terms it extends."""
         project_path = _resolve_project(project_path)
         root = Path(project_path).resolve()
         root_content = root.read_text(encoding='utf-8')
         term_map = self._build_term_map(root)
-
-        recipes = [{'term': root.stem, **r} for r in _parse_recipes(root_content)]
-        references = [{'term': root.stem, **r} for r in _parse_references(root_content)]
-        rules = self._project_wide_rules(root, root_content, term_map)
-        terms = []
-        vocabulary: dict[str, list[dict]] = {}
-
-        # A term is this project's own when its file lies under the root file's directory.
-        # Anything else came in through another project's `uses:`, and is attributed to the
-        # broadest such project containing it, so a framework is one group, not one per
-        # sub-project.
         root_dir = root.parent
-        _, project_files = self._collect(root)
-        sources = sorted(
-            {f.resolve() for f in project_files if f.is_file() and not f.resolve().is_relative_to(root_dir)},
-            key=lambda f: len(f.parent.parts),
-        )
+        framework = term_map.get('Duckspec')
+        fw_dir = framework.resolve().parent if framework else None
 
+        def is_framework(p: Path) -> bool:
+            return fw_dir is not None and p.resolve().is_relative_to(fw_dir) and not root.is_relative_to(fw_dir)
+
+        own: dict[str, Path] = {}
+        vocabulary = []
+        contents: dict[str, str] = {}
         for name, p, content in self._walk_terms(project_path):
             resolved = p.resolve()
             if resolved == root:
                 continue
-            m = _DESCRIPTION.search(content)
-            entry = {'name': name, 'path': str(p), 'description': m.group(1).strip() if m else ''}
             if resolved.is_relative_to(root_dir):
-                terms.append(entry)
-            else:
-                source = next((f.stem for f in sources if resolved.is_relative_to(f.parent)), 'other')
-                vocabulary.setdefault(source, []).append(entry)
-            recipes += [{'term': name, **r} for r in _parse_recipes(content)]
-            references += [{'term': name, **r} for r in _parse_references(content)]
+                own[name] = p
+                contents[name] = content
+            elif is_framework(p):
+                vocabulary.append({'name': name, 'path': str(p), 'description': _description(content)})
+
+        fw_names = {n for n, p in term_map.items() if is_framework(p)}
+        chains = {n: {a for a, _ in self._extends_chain_from(n, c, term_map)} for n, c in contents.items()}
+        edges = _term_edges(contents, set(term_map), fw_names, chains)
+
+        software = [s.strip().strip('\'"').lstrip('@')
+                    for s in _parse_list_block(root_content, _SOFTWARE_BLOCK)]
+
+        def row(name):
+            return {'name': name, 'path': str(own[name]),
+                    'description': _description(contents[name]), **edges[name]}
+
+        parts = [row(n) for n in software if n in own]
+        terms = [row(n) for n in sorted(own) if n not in software]
+
+        # other projects, one node each
+        projects, seen_projects = [], set()
+        workspace = _active_projects(_load_settings())
+        um = _USES_BLOCK.search(root_content)
+        for entry in (_LIST_ITEM.findall(um.group(1)) if um else []):
+            entry = entry.strip('\'"')
+            target = _resolve_entry(entry, root_dir, workspace)
+            if target is None or not target.is_file():
+                continue
+            target = target.resolve()
+            if target.is_relative_to(root_dir) or (fw_dir and target.is_relative_to(fw_dir)) \
+                    or target in seen_projects:
+                continue
+            seen_projects.add(target)
+            projects.append({'name': target.stem, 'repository': entry,
+                             'connection': f'uses — its terms resolve here; open it with load_project({target.stem})',
+                             'description': _description(target.read_text(encoding='utf-8'))})
+        refs = _parse_references(root_content) + [r for n in sorted(contents) for r in _parse_references(contents[n])]
+        for r in refs:
+            repo = r.get('repository', '')
+            target = workspace.get(repo)
+            name = Path(target).stem if target else repo
+            if target and Path(target).resolve() in seen_projects:
+                continue
+            if target:
+                seen_projects.add(Path(target).resolve())
+            desc = ''
+            if target and Path(target).is_file():
+                desc = _description(Path(target).read_text(encoding='utf-8'))
+            projects.append({'name': name, 'repository': repo,
+                             'connection': 'reference — ' + r.get('description', ''),
+                             'description': desc})
+
+        # recipes: own, root's, and those of the framework terms own terms extend
+        extended = set()
+        for n, c in list(contents.items()) + [(root.stem, root_content)]:
+            extended |= {a for a, _ in self._extends_chain_from(n, c, term_map)} & fw_names
+        recipes = [{'term': root.stem, **r} for r in _parse_recipes(root_content)]
+        for n in sorted(contents):
+            recipes += [{'term': n, **r} for r in _parse_recipes(contents[n])]
+        for n in sorted(extended):
+            try:
+                recipes += [{'term': n, **r} for r in _parse_recipes(term_map[n].read_text(encoding='utf-8'))]
+            except Exception:
+                pass
 
         return {
             'root_content': root_content,
-            'terms': terms,  # already sorted by _walk_terms
-            'vocabulary': [{'project': k, 'terms': v} for k, v in sorted(vocabulary.items())],
-            'recipes': recipes,
-            'references': references,
-            'rules': rules,
             'workflow': self._workflow_hint(root_content),
+            'parts': parts,
+            'terms': terms,
+            'projects': projects,
+            'vocabulary': sorted(vocabulary, key=lambda v: v['name']),
+            'recipes': recipes,
+            'rules': self._project_wide_rules(root, root_content, term_map),
         }
 
     @staticmethod
@@ -931,14 +1275,13 @@ class Resolver:
         project_path = _resolve_project(project_path)
         result = []
         for name, p, content in self._walk_terms(project_path, include_all):
-            m = _DESCRIPTION.search(content)
-            result.append({'name': name, 'path': str(p), 'description': m.group(1).strip() if m else ''})
+            result.append({'name': name, 'path': str(p), 'description': _description(content)})
         return result
 
     def load_terms(self, project_path: str, term_names: list[str]) -> list[dict]:
         """Loads the named terms, each followed by its `extends` chain. Only the explicitly
         requested terms (not the ancestors inlined with them) get a `rules` tree attached — own
-        guidelines/ai_instructions plus each `extends` ancestor's own, kept separate so scope
+        guidelines plus each `extends` ancestor's own, kept separate so scope
         stays visible instead of flattened into one list — and a `references` list naming the
         terms they mention without loading them."""
         project_path = _resolve_project(project_path)
@@ -970,20 +1313,33 @@ class Resolver:
         return result
 
     def grep_terms(self, project_path: str, query: str, include_all: bool = False) -> list[dict]:
-        """Each hit carries the `#`-path of the element it sits in, not just its text. A bare
-        matching line says nothing about whose line it is, so every hit used to need the file
-        opened again to find out; the ref it comes back with now is the one resolve_path and
-        set_field already take."""
+        """The elements whose own text holds every word of `query` — see
+        @DuckToolsApp#components#resolver#functions#grep_terms."""
         project_path = _resolve_project(project_path)
-        q = query.lower()
+        words = [w for w in query.lower().split() if w]
+        if not words:
+            return []
         results = []
         for name, p, content in self._walk_terms(project_path, include_all):
-            paths = _element_paths(content)
-            hits = [{'ref': '#'.join([name] + paths[i]), 'line': i + 1, 'text': line.strip()}
-                    for i, line in enumerate(content.splitlines()) if q in line.lower()]
-            if hits:
-                results.append({'name': name, 'path': str(p), 'hits': hits,
-                                'lines': [h['text'] for h in hits]})
+            lines = content.splitlines()
+            groups: dict[tuple, list[tuple[int, str]]] = {}
+            for i, owner in enumerate(_element_owners(content)):
+                text = _LINE_LEAD.sub('', lines[i]).strip().strip('"\'')
+                if text:
+                    groups.setdefault(tuple(owner), []).append((i, text))
+            for owner, parts in groups.items():
+                joined = ' '.join(text for _, text in parts)
+                low = joined.lower()
+                if not all(w in low for w in words):
+                    continue
+                at = min(low.find(w) for w in words)
+                first = next(i for i, text in parts if any(w in text.lower() for w in words))
+                snippet = joined[max(0, at - 70):at + 110].strip()
+                snippet = ('…' if at > 70 else '') + snippet + ('…' if at + 110 < len(joined) else '')
+                results.append({'ref': '#'.join([name, *owner]), 'term': name, 'path': str(p),
+                                'line': first + 1, 'matches': sum(low.count(w) for w in words),
+                                'snippet': snippet})
+        results.sort(key=lambda r: (-r['matches'], r['ref']))
         return results
 
     def resolve_path(self, project_path: str, ref: str) -> dict | None:
@@ -1001,29 +1357,156 @@ class Resolver:
             content = term_path.read_text(encoding='utf-8')
         except Exception:
             return None
-
-        for segment in segments:
-            # Refuse an ambiguous segment instead of returning whichever entry came first, the
-            # way _locate already does for the editing operations. A stale duplicate of an entire
-            # recipe sat in DuckspecProject.yaml across five releases precisely because nothing
-            # that reads a path ever objected to there being two of something.
-            if segment.isdigit():
-                block = _nth_item(content, int(segment))
-                if block is None:
-                    return None
-                content = block
-                continue
-            candidates = _find_named_blocks(content, segment)
-            if len(candidates) > 1:
+        whole = content
+        # A full path only: each segment is a direct child of the element before it (_child), so
+        # a name used again elsewhere in the term is never mistaken for the one meant — the old
+        # search at any depth silently took the shallowest match, which for the Workspace
+        # Manager's `indicator-model` was its test, not the module.
+        for n, segment in enumerate(segments):
+            child, why = _child(content, segment, root=(n == 0))
+            if why:
                 return {'name': term_name, 'path': str(term_path), 'ref': ref, 'content': '',
-                        'error': f"ambiguous: '{segment}' matches {len(candidates)} elements "
-                                 f"in {ref} — the spec has more than one, which is itself a defect"}
-            block = candidates[0] if candidates else _extract_key_block(content, segment)
-            if block is None:
+                        'error': f"{why}, in {'#'.join([term_name] + segments[:n])}"}
+            if child is None:
+                hint = _path_hint(whole, content, segments[n:], term_name, root=(n == 0))
+                if hint:
+                    return {'name': term_name, 'path': str(term_path), 'ref': ref, 'content': '',
+                            'error': f"not found: {ref} — {hint}"}
                 return None
-            content = block
+            content = child
 
-        return {'name': term_name, 'path': str(term_path), 'ref': ref, 'content': content}
+        return {'name': term_name, 'path': str(term_path), 'ref': ref, 'content': content,
+                **self._rules_for(project_path, ref)}
+
+    def expand(self, project_path: str, ref: str) -> dict | None:
+        """The children of one element with their descriptions and what they refer to, and the
+        rules that apply to it — see @DuckToolsApp#resolver#expand."""
+        found = self.resolve_path(project_path, ref)
+        if found is None or found.get('error'):
+            return found
+        fields = _element_fields(found['content'])
+        term_map = self._build_term_map(Path(_resolve_project(project_path)).resolve())
+        files: dict[str, str] = {}
+        out = {'name': found['name'], 'path': found['path'], 'ref': ref,
+               'description': _field(fields, 'description', ''), 'fields': [], 'slots': [],
+               'strings': [], 'rules': found['rules'], 'codestyle': found['codestyle'], 'goals': found['goals']}
+        for key, kind, value in fields:
+            if key in ('id', 'description'):
+                continue
+            if kind == 'scalar':
+                out['fields'].append({'key': key, 'value': value})
+            elif kind == 'mapping':
+                out['fields'].append({'key': key, 'value': ' '.join(l.strip() for l in value if l.strip())})
+            elif kind == 'strings':
+                if key not in ('guidelines', 'codestyle'):
+                    out['strings'].append({'slot': key, 'items': value})
+                else:
+                    out['strings'].append({'slot': key, 'items': [], 'count': len(value)})
+            else:
+                entries = []
+                for entry in value:
+                    text = ' '.join(str(v) for k, _kind, v in entry if _kind == 'scalar' and k != 'id')
+                    nested = '\n'.join(str(v) for _k, _kind, v in entry if _kind != 'scalar')
+                    refs = []
+                    blob = text + nested
+                    for m in _PATH_REF.finditer(blob):
+                        full = self._full_ref(term_map, m.group(1), m.group(2).strip('#').split('#'), files)
+                        refs.append(full or m.group(0))
+                    blob = _PATH_REF.sub(' ', blob)
+                    for r in _TERM_REF.findall(blob):
+                        refs.append('@' + r)
+                    for r in _LOCAL_REF.findall(blob):
+                        if not r.startswith('decisions#'):
+                            refs.append(self._full_ref(term_map, found['name'], r.split('#'), files) or r)
+                    refs = list(dict.fromkeys(refs))
+                    entries.append({
+                        'id': _field(entry, 'id', _field(entry, 'name', '')),
+                        'type': _field(entry, 'type', ''),
+                        'description': _field(entry, 'description', ''),
+                        'counts': {k: len(v) for k, _kind, v in entry if _kind in ('entries', 'strings')},
+                        'refers_to': refs[:16],
+                    })
+                out['slots'].append({'slot': key, 'entries': entries})
+        return out
+
+    @staticmethod
+    def _full_ref(term_map: dict, term_name: str, segments: list[str], files: dict) -> str | None:
+        """The full path, as `@<TermName>#…`, of what a pointer written in prose names — itself
+        when it already is one, the one path that fits when it skips levels — or None when it
+        names nothing, or more than one thing."""
+        if term_name not in term_map:
+            return None
+        if term_name not in files:
+            try:
+                files[term_name] = term_map[term_name].read_text(encoding='utf-8')
+            except OSError:
+                return None
+        text = files[term_name]
+        fits = _fit_paths(text, text, [s for s in segments if s], term_name, root=True)
+        return '@' + fits[0] if len(fits) == 1 else None
+
+    def _owning_project(self, term_path: Path) -> Path:
+        """The project file whose `terms_folder` holds the term, at any depth; the term itself
+        when none does (a root project file)."""
+        for folder in term_path.resolve().parents:
+            for candidate in sorted(folder.parent.glob('*.yaml')):
+                try:
+                    declared = re.search(r'(?m)^terms_folder:\s*(\S+)\s*$', candidate.read_text(encoding='utf-8'))
+                except OSError:
+                    continue
+                if declared and (candidate.parent / declared.group(1).strip('\'"').rstrip('/')
+                                 ).resolve() == folder:
+                    return candidate
+            if folder.parent == folder:
+                break
+        return term_path
+
+    def _rules_for(self, project_path: str, ref: str) -> dict:
+        """Guidelines, codestyle and the part's goals that apply to the element `ref` addresses —
+        see @DuckToolsApp#resolver#_rules_for."""
+        project_path = _resolve_project(project_path)
+        root = Path(project_path).resolve()
+        term_name, *segments = ref.split('#')
+        term_name = term_name.lstrip('@')
+        term_map = self._build_term_map(root)
+        term_path = term_map.get(term_name)
+        if term_path is None:
+            return {'rules': [], 'codestyle': [], 'goals': []}
+        content = term_path.read_text(encoding='utf-8')
+        rules = [{'source': f'@{term_name}', 'text': r['text']} for r in _own_rules(content, term_name)]
+        block, trail = content, [term_name]
+        for n, segment in enumerate(segments):
+            nxt, _why = _child(block, segment, root=(n == 0))
+            if nxt is None:
+                break
+            block = nxt
+            trail.append(segment)
+            for g in _field(_element_fields(block), 'guidelines', []) or []:
+                if isinstance(g, str):
+                    rules.append({'source': '#'.join(trail), 'text': g})
+        shown = {r['term'] for r in self._project_wide_rules(root, root.read_text(encoding='utf-8'), term_map)}
+        tree = self._rules_tree(term_name, term_map)
+        for group in tree['inherited']:
+            if group['term'] in shown:
+                continue
+            rules += [{'source': f"@{group['term']} (inherited)", 'text': r['text']} for r in group['rules']]
+        codestyle = []
+        chain = {a for a, _ in self._extends_chain_from(term_name, content, term_map)}
+        if 'Software' in chain and not any(s in _SOFTWARE_NON_CODE_SLOTS for s in segments):
+            codestyle += [{'source': f'@{term_name}', 'text': c}
+                          for c in _field(_element_fields(content), 'codestyle', []) or []]
+            project = self._owning_project(term_path)
+            if project.resolve() != term_path.resolve():
+                pc = project.read_text(encoding='utf-8')
+                codestyle += [{'source': f'@{project.stem}', 'text': c}
+                              for c in _field(_element_fields(pc), 'codestyle', []) or []]
+        # the goals of the part an element belongs to: what decides between two ways of doing the
+        # work is opened with it; the part itself carries them in its own content already
+        goals = []
+        if 'Software' in chain and segments:
+            goals = [{'source': f'@{term_name}', 'text': g}
+                     for g in _field(_element_fields(content), 'goals', []) or []]
+        return {'rules': rules, 'codestyle': codestyle, 'goals': goals}
 
     def _duplicate_terms(self, project_path: Path) -> list[dict]:
         """One term name defined in several files. Kept out of _build_term_map, which resolves
@@ -1036,7 +1519,7 @@ class Resolver:
             if f.is_file():
                 seen.setdefault(f.stem, f)
         for folder in folders:
-            for f in sorted(folder.glob('*.yaml')):
+            for f in _term_files(folder):
                 if f.stem in seen and seen[f.stem] != f:
                     duplicates.append({'name': f.stem, 'path': f, 'first_path': seen[f.stem]})
                 else:
@@ -1123,6 +1606,63 @@ class Resolver:
                     add('error', 'unquoted-scalar', name, path,
                         f"'{shown}' is written bare, and YAML would not read it as text — quote "
                         f"it, or run normalize on the project", i + 1)
+                # A full path names one element only while no two siblings share an id.
+                paths = _element_paths(content)
+                for i, dup in _duplicate_ids(content):
+                    add('error', 'duplicate-id', name, path,
+                        f"'{dup}' is the id of another entry of the same list too, so "
+                        f"{'#'.join([name] + paths[i])} names two elements — give one of them "
+                        f"another id", i + 1)
+                # A choice, a ruling or evidence written inline belongs in a @Decision.
+                keys: list[tuple[int, str]] = []   # the keys enclosing each line, by indent
+                for i, line in enumerate(content.splitlines()):
+                    if line.strip():
+                        ind = len(line) - len(line.lstrip())
+                        while keys and keys[-1][0] >= ind:
+                            keys.pop()
+                        km = re.match(r'^\s*(?:-\s+)?([\w-]+):', line)
+                        if km:
+                            keys.append((ind, km.group(1)))
+                    if any(k == 'decisions' for _, k in keys):
+                        continue   # a decision is where dates and rulings belong
+                    dm = re.match(r'^\s*(?:-\s+)?description:\s*(.*)$', line)
+                    if dm and (_DATE.search(dm.group(1)) or '(the author' in dm.group(1).lower()):
+                        what = 'a date' if _DATE.search(dm.group(1)) else 'an attribution, "(the author"'
+                        add('warning', 'dated-prose', name, path,
+                            f"this description holds {what}: a choice, a ruling or evidence written "
+                            f"inline — move it to a @Decision of the element (`by`, `date`, `rejected`)", i + 1)
+                # The project's own workflow is one of its repository too, not one it inherits from
+                # another project — a clone of this repository alone would have none.
+                wm = re.search(r'(?m)^workflow:\s*\n((?:[ \t]+.*\n?)*)', content)
+                tm = re.search(r'(?m)^\s+type:\s*["\']?@(\w+)', wm.group(1)) if wm else None
+                if tm and tm.group(1) in term_map:
+                    wf_path = term_map[tm.group(1)].resolve()
+                    fw = term_map.get('Duckspec')
+                    if not (fw is not None and wf_path.is_relative_to(fw.resolve().parent)) \
+                            and _git_root(wf_path) != _git_root(Path(path)):
+                        add('error', 'foreign-workflow-ref', name, path,
+                            f"the project's workflow @{tm.group(1)} is a term of another repository: "
+                            f"a workflow is self-contained within its own (see @DuckWorkflow) — give "
+                            f"this project a workflow of its own")
+                # A workflow is self-contained within its repository (see @DuckWorkflow).
+                chain_names = {a for a, _ in self._extends_chain_from(name, content, term_map)}
+                if 'DuckWorkflow' in chain_names and name != 'DuckWorkflow':
+                    here = _git_root(Path(path))
+                    fw = term_map.get('Duckspec')
+                    fw_dir = fw.resolve().parent if fw else None
+                    for i, line in enumerate(content.splitlines()):
+                        for ref in _TERM_REF.findall(line):
+                            target = term_map.get(ref)
+                            if target is None:
+                                continue
+                            target = target.resolve()
+                            if fw_dir is not None and target.is_relative_to(fw_dir):
+                                continue
+                            if _git_root(target) != here:
+                                add('error', 'foreign-workflow-ref', name, path,
+                                    f"@{ref} is a term of another repository: a workflow is "
+                                    f"self-contained within its own (see @DuckWorkflow) — describe "
+                                    f"that project in words and list it in `references`", i + 1)
 
             # A `uses:` entry that resolves to nothing was skipped in silence, so the project it
             # names simply vanished from the term map and the report blamed the dangling
@@ -1331,24 +1871,14 @@ class Resolver:
                         f"one, and stays unverified until a check is written for it")
 
         findings.sort(key=lambda f: (f['severity'] != 'error', f['path'], f.get('line', 0)))
-        return findings
+        return _with_elements(findings)
 
     def _source_root(self, term_path: Path) -> Path:
         """The directory a term's `src:` values resolve against: the `settings.src` (default `..`)
         of the project whose `terms_folder:` names the folder the term sits in. Matched on that
         declaration, not on the folder's name, which need not match the project's. A term no
         project claims — a root project file itself — is read as its own project."""
-        folder = term_path.parent.resolve()
-        project = term_path
-        for candidate in sorted(folder.parent.glob('*.yaml')):
-            try:
-                declared = re.search(r'(?m)^terms_folder:\s*(\S+)\s*$', candidate.read_text(encoding='utf-8'))
-            except OSError:
-                continue
-            if declared and (candidate.parent / declared.group(1).strip('\'"').rstrip('/')
-                             ).resolve() == folder:
-                project = candidate    # the file naming this terms folder owns what is in it
-                break
+        project = self._owning_project(term_path)
         try:
             content = project.read_text(encoding='utf-8')
         except OSError:
@@ -1475,13 +2005,15 @@ class Resolver:
                                                 f"another file"})
 
         findings.sort(key=lambda f: (f['severity'] != 'error', f['path'], f.get('line', 0)))
-        return findings
+        return _with_elements(findings)
 
     def term_uses(self, project_path: str, term_name: str) -> dict:
-        """Reverse index: who extends this term, who mentions it, who names it as a `type:`."""
+        """Reverse index: the terms that extend this one, and the elements — by full path — that
+        name it as their `type:` or mention it."""
         project_path = _resolve_project(project_path)
         term_map = self._build_term_map(Path(project_path).resolve())
         out = {'extended_by': [], 'referenced_by': [], 'typed_by': []}
+        typed = re.compile(rf'^\s*(?:-\s+)?type:\s*["\']?@{re.escape(term_name)}\b')
         for name, path in sorted(term_map.items()):
             if name == term_name:
                 continue
@@ -1491,10 +2023,17 @@ class Resolver:
                 continue
             if _parse_extends(content) == term_name:
                 out['extended_by'].append(name)
-            if re.search(rf'^\s*type:\s*["\']?@{re.escape(term_name)}\b', content, re.MULTILINE):
-                out['typed_by'].append(name)
-            elif term_name in _TERM_REF.findall(content):
-                out['referenced_by'].append(name)
+            owners = _element_paths(content)
+            for i, line in enumerate(content.splitlines()):
+                where = '#'.join([name, *owners[i]])
+                if typed.match(line):
+                    if where not in out['typed_by']:
+                        out['typed_by'].append(where)
+                elif re.match(r'^\s*extends:', line):
+                    continue
+                elif term_name in _TERM_REF.findall(line) and where not in out['referenced_by']:
+                    out['referenced_by'].append(where)
+        out['referenced_by'] = [r for r in out['referenced_by'] if r not in out['typed_by']]
         return out
 
     def term_schema(self, project_path: str, term_name: str) -> list[dict]:
@@ -1565,34 +2104,19 @@ class Resolver:
         start, end = 0, len(lines)
         for n, segment in enumerate(segments):
             window = ''.join(lines[start:end])
-            prefer_key = slot and n == len(segments) - 1
-            if prefer_key and not segment.isdigit():
-                # The slot a list operation writes into is the element's own, never one nested
-                # deeper: with no `fields:` of its own, `Term#fields` used to land in the first
-                # component's fields. Not found here means the caller creates it on the element.
-                column = 0 if n == 0 else self._field_column(lines[start])
-                own = re.compile(rf'^ {{{column}}}{re.escape(segment)}:(\s|$)')
-                hit = next((i for i in range(start + (n > 0), end) if own.match(lines[i])), None)
-                if hit is None:
-                    return f"not found: '{segment}' in {ref}"
-                stop = next((j for j in range(hit + 1, end) if lines[j].strip()
-                             and len(lines[j]) - len(lines[j].lstrip()) <= column), end)
-                while stop > hit + 1 and not lines[stop - 1].strip():
-                    stop -= 1
-                start, end = hit, stop
-                continue
-            keyed = prefer_key and _extract_key_block(window, segment) is not None
-            if (not segment.isdigit() and not keyed
-                    and len(_find_named_blocks(window, segment)) > 1):
-                return f"ambiguous: '{segment}' matches more than one element in {ref}"
-            block = _narrow(window, segment, prefer_key=prefer_key)
-            if block is None:
-                return f"not found: '{segment}' in {ref}"
+            child, why = _child(window, segment, root=(n == 0))
+            if why:
+                return f"{why}, in {'#'.join([term_name] + segments[:n])}"
+            if child is None:
+                hint = _path_hint(''.join(lines), window, segments[n:], term_name, root=(n == 0))
+                return f"not found: '{segment}' in {ref}" + (f" — {hint}" if hint else '')
             # Found by its whole run of lines, not its first line alone: two list items can open
             # with the same line, and a digits-only segment picks one of them by position.
-            wanted = [l.rstrip() for l in block.splitlines()]
+            wanted = [l.rstrip() for l in child.splitlines()]
             have = [l.rstrip() for l in lines[start:end]]
-            offset = next(i for i in range(len(have)) if have[i:i + len(wanted)] == wanted)
+            offset = next((i for i in range(len(have)) if have[i:i + len(wanted)] == wanted), None)
+            if offset is None:
+                return f"not found: '{segment}' in {ref}"
             start += offset
             end = start + len(wanted)
         return path, lines, start, end
@@ -1694,26 +2218,59 @@ class Resolver:
 
     def _entry_not_slot(self, project_path: str, ref: str, parent_ref: str,
                         slot_name: str) -> str | None:
-        """Why a missing slot must not be created, or None. A name the path already answers with
-        an entry is a slot only when the term's type declares it — @Term's own `guidelines:`
-        beside the `guidelines` entry of its `properties:`; otherwise the entry is what was meant,
-        and a slot of the same name would be a second thing under it that every edit reaches
-        while resolve_path and every reader reach the entry."""
+        """Why a missing slot must not be created, or None. A full path's last segment that is
+        not a field of the element before it is created there as a new slot — unless an entry of
+        that name lies below the element: then the path most likely skipped a level, and creating
+        the slot would put a second, empty thing under that name instead of reaching the entry.
+        A slot the term's type declares is always created; a same-named key further down — a
+        nested component's own `decisions:` — is another element's slot and no rival."""
         if '#' not in parent_ref:
             declared = {m['member'] for m in self.term_schema(project_path, parent_ref.lstrip('@'))}
             if slot_name in declared:
                 return None
-        entry = self._locate(project_path, ref)
-        if isinstance(entry, str):
+        parent = self._locate(project_path, parent_ref)
+        if isinstance(parent, str):
             return None
-        _, lines, start, end = entry
-        column = self._field_column(lines[start])
-        own = re.compile(rf'^ {{{column}}}([\w-]+):\s*$')
-        slots = [m.group(1) for line in lines[start + 1:end] if (m := own.match(line))]
-        where = (', '.join(f'{ref}#{s}' for s in slots) if slots
-                 else f'{ref}#<slot>, which is created on it')
-        return (f"refused: '{slot_name}' in {ref} is an entry, not a slot, and no type declares a "
-                f"slot of that name — add to one of the entry's slots instead: {where}")
+        path, lines, start, end = parent
+        window = ''.join(lines[start:end])
+        entries = [b for b in _all_named(window, slot_name) if b.lstrip().startswith('- ')]
+        if not entries:
+            return None
+        term_name = parent_ref.split('#')[0].lstrip('@')
+        paths = _candidate_paths(''.join(lines), window, entries, term_name)
+        return (f"refused: '{slot_name}' is not a field of {parent_ref}, and creating it there "
+                f"would add a new slot beside the entries already called '{slot_name}' below — "
+                f"a path names every level: " + ', '.join(paths))
+
+    def _own_slot(self, project_path: str, ref: str):
+        """The slot `ref` names, looked for only among the fields of the element the rest of the
+        path addresses — never in an element nested below it, whose slot of the same name (a
+        nested component's `decisions:`) is not the one meant. Falls back to _locate when the
+        parent cannot be located or the last segment is a position."""
+        parent_ref, _, slot_name = ref.rpartition('#')
+        if not parent_ref or slot_name.isdigit():
+            return self._locate(project_path, ref, slot=True)
+        parent = self._locate(project_path, parent_ref)
+        if isinstance(parent, str):
+            return self._locate(project_path, ref, slot=True)
+        path, lines, p_start, p_end = parent
+        if '#' not in parent_ref:
+            own_col, p_start, p_end = 0, 0, len(lines)
+        else:
+            head = lines[p_start]
+            if not head.lstrip().startswith('- '):
+                return self._locate(project_path, ref, slot=True)
+            own_col = len(head) - len(head.lstrip()) + 2
+        header = re.compile(rf'^ {{{own_col}}}{re.escape(slot_name)}:\s*$')
+        for i in range(p_start, p_end):
+            if header.match(lines[i].rstrip('\n')):
+                end = len(lines)
+                for j in range(i + 1, len(lines)):
+                    if lines[j].strip() and len(lines[j]) - len(lines[j].lstrip()) <= own_col:
+                        end = j
+                        break
+                return path, lines, i, end
+        return f"not found: '{slot_name}' in {ref}"
 
     def add_entry(self, project_path: str, ref: str, entry_id: str,
                   fields: dict | None = None, after: str | None = None,
@@ -1727,7 +2284,7 @@ class Resolver:
         if after is not None and before is not None:
             return 'refused: `after` and `before` both given — an entry has one place'
         anchor = after if after is not None else before
-        located = self._locate(project_path, ref, slot=True)
+        located = self._own_slot(project_path, ref)
         if isinstance(located, str):
             if anchor is not None and located.startswith('not found'):
                 return f"refused: '{anchor}' is not an entry of {ref}, which does not exist yet"
@@ -1753,7 +2310,7 @@ class Resolver:
                     at -= 1
             lines.insert(at, f'{" " * column}{slot_name}:\n')
             path.write_text(''.join(lines), encoding='utf-8', newline='')
-            located = self._locate(project_path, ref, slot=True)
+            located = self._own_slot(project_path, ref)
             if isinstance(located, str):
                 return located
         path, lines, start, end = located
@@ -1858,6 +2415,11 @@ class Resolver:
             head, _, block = ref.rpartition("#")
             if not head:
                 return located
+            if not located.startswith('not found') or block.isdigit():
+                return located
+            refused = self._entry_not_slot(project_path, ref, head, block)
+            if refused:
+                return refused
             parent = self._locate(project_path, head)
             if isinstance(parent, str):
                 return parent
@@ -1962,6 +2524,50 @@ class Resolver:
             lines[i] = prefix + _quoted(value) + ending
         return ''.join(lines), len(found)
 
+    _BATCH_OPS = {
+        'set_field': 'set_field', 'set': 'set_field', 'edit_field': 'edit_field', 'edit': 'edit_field',
+        'add_entry': 'add_entry', 'add': 'add_entry', 'remove_element': 'remove_element', 'remove': 'remove_element',
+        'add_item': 'add_item', 'add-item': 'add_item', 'set_item': 'set_item', 'set-item': 'set_item',
+        'remove_item': 'remove_item', 'remove-item': 'remove_item', 'move_item': 'move_item', 'move-item': 'move_item',
+        'create_term': 'create_term', 'create-term': 'create_term', 'remove_term': 'remove_term',
+        'remove-term': 'remove_term', 'rename_term': 'rename_term', 'rename-term': 'rename_term',
+    }
+    _REFUSALS = ('refused', 'not found', 'unknown term', 'ambiguous', 'error')
+
+    def batch(self, project_path: str, operations: list[dict]) -> dict:
+        """Several edits as one, all or nothing — see @DuckToolsApp#resolver#batch."""
+        project_path = _resolve_project(project_path)
+        root = Path(project_path).resolve()
+        folders, _ = self._collect(root)
+        def snapshot() -> dict[Path, str]:
+            files = {root} | set(self._build_term_map(root).values())
+            for folder in folders:
+                files |= set(_term_files(folder))
+            return {f.resolve(): f.read_text(encoding='utf-8') for f in files if f.is_file()}
+        before = snapshot()
+        results: list[str] = []
+        for n, op in enumerate(operations):
+            args = dict(op)
+            name = self._BATCH_OPS.get(str(args.pop('op', '')))
+            try:
+                if name is None:
+                    raise ValueError(f"unknown operation {op.get('op')!r}")
+                out = getattr(self, name)(project_path, **args)
+                out = '' if out is None else str(out)
+            except Exception as e:   # a bad argument is a refusal like any other
+                out = f'refused: {type(e).__name__}: {e}'
+            if out.startswith(self._REFUSALS):
+                after = snapshot()
+                for f in set(after) - set(before):
+                    f.unlink()
+                for f, content in before.items():
+                    if after.get(f) != content:
+                        f.write_text(content, encoding='utf-8', newline='')
+                results.append(out)
+                return {'ok': False, 'results': results, 'failed': n}
+            results.append(out)
+        return {'ok': True, 'results': results, 'failed': None}
+
     def normalize(self, project_path: str) -> list[dict]:
         """Rewrites every term file of the project so each value YAML would misread is quoted.
         Returns [{path, quoted}] for the files it changed."""
@@ -2053,8 +2659,7 @@ class Resolver:
                 try:
                     content = Path(path).read_text(encoding='utf-8')
                     name = Path(path).stem
-                    m = _DESCRIPTION.search(content)
-                    description = m.group(1).strip() if m else ''
+                    description = _description(content)
                 except Exception:
                     pass
                 projects.append({'repository': repository, 'path': path, 'name': name, 'description': description})

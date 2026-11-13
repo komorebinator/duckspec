@@ -1,0 +1,6 @@
+description: A named lookup table a term's recipes refer to by id — e.g. the categories a file is sorted into — each item an id with a description.
+extends: "@Term"
+properties:
+  - id: items
+    type: "@Term"
+    description: the entries of the table, each with an `id` and a `description`

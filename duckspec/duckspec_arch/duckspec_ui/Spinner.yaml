@@ -1,2 +1,0 @@
-description: A visual indicator of an ongoing loading or processing state.
-extends: "@UserInterfaceElement"

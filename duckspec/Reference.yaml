@@ -1,0 +1,5 @@
+description: "One other project this project is connected to by identity only — one it installs, targets or is installed by — named by its repository and never loaded: load_project shows it as a node, so the connection stays visible without the other project's content."
+extends: "@Term"
+properties:
+  - id: repository
+    description: URL of the other project's repository, as the workspace registry keys it

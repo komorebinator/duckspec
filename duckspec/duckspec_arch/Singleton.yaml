@@ -1,2 +1,0 @@
-description: A component with a single shared instance for the lifetime of the application.
-extends: "@DesignPattern"

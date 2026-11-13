@@ -79,11 +79,29 @@ loaded = r.load_project(project)
 check('load_project', 'A fixture project.' in str(loaded) and 'Widget' in str(loaded))
 # The fixture's own reachable term is listed on its own; the framework it uses comes back as a
 # separate group under the project it belongs to, descriptions kept.
-_own = {t['name'] for t in loaded['terms']}
-_vocab = {v['project']: [t['name'] for t in v['terms'] if t['description']] for v in loaded['vocabulary']}
+_parts = [t['name'] for t in loaded['parts']]
+_own = set(_parts) | {t['name'] for t in loaded['terms']}
+_vocab = [v['name'] for v in loaded['vocabulary'] if v['description']]
 check('load_project/vocabulary',
-      _own == {'Widget'} and list(_vocab) == ['Duckspec'] and 'Term' in _vocab['Duckspec'],
-      f'own={sorted(_own)} vocabulary={ {k: len(v) for k, v in _vocab.items()} }')
+      _own == {'Widget'} and 'Term' in _vocab and 'Widget' not in _vocab,
+      f'own={sorted(_own)} vocabulary={len(_vocab)}')
+# the root's `software:` names the parts; a framework term is never an edge, nearly every term
+# mentions some; the order of every list is the same on every run
+check('load_project/parts', _parts == ['Widget'] and 'Software' not in loaded['parts'][0]['refers_to'],
+      f"parts={_parts} edges={loaded['parts'][:1]}")
+check('load_project/stable', r.load_project(project) == loaded)
+# what the overview shows is the text YAML reads: a block-scalar description whole, not its `|`,
+# and a quoted rule or recipe description without its quotes
+check('_description',
+      R._description('description: |\n  First line\n  second line.\nextends: "@Term"\n') == 'First line\nsecond line.'
+      and R._description('description: "a: b"\n') == 'a: b'
+      and R._description('description: plain\n  continued\nname: x\n') == 'plain continued',
+      'block, quoted or continued description read wrongly')
+check('load_project/unquoted',
+      not any(x['text'].startswith('"') for x in loaded['rules'])
+      and not any(x.get('description', '').startswith('"') for x in loaded['recipes'])
+      and all(v['description'] not in ('|', '>') for v in loaded['vocabulary']),
+      'a quote or a block indicator reached the overview')
 
 terms = r.list_terms(project)
 check('list_terms', any(t['name'] == 'Widget' for t in terms), f'got {terms}')
@@ -103,16 +121,19 @@ check('load_terms/references-named',
       'references' in _w and 'Gadget' not in _names, f'got {_w.get("references")}')
 
 hits = r.grep_terms(project, 'colour')
-check('grep_terms', any('Widget' == h['name'] for h in hits), f'got {hits}')
+check('grep_terms', any('Widget' == h['term'] for h in hits), f'got {hits}')
 
-# every hit names the element it sits in, and that name has to be one resolve_path accepts —
-# a ref that only looks right is worth no more than the bare line it replaced
-_refs = [h['ref'] for res in hits for h in res['hits']]
+# every hit is an element named by its full path, which resolve_path opens as it is
+_refs = [h['ref'] for h in hits]
 check('grep_terms/ref', 'Widget#properties#colour' in _refs, f'got {_refs}')
+# several words: an element matches only when its own text holds all of them
+_two = [h['ref'] for h in r.grep_terms(project, 'widget colour')]
+check('grep_terms/words', _two == ['Widget#properties#colour'] and r.grep_terms(project, 'colour nowhere-at-all') == [],
+      f'got {_two}')
 check('grep_terms/resolvable',
       all(r.resolve_path(project, ref) is not None for ref in _refs), f'got {_refs}')
 
-resolved = r.resolve_path(project, 'Widget#spin')
+resolved = r.resolve_path(project, 'Widget#functions#spin')
 check('resolve_path', resolved is not None and 'turns the widget once' in resolved['content'])
 
 # two entries under one id is a defect in the spec; returning whichever came first hides it,
@@ -122,8 +143,33 @@ _twin.write_text('description: Two entries share an id.\nextends: "@Term"\n'
                  'properties:\n  - id: dup\n    description: first\n'
                  'functions:\n  - id: dup\n    description: second\n', encoding='utf-8')
 _amb = r.resolve_path(project, 'Twin#dup')
-check('resolve_path/ambiguous', _amb is not None and 'ambiguous' in _amb.get('error', ''),
+# not a full path: refused, naming every element it may have meant by its full path, each of
+# which opens exactly that element
+_named = _amb['error'].split('fit: ')[-1].split(', ') if _amb and _amb.get('error') else []
+check('resolve_path/not-full', _named == ['Twin#properties#dup', 'Twin#functions#dup']
+      and [r.resolve_path(project, n)['content'].split('description: ')[1].strip() for n in _named] == ['first', 'second'],
       f'got {_amb}')
+_edit = r.set_field(project, 'Twin#dup', 'description', 'x')
+check('_locate/not-full', _edit.startswith('not found') and 'Twin#properties#dup, Twin#functions#dup' in _edit, f'got {_edit}')
+# a name used again deeper in another branch is no rival of a direct child: the old search took
+# the shallowest match anywhere, so a module nested in a component lost to a top-level test
+_twin.write_text('description: Deep and shallow.\nextends: "@Term"\n'
+                 'components:\n  - id: outer\n    components:\n      - id: inner\n        description: module\n'
+                 'tests:\n  - id: inner\n    description: test\n', encoding='utf-8')
+_deep = r.resolve_path(project, 'Twin#components#outer#components#inner')
+_short = r.resolve_path(project, 'Twin#inner')
+check('resolve_path/strict', _deep and 'module' in _deep['content'] and _short and 'error' in _short
+      and 'Twin#components#outer#components#inner' in _short['error'], f'{_deep} {_short}')
+# two entries of one list under one id: refused as ambiguous, and verify_project reports it
+_twin.write_text('description: Twins.\nextends: "@Term"\nfunctions:\n  - id: dup\n    description: a\n'
+                 '  - id: dup\n    description: b\n', encoding='utf-8')
+_both = r.resolve_path(project, 'Twin#functions#dup')
+check('resolve_path/duplicate-id', _both and 'ambiguous' in _both.get('error', ''), f'got {_both}')
+check('verify_project/duplicate-id', any(f['check'] == 'duplicate-id' for f in r.verify_project(project)),
+      f'got {r.verify_project(project)}')
+# a finding with a line names the element it sits in by its full path
+_dupf = [f for f in r.verify_project(project) if f['check'] == 'duplicate-id']
+check('verify_project/element', _dupf and _dupf[0].get('ref') == 'Twin#functions#dup', f'got {_dupf}')
 _twin.unlink()
 
 # the workflow is not carried by load_project — nothing is in hand when a project is opened — so
@@ -323,6 +369,9 @@ check('verify_source/src-list', verdicts.get('in_neither') == ('absent-function'
 
 uses = r.term_uses(project, 'Widget')
 check('term_uses', 'Gadget' in str(uses), f'got {uses}')
+# the elements that name it, by full path, not only the terms they are in
+check('term_uses/elements', all('#' in u or u == 'Gadget' for u in uses['typed_by'] + uses['referenced_by']),
+      f'got {uses}')
 
 schema = r.term_schema(project, 'Gadget')
 check('term_schema', any(m['member'] == 'colour' for m in schema), f'got {schema}')
@@ -334,16 +383,16 @@ entries = r.slot_entries(project, 'Widget', 'properties')
 check('slot_entries', [e['id'] for e in entries] == ['colour'], f'got {entries}')
 
 # --- editing -----------------------------------------------------------------
-r.set_field(project, 'Widget#colour', 'description', 'the colour, restated')
+r.set_field(project, 'Widget#properties#colour', 'description', 'the colour, restated')
 check('set_field', 'restated' in Path(project).parent.joinpath('Fixture/Widget.yaml').read_text(encoding='utf-8'))
 
 # an entry's own `id` sits on the `- ` line, two columns left of its siblings; setting it must
 # rewrite that line rather than append a second `id:` under it
-r.set_field(project, 'Widget#colour', 'id', 'hue')
+r.set_field(project, 'Widget#properties#colour', 'id', 'hue')
 _widget = Path(project).parent / 'Fixture' / 'Widget.yaml'
 check('set_field/id', _widget.read_text(encoding='utf-8').count('id: hue') == 1
       and 'id: colour' not in _widget.read_text(encoding='utf-8'), _widget.read_text(encoding='utf-8'))
-r.set_field(project, 'Widget#hue', 'id', 'colour')
+r.set_field(project, 'Widget#properties#hue', 'id', 'colour')
 
 r.add_entry(project, 'Widget#properties', 'weight', {'description': 'how heavy: quite'})
 widget = Path(project).parent / 'Fixture' / 'Widget.yaml'
@@ -356,7 +405,7 @@ check('add_entry/duplicate', 'refused' in r.add_entry(project, 'Widget#propertie
 # holding what was meant for its component — is a second thing under that name nothing addresses
 _before = widget.read_text(encoding='utf-8')
 _said = r.add_entry(project, 'Widget#spin', 'turn', {'description': 'meant for the function'})
-check('add_entry/entry-not-slot', 'refused' in _said and 'Widget#spin#' in _said
+check('add_entry/entry-not-slot', 'refused' in _said and 'Widget#functions#spin' in _said
       and widget.read_text(encoding='utf-8') == _before, _said)
 # but a slot the term's type declares is made even where an entry has its name, as @Term's own
 # `guidelines:` sits beside the `guidelines` entry of its `properties:`
@@ -374,10 +423,10 @@ r.add_entry(project, 'Widget#functions', 'wobble', {
     'arguments': [{'id': 'angle', 'description': 'how far: in degrees'}, {'id': 'axis'}],
     'notes': ['first', 'second'],
 })
-_arg = r.resolve_path(project, 'Widget#wobble#arguments#angle')
+_arg = r.resolve_path(project, 'Widget#functions#wobble#arguments#angle')
 check('add_entry/nested',
       _arg is not None and '"how far: in degrees"' in _arg['content']
-      and r.resolve_path(project, 'Widget#wobble#axis') is not None
+      and r.resolve_path(project, 'Widget#functions#wobble#arguments#axis') is not None
       and '    notes:\n      - first\n      - second\n' in widget.read_text(encoding='utf-8'),
       widget.read_text(encoding='utf-8'))
 # an id nested inside an entry — wobble's argument `angle` — is not an entry of the slot, and
@@ -411,7 +460,7 @@ check('add_entry/unknown-anchor',
 for _id in ('girth', 'height', 'depth'):
     r.remove_element(project, f'Widget#properties#{_id}')
 
-r.remove_element(project, 'Widget#weight')
+r.remove_element(project, 'Widget#properties#weight')
 check('remove_element', 'weight' not in widget.read_text(encoding='utf-8'))
 
 r.add_item(project, 'Widget#guidelines', 'A widget spins clockwise.')
@@ -419,7 +468,7 @@ check('add_item', 'clockwise' in widget.read_text(encoding='utf-8'))
 
 # the list is addressed by path, not by term plus block name, so the same operation reaches a
 # recipe's instructions two levels down — which nothing could edit before
-r.add_item(project, 'Widget#spin#instructions', 'Turn it once and stop.')
+r.add_item(project, 'Widget#functions#spin#instructions', 'Turn it once and stop.')
 check('add_item/nested', 'Turn it once and stop.' in widget.read_text(encoding='utf-8'), widget.read_text(encoding='utf-8'))
 
 # `after` puts an item where it belongs rather than at the end
@@ -441,21 +490,90 @@ check('add_item/creates-block',
       re.search(r'^goals:\n  - Spin reliably\.', widget.read_text(encoding='utf-8'), re.M) is not None,
       widget.read_text(encoding='utf-8'))
 
-r.move_item(project, 'Widget#guidelines', 'Widget#ai_instructions', 'other way')
-check('move_item', re.search(r'ai_instructions:\n  - A widget spins the other way\.',
+r.move_item(project, 'Widget#guidelines', 'Widget#codestyle', 'other way')
+check('move_item', re.search(r'codestyle:\n  - A widget spins the other way\.',
                              widget.read_text(encoding='utf-8')) is not None, widget.read_text(encoding='utf-8'))
 
-r.remove_item(project, 'Widget#ai_instructions', 'other way')
+r.remove_item(project, 'Widget#codestyle', 'other way')
 check('remove_item', 'other way' not in widget.read_text(encoding='utf-8'))
 
 # moving takes the item's text out and writes it back, so the quoting has to be undone on the way
 # out: stripping only the outer quotes left the escapes inside, and writing escaped them again
 _said = 'Say "spin": never "rotate"'
 r.add_item(project, 'Widget#guidelines', _said)
-r.move_item(project, 'Widget#guidelines', 'Widget#ai_instructions', 'never')
-_moved = r.resolve_path(project, 'Widget#ai_instructions')['content']
+r.move_item(project, 'Widget#guidelines', 'Widget#codestyle', 'never')
+_moved = r.resolve_path(project, 'Widget#codestyle')['content']
 check('move_item/quoted', R.Resolver._item_line(_said, 2).rstrip('\n') in _moved, _moved)
-r.remove_item(project, 'Widget#ai_instructions', 'never')
+r.remove_item(project, 'Widget#codestyle', 'never')
+
+
+# --- navigation --------------------------------------------------------------
+# a term in a subfolder of the terms folder is a term of the project like any other
+(TMP / 'project' / 'Fixture' / 'parts').mkdir()
+(TMP / 'project' / 'Fixture' / 'parts' / 'Pinion.yaml').write_text(
+    'description: A pinion, kept in a subfolder.\nextends: "@Term"\n', encoding='utf-8')
+check('_build_term_map/subfolders', 'Pinion' in r._build_term_map(Path(project)))
+check('_owning_project', r._owning_project(TMP / 'project' / 'Fixture' / 'parts' / 'Pinion.yaml').name == 'Fixture.yaml')
+
+_x = r.expand(project, 'Widget')
+_slots = {s['slot']: s for s in (_x or {}).get('slots', [])}
+check('expand', _x is not None and 'functions' in _slots
+      and _slots['functions']['entries'][0]['id'] == 'spin'
+      and _slots['functions']['entries'][0]['description'] == 'turns the widget once', f'got {_x}')
+_rp = r.resolve_path(project, 'Widget#functions#spin')
+check('_rules_for', any(rule['source'] == '@Widget' for rule in _rp['rules']), f"got {_rp['rules']}")
+check('resolve_path/rules', 'rules' in _rp and 'codestyle' in _rp)
+# codestyle comes with the code it governs: the Software's own and its project's
+r.add_item(project, 'Widget#codestyle', 'Log every spin.')
+r.add_item(project, 'Fixture#codestyle', 'Name functions by verbs.')
+_cs = [c['text'] for c in r.resolve_path(project, 'Widget#functions#spin')['codestyle']]
+check('resolve_path/codestyle', _cs == ['Log every spin.', 'Name functions by verbs.'], f'got {_cs}')
+r.remove_item(project, 'Widget#codestyle', 'Log every spin.')
+r.remove_item(project, 'Fixture#codestyle', 'Name functions by verbs.')
+# the part's goals come with an element inside it, where a choice between two ways is made;
+# the part itself carries them in its own content, so they are not repeated there
+_goals = [g['text'] for g in r.resolve_path(project, 'Widget#functions#spin')['goals']]
+check('resolve_path/goals', _goals == ['Spin reliably.'] and r.expand(project, 'Widget')['goals'] == [],
+      f'got {_goals}')
+
+# add_entry: the slot is the addressed element's own, never a nested element's of the same name
+r.add_entry(project, 'Widget#components', 'wheel', {'type': 'part', 'description': 'turns'})
+r.add_entry(project, 'Widget#components#wheel#decisions', 'round', {'description': 'round, since it rolls'})
+_res = r.add_entry(project, 'Widget#decisions', 'one', {'description': 'one widget per fixture'})
+_wtext = widget.read_text(encoding='utf-8')
+check('_own_slot', not _res.startswith('refused') and re.search(r'^decisions:\n  - id: one', _wtext, re.M) is not None,
+      f'{_res}\n{_wtext}')
+# and the same below a component: its own slot, not a nested component's
+r.add_entry(project, 'Widget#components', 'rim', {'type': 'part', 'description': 'the rim'})
+r.add_entry(project, 'Widget#components#rim#components', 'hub', {'type': 'part', 'description': 'holds it'})
+r.add_entry(project, 'Widget#components#rim#components#hub#decisions', 'steel', {'description': 'steel, since it bears the load'})
+_res2 = r.add_entry(project, 'Widget#components#rim#decisions', 'rubber', {'description': 'rubber rim'})
+_rim = r.resolve_path(project, 'Widget#components#rim')['content']
+check('_entry_not_slot', not _res2.startswith('refused')
+      and re.search(r'^    decisions:\n      - id: rubber', _rim, re.M) is not None, f'{_res2}\n{_rim}')
+r.remove_element(project, 'Widget#decisions')
+r.remove_element(project, 'Widget#components')
+
+# dated prose and a workflow naming another repository's terms are reported
+r.set_field(project, 'Widget#functions#spin', 'description', 'turns the widget once (the author, 2026-01-01)')
+_f = r.verify_project(project)
+check('verify_project/dated-prose', any(x['check'] == 'dated-prose' for x in _f), f'got {_f}')
+r.set_field(project, 'Widget#functions#spin', 'description', 'turns the widget once')
+
+
+# --- batch -------------------------------------------------------------------
+_before = widget.read_text(encoding='utf-8')
+_b = r.batch(project, [{'op': 'add-item', 'ref': 'Widget#guidelines', 'text': 'Batch one.'},
+                       {'op': 'set_field', 'ref': 'Widget#functions#spin', 'field': 'description', 'value': 'turns it, batched'}])
+_after = widget.read_text(encoding='utf-8')
+check('batch', _b['ok'] and 'Batch one.' in _after and 'turns it, batched' in _after, f'{_b}')
+_b2 = r.batch(project, [{'op': 'add-item', 'ref': 'Widget#guidelines', 'text': 'Batch two.'},
+                        {'op': 'remove', 'ref': 'Widget#nothing-here'}])
+check('batch/all-or-nothing', not _b2['ok'] and _b2['failed'] == 1
+      and widget.read_text(encoding='utf-8') == _after, f'{_b2}')
+r.batch(project, [{'op': 'remove-item', 'ref': 'Widget#guidelines', 'match': 'Batch one.'},
+                  {'op': 'set', 'ref': 'Widget#functions#spin', 'field': 'description', 'value': 'turns the widget once'}])
+check('batch/restored', widget.read_text(encoding='utf-8') == _before)
 
 r.create_term(project, 'Sprocket', 'A sprocket.', '@Term')
 sprocket = Path(project).parent / 'Fixture' / 'Sprocket.yaml'
@@ -517,18 +635,17 @@ check('add_entry/own-slot',
 _outer = r.resolve_path(project, 'Holder#fields#outer')
 check('resolve_path/own-slot', _outer is not None and 'the holder' in _outer['content'], f'got {_outer}')
 check('add_entry/nested-slot-by-name',
-      'added deeper' in r.add_entry(project, 'Holder#part#fields', 'deeper', {})
+      'added deeper' in r.add_entry(project, 'Holder#components#part#fields', 'deeper', {})
       and '      - id: inner\n      - id: deeper\n' in _holder.read_text(encoding='utf-8'),
       _holder.read_text(encoding='utf-8'))
-# an entry named like an entry nested deeper elsewhere is still addressable: the deeper one, inside
-# another component's subtree, is no rival — `Holder#windows` named nothing while a function of
-# another component was called `windows` too
+# an entry named like an entry nested deeper elsewhere is addressable by its full path, and the
+# deeper one is no rival of it
 _holder.write_text('description: Holds parts.\nextends: "@Software"\ncomponents:\n  - id: registry\n'
                    '    type: "@Module"\n    functions:\n      - id: windows\n        description: lists them\n'
                    '  - id: windows\n    type: "@Module"\n    description: the adapter\n', encoding='utf-8')
-_win = r.resolve_path(project, 'Holder#windows')
-check('resolve_path/shallowest', _win is not None and 'the adapter' in _win['content'], f'got {_win}')
-check('set_field/shallowest', 'replaced' in r.set_field(project, 'Holder#windows', 'description', 'renamed')
+_win = r.resolve_path(project, 'Holder#components#windows')
+check('resolve_path/same-name-elsewhere', _win is not None and 'the adapter' in _win['content'], f'got {_win}')
+check('set_field/same-name-elsewhere', 'replaced' in r.set_field(project, 'Holder#components#windows', 'description', 'renamed')
       and 'description: renamed' in _holder.read_text(encoding='utf-8')
       and 'description: lists them' in _holder.read_text(encoding='utf-8'), _holder.read_text(encoding='utf-8'))
 _holder.unlink()
@@ -582,7 +699,7 @@ check('set_field/position', '  - note: "the first: kept"\n  - note: second\n' in
 
 # a slot that is not there yet is created rather than refused, at the top level and inside an entry
 r.add_entry(project, 'Knot#recipes', 'tie', {'description': 'ties it'})
-r.add_entry(project, 'Knot#tie#arguments', 'rope', {'description': 'which rope'})
+r.add_entry(project, 'Knot#recipes#tie#arguments', 'rope', {'description': 'which rope'})
 check('add_entry/creates-slot',
       re.search(r'^recipes:\n  - id: tie\n    description: ties it\n'
                 r'    arguments:\n      - id: rope\n        description: which rope\n',
@@ -618,6 +735,8 @@ _root_file.write_text(_before + 'workflow:\n  type: "@GitHubWorkflow"\n', encodi
 # (command, argv after the command, tool, arguments, text the output must contain — or a tuple
 # of alternatives, for the checks whose verdict depends on what earlier sections left behind)
 _P = {'project_path': project}
+_batch_file = TMP / 'batch.json'
+_batch_file.write_text('[{"op": "set", "ref": "Gear#spin", "field": "description", "value": "turns, by batch"}]', encoding='utf-8')
 _gear_file = TMP / 'gear.yaml'
 _gear_file.write_text('description: A toothed gear.\nextends: @Term\n', encoding='utf-8')
 FRONT = [
@@ -626,7 +745,8 @@ FRONT = [
     ('list-terms', [project], 'list_terms', _P, '@Widget'),
     ('load-terms', [project, 'Widget'], 'load_terms', {**_P, 'term_names': 'Widget'}, '--- @Software'),
     ('grep', [project, 'colour'], 'grep_terms', {**_P, 'query': 'colour'}, 'Widget#properties#colour'),
-    ('resolve-path', [project, 'Widget#spin'], 'resolve_path', {**_P, 'ref': 'Widget#spin'}, 'turns the widget'),
+    ('resolve-path', [project, 'Widget#functions#spin'], 'resolve_path', {**_P, 'ref': 'Widget#functions#spin'}, 'turns the widget'),
+    ('expand', [project, 'Widget'], 'expand', {**_P, 'ref': 'Widget'}, 'turns the widget'),
     ('verify-project', [project], 'verify_project', _P, ('no findings', '| Severity |')),
     ('verify-source', [project], 'verify_source', _P, ('no findings', '| Severity |')),
     ('uses', [project, 'Widget'], 'term_uses', {**_P, 'term_name': 'Widget'}, '@Gadget'),
@@ -641,6 +761,7 @@ FRONT = [
     ('replace-term', [project, 'Gear', str(_gear_file)], 'replace_term',
      {**_P, 'term_name': 'Cam', 'content': 'description: A lobed cam.\nextends: @Term\n'}, 'replaced'),
     ('normalize', [project], 'normalize', _P, ('quoted', 'nothing to change')),
+    ('batch', [project, str(_batch_file)], 'batch', {**_P, 'operations': [{'op': 'set_field', 'ref': 'Cam#spin', 'field': 'description', 'value': 'turns, by batch'}]}, ('batch applied', 'batch refused')),
     ('edit', [project, 'Gear', 'description', 'toothed', 'spur'], 'edit_field',
      {**_P, 'ref': 'Cam', 'field': 'description', 'old': 'lobed', 'new': 'round'}, 'replaced description'),
     ('add', [project, 'Widget#properties', 'size', 'description=how big'], 'add_entry',
@@ -651,10 +772,10 @@ FRONT = [
      {**_P, 'ref': 'Cam#guidelines', 'text': 'Lift smoothly.'}, 'added'),
     ('set-item', [project, 'Gear#guidelines', 'Mesh', 'Mesh quietly.'], 'set_item',
      {**_P, 'ref': 'Cam#guidelines', 'match': 'Lift', 'text': 'Lift gently.'}, 'replaced'),
-    ('move-item', [project, 'Gear#guidelines', 'Gear#ai_instructions', 'Mesh'], 'move_item',
-     {**_P, 'from_ref': 'Cam#guidelines', 'to_ref': 'Cam#ai_instructions', 'match': 'Lift'}, 'added'),
-    ('remove-item', [project, 'Gear#ai_instructions', 'Mesh'], 'remove_item',
-     {**_P, 'ref': 'Cam#ai_instructions', 'match': 'Lift'}, 'removed'),
+    ('move-item', [project, 'Gear#guidelines', 'Gear#codestyle', 'Mesh'], 'move_item',
+     {**_P, 'from_ref': 'Cam#guidelines', 'to_ref': 'Cam#codestyle', 'match': 'Lift'}, 'added'),
+    ('remove-item', [project, 'Gear#codestyle', 'Mesh'], 'remove_item',
+     {**_P, 'ref': 'Cam#codestyle', 'match': 'Lift'}, 'removed'),
     ('rename-term', [project, 'Gear', 'Cog'], 'rename_term',
      {**_P, 'old_name': 'Cam', 'new_name': 'Eccentric'}, '->'),
     ('remove-term', [project, 'Cog'], 'remove_term', {**_P, 'term_name': 'Eccentric'}, 'removed'),

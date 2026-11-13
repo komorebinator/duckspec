@@ -1,6 +1,5 @@
-description: A plain-text rule or convention. Represented as a string in a list. Guidelines are written for humans and AI alike and carry the same behavioral weight as ai_instruction entries.
+description: "A plain-text rule or convention, represented as a string in a list. Guidelines are written for humans and AI alike, and are the one kind of rule a term carries: there is no separate list of instructions for the model, since a rule the model must follow is a rule anyone working on the project must follow."
 extends: "@Term"
 guidelines:
   - A @Guideline declared on a @Term applies to all work within that term's scope and all terms that extend or use it.
-ai_instructions:
-  - A @Guideline carries the same force as an ai_instruction. Comply with all applicable guidelines at all times, not only during explicit validation.
+  - Comply with every applicable guideline at all times, not only during explicit validation.

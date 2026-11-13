@@ -2,6 +2,7 @@ import argparse
 import json
 import sys
 
+from . import render
 from .resolver import resolver
 
 
@@ -12,11 +13,6 @@ def _print_terms_table(terms: list[dict]) -> None:
         print(f"| @{t['name']} | {t['path']} | {t.get('description', '')} |")
 
 
-def _print_vocabulary(vocabulary: list[dict]) -> None:
-    """One `Terms from @<project>` table per used project; prints nothing when there are none."""
-    for v in vocabulary:
-        print(f"\n## Terms from @{v['project']}\n")
-        _print_terms_table(v['terms'])
 
 
 def _format_rules_tree(term_name: str, tree: dict) -> str:
@@ -48,35 +44,18 @@ def _print_term_blocks(terms: list[dict]) -> None:
             print(NOTE + ', '.join('@' + n for n in t['references']))
 
 
-def _print_recipes_table(recipes: list[dict]) -> None:
-    print('| Recipe | Term | Description |')
-    print('|--------|------|-------------|')
-    for r in recipes:
-        print(f"| {r['name']} | @{r['term']} | {r.get('description', '')} |")
 
 
-def _print_rules_table(rules: list[dict]) -> None:
-    print('| Source | Type | Rule |')
-    print('|--------|------|------|')
-    for r in rules:
-        print(f"| @{r['term']} | {r['type']} | {r['text']} |")
-
-
-def _print_references_table(references: list[dict]) -> None:
-    print('| Term | Repository | Description |')
-    print('|------|------------|-------------|')
-    for r in references:
-        print(f"| @{r['term']} | {r['repository']} | {r.get('description', '')} |")
 
 
 _PROJECT_ARG = 'a .yaml file path, or the identifier of a project registered in the active workspace'
-_REF_ARG = 'a `TermName#segment#segment...` path; refused when it matches more than one element'
+_REF_ARG = 'a full path naming every level, `TermName#<slot>#<id>#<slot>#<id>...`; one that skips a level is refused with the full paths that fit'
 
 # group -> (name, usage, purpose, [(argument, description), ...])
 _COMMAND_GROUPS = [
     ('reading', [
         ('load-project', 'load-project <project>',
-         'Root file, workflow pointer, term list, recipes, and project-wide rules — start here',
+         "The project's parts with their descriptions and how they connect, connected projects as single nodes, recipes, vocabulary and project-wide rules — start here",
          [('project', _PROJECT_ARG)]),
         ('load-workflow', 'load-workflow <project>',
          'Print the project\'s workflow in full — steps, rules, and the overrides the project sets',
@@ -89,13 +68,16 @@ _COMMAND_GROUPS = [
          'Named terms with their `extends` chain and applicable rules; other terms they mention are named, not loaded',
          [('project', _PROJECT_ARG),
           ('Term', 'one or more term names, written without the leading @')]),
+        ('expand', 'expand <project> <ref>',
+         'The children of a term or element with their descriptions and what they refer to, and the rules that apply there — the step between load-project and one element',
+         [('project', _PROJECT_ARG), ('ref', 'a term name, or ' + _REF_ARG)]),
         ('resolve-path', 'resolve-path <project> <ref>',
-         'One nested element, without its term or that term\'s dependencies',
+         'One element whole, with every guideline that applies to it, codestyle for code and the goals of the part it is in',
          [('project', _PROJECT_ARG), ('ref', _REF_ARG)]),
-        ('grep', 'grep <project> <query> [--all]',
-         'Search across term content by keyword',
+        ('grep', 'grep <project> <words> [--all] [--limit N]',
+         'The elements whose own text holds every word, each with the full path that opens it and the words in context',
          [('project', _PROJECT_ARG),
-          ('query', 'substring to search for, case-insensitive'),
+          ('query', 'one or more words, case-insensitive; an element matches when its own text holds all of them'),
           ('--all', 'search the whole term map, not only reachable terms')]),
     ]),
     ('structure', [
@@ -157,7 +139,7 @@ _COMMAND_GROUPS = [
          [('project', _PROJECT_ARG), ('Term#path', 'path ending at the list'),
           ('match', 'substring identifying the item')]),
         ('move-item', 'move-item <project> <from#path> <to#path> <match>',
-         'Move an item verbatim between lists — e.g. an ai_instruction that is really a guideline',
+         'Move an item verbatim between lists',
          [('project', _PROJECT_ARG), ('from#path', 'list the item sits in'),
           ('to#path', 'list to move it to'), ('match', 'substring identifying the item')]),
         ('create-term', 'create-term <project> <Term> <description> [--extends T]',
@@ -174,6 +156,9 @@ _COMMAND_GROUPS = [
          "Replace a term file's whole content, normalized on the way in; `-` reads standard input",
          [('project', _PROJECT_ARG), ('Term', 'the term to replace'),
           ('file', 'where to read the new content from; - for standard input')]),
+        ('batch', 'batch <project> <file>',
+         'Several edits in one call, all or nothing — a JSON list of {op, ...arguments}; `-` reads standard input',
+         [('project', _PROJECT_ARG), ('file', 'a JSON file of operations, or `-` for standard input')]),
         ('normalize', 'normalize <project>',
          'Quote every value YAML would misread, so each term file is valid YAML',
          [('project', _PROJECT_ARG)]),
@@ -241,19 +226,7 @@ def cmd_help(command: str | None = None) -> None:
 
 
 def cmd_load_project(project_path: str) -> None:
-    result = resolver.load_project(project_path)
-    print(result['root_content'])
-    print('\n## Workflow\n')
-    print(result['workflow']['note'])
-    print('\n## Terms\n')
-    _print_terms_table(result['terms'])
-    _print_vocabulary(result['vocabulary'])
-    print('\n## Recipes\n')
-    _print_recipes_table(result['recipes'])
-    print('\n## References\n')
-    _print_references_table(result['references'])
-    print('\n## Rules (project-wide)\n')
-    _print_rules_table(result['rules'])
+    print(render.load_project(resolver.load_project(project_path)), end='')
 
 
 def cmd_load_workflow(project_path: str) -> None:
@@ -275,25 +248,16 @@ def cmd_load_terms(project_path: str, term_names: list[str]) -> None:
     _print_term_blocks(resolver.load_terms(project_path, term_names))
 
 
-def cmd_grep(project_path: str, query: str, include_all: bool = False) -> None:
-    results = resolver.grep_terms(project_path, query, include_all=include_all)
-    print('| Reference | Line | Match |')
-    print('|-----------|------|-------|')
-    for r in results:
-        for h in r['hits'][:3]:
-            print(f"| @{h['ref']} | {h['line']} | {h['text'][:100]} |")
+def cmd_grep(project_path: str, query: str, include_all: bool = False, limit: int = 30) -> None:
+    print(render.search(resolver.grep_terms(project_path, query, include_all=include_all), limit))
 
 
 def cmd_resolve_path(project_path: str, ref: str) -> None:
-    result = resolver.resolve_path(project_path, ref)
-    if result is None:
-        print(f'not found: {ref}')
-        return
-    if result.get('error'):
-        print(result['error'])
-        return
-    print(f"--- {ref} [{result['path']}] ---")
-    print(result['content'])
+    print(render.resolve_path(resolver.resolve_path(project_path, ref), ref), end='')
+
+
+def cmd_expand(project_path: str, ref: str) -> None:
+    print(render.expand(resolver.expand(project_path, ref), ref), end='')
 
 
 def cmd_verify_source(project_path: str) -> int:
@@ -307,17 +271,8 @@ def cmd_verify_project(project_path: str, unreachable: bool = False,
 
 
 def _print_findings(findings: list[dict]) -> int:
-    if not findings:
-        print('no findings')
-        return 0
-    print('| Severity | Check | Term | Location | Message |')
-    print('|----------|-------|------|----------|---------|')
-    for f in findings:
-        location = f"{f['path']}:{f['line']}" if 'line' in f else f['path']
-        print(f"| {f['severity']} | {f['check']} | @{f['term']} | {location} | {f['message']} |")
-    errors = sum(1 for f in findings if f['severity'] == 'error')
-    print(f"\n{errors} error(s), {len(findings) - errors} warning(s)")
-    return 1 if errors else 0
+    print(render.findings(findings))
+    return 1 if any(f['severity'] == 'error' for f in findings) else 0
 
 
 def cmd_uses(project_path: str, term_name: str) -> None:
@@ -353,10 +308,10 @@ def cmd_entries(project_path: str, ref: str) -> None:
     if not rows:
         print('(no entries)')
         return
-    print('| Id | Fields |')
-    print('|----|--------|')
+    print('| Element | Fields |')
+    print('|---------|--------|')
     for r in rows:
-        print(f"| {r['id']} | {', '.join(r['fields'])} |")
+        print(f"| @{ref.lstrip('@')}#{r['id']} | {', '.join(r['fields'])} |")
 
 
 def cmd_set_field(project_path: str, ref: str, field: str, value: str) -> None:
@@ -430,6 +385,18 @@ def cmd_normalize(project_path: str) -> None:
         print('nothing to change')
     for c in changed:
         print(f"{c['path']}: quoted {c['quoted']} value(s)")
+
+
+def cmd_batch(project_path: str, file: str) -> int:
+    text = sys.stdin.read() if file == '-' else open(file, encoding='utf-8').read()
+    result = resolver.batch(project_path, json.loads(text))
+    for line in result['results']:
+        print(line)
+    if result['ok']:
+        print('batch applied')
+        return 0
+    print(f"batch refused at {result['failed']}: {result['results'][-1]} — nothing changed")
+    return 1
 
 
 def cmd_create_workspace(name: str) -> None:
@@ -506,7 +473,9 @@ def main() -> None:
     p.add_argument('project_path')
     p.add_argument('query')
     p.add_argument('--all', action='store_true', dest='include_all')
+    p.add_argument('--limit', type=int, default=30)
 
+    p = sub.add_parser('expand'); p.add_argument('project_path'); p.add_argument('ref')
     p = sub.add_parser('resolve-path')
     p.add_argument('project_path')
     p.add_argument('ref')
@@ -563,6 +532,7 @@ def main() -> None:
     p = sub.add_parser('remove-term'); [p.add_argument(a) for a in ('project_path','term_name')]
     p = sub.add_parser('replace-term'); [p.add_argument(a) for a in ('project_path','term_name','file')]
     p = sub.add_parser('normalize'); p.add_argument('project_path')
+    p = sub.add_parser('batch'); p.add_argument('project_path'); p.add_argument('file')
 
     sub.add_parser('serve').add_argument('project_path', nargs='?')
 
@@ -593,7 +563,9 @@ def main() -> None:
     elif args.command == 'load-terms':
         cmd_load_terms(args.project_path, args.term_names)
     elif args.command == 'grep':
-        cmd_grep(args.project_path, args.query, include_all=args.include_all)
+        cmd_grep(args.project_path, args.query, include_all=args.include_all, limit=args.limit)
+    elif args.command == 'expand':
+        cmd_expand(args.project_path, args.ref)
     elif args.command == 'resolve-path':
         cmd_resolve_path(args.project_path, args.ref)
     elif args.command == 'verify-project':
@@ -636,6 +608,8 @@ def main() -> None:
         cmd_replace_term(args.project_path, args.term_name, args.file)
     elif args.command == 'normalize':
         cmd_normalize(args.project_path)
+    elif args.command == 'batch':
+        sys.exit(cmd_batch(args.project_path, args.file))
     elif args.command == 'serve':
         from .mcp_server import run_server
         run_server()

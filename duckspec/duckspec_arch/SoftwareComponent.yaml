@@ -5,4 +5,4 @@ guidelines:
   - A component description is sufficient on its own for declarative components (@ConfigFile, @Patch); components with non-trivial behaviour add detail through their other slots rather than in prose.
 properties:
   - id: type
-    description: the @DesignPattern this component instantiates (e.g. @Singleton)
+    description: "what this component is, always stated: plain text naming the kind of thing — a button, a GJS module holding the window registry, a webhook receiver, a systemd timer, a config file — or a reference to a @Term when the project or the framework has one for this kind of part (e.g. `@ConfigFile`, `@Script`, `@Secret`). A term is referenced when it gives the component something — fields it declares, rules, or a mechanism of the tools such as a @Script's implicit `run`; otherwise the plain text says it better than a term that only names it."

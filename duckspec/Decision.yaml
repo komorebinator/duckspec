@@ -1,0 +1,16 @@
+description: "A choice made about the element it sits under, with the reason it was made and the options turned down — so that a later change does not quietly bring back what was already tried and rejected, and does not undo what the author decided. It covers the project's own choices and its workarounds for defects outside it — an upstream bug, a platform limitation: a workaround names the defect in `upstream` and, where it is known, the condition under which it can go in `revisit_when`. The element's `description` says what the element is and does; why it has that shape, what was tried instead, and the evidence for either are its decisions, which the description names by path where a reader needs the pointer."
+extends: "@Term"
+guidelines:
+  - "A decision whose `by` is `author` is the author's: never change it, or work around it, without asking them first — saying which decision the change would touch and why. Inline markers such as \"(the author, <date>)\" in a description are how this used to be written; they become decisions with `by` and `date`."
+  - A decision sits on the most specific element it concerns — the component, function or field whose code it shapes — because that element is what is opened when its code changes, and the decision comes with it. A decision that holds for several parts at once is a rule, and is written as a guideline of the element that holds them all, where it reaches every one of them.
+properties:
+  - id: rejected
+    description: "list of the options considered and turned down, each one string: the option — why not. This is what keeps a later change from proposing them again as if they were new."
+  - id: by
+    description: "who made the decision: `author` when the project's author made or confirmed it. Omitted for a technical finding anyone would reach from the same evidence."
+  - id: date
+    description: when the decision was made or last confirmed, YYYY-MM-DD
+  - id: upstream
+    description: "for a workaround: the defect outside the project it works around — an issue link or reference"
+  - id: revisit_when
+    description: "for a workaround or a provisional choice: the observable condition under which the decision can be dropped or reconsidered — e.g. the build reporting that a patch applies in reverse"

@@ -19,7 +19,7 @@ for f in ('cli.py', 'mcp_server.py'):
 
 from ducktools import cli, mcp_server  # noqa: E402
 
-spec = pathlib.Path('ducktools/ducktools/DuckToolsApp.yaml').read_text(encoding='utf-8')
+spec = pathlib.Path('duckspec/ducktools/DuckToolsApp.yaml').read_text(encoding='utf-8')
 
 
 def described(component: str) -> set[str]:

@@ -1,8 +1,0 @@
-description: A visual indicator of progress or completion.
-extends: "@UserInterfaceElement"
-properties:
-  - id: value
-    description: current progress value
-  - id: max
-    description: maximum progress value; defaults to 100
-    default: 100

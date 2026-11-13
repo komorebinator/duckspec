@@ -1,2 +1,0 @@
-description: A single-selection element used within a group of mutually exclusive options.
-extends: "@UserInterfaceElement"
