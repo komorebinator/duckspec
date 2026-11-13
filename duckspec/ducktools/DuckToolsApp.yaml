@@ -271,7 +271,7 @@ components:
           - id: project_path
             description: a @DuckspecProject .yaml file — a filesystem path, or the identifier of a project registered in the active @Workspace (see _resolve_project)
           - id: query
-            description: substring to search for (case-insensitive)
+            description: one or more words, case-insensitive; an element matches when its own text holds all of them
           - id: include_all
             description: if true, search all terms in the term map instead of only reachable ones; default false
       - id: _find_named_blocks
