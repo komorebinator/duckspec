@@ -86,7 +86,7 @@ def expand(result: dict | None, ref: str) -> str:
         else:
             out += ['', f"## {s['slot']} ({len(s['items'])})", ''] + [f'- {_cell(i)}' for i in s['items']]
     for s in result['slots']:
-        out += ['', f"## {s['slot']} ({len(s['entries'])}) — each opens as {result['ref']}#{s['slot']}#<id>", '']
+        out += ['', f"## {s['slot']} ({len(s['entries'])}) — each opens as {s.get('opens', result['ref'] + '#' + s['slot'])}#<id>", '']
         for e in s['entries']:
             line = f"- **{e['id']}**" + (f" [{e['type']}]" if e['type'] else '') + f" — {_cell(e['description'])}"
             if e['counts']:

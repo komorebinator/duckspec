@@ -684,6 +684,48 @@ check('edit_field/once',
       'refused' in r.edit_field(project, 'Knot', 'name', 'zz', 'y')
       and 'refused' in r.edit_field(project, 'Knot', 'name', 'k', 'y'), knot.read_text(encoding='utf-8'))
 
+# a field under mappings the file does not have yet creates them, outermost first, and a path that
+# skipped a level to an existing mapping is refused rather than given a second one
+_blk0 = knot.read_text(encoding='utf-8')
+_m1 = r.set_field(project, 'Knot#workflow#versioning', 'type', '@SemVer')
+_m2 = r.set_field(project, 'Knot#workflow', 'main_branch', 'main')
+_m3 = r.set_field(project, 'Knot#versioning', 'type', 'x')
+_mafter = knot.read_text(encoding='utf-8')
+check('set_field/creates-mapping',
+      'workflow:\n  main_branch: main\n  versioning:\n    type: "@SemVer"\n' in _mafter
+      and 'refused' not in _m1 + _m2 and 'not found' in _m3 and 'versioning:' not in _mafter.split('workflow:')[0],
+      f'{_m1} | {_m2} | {_m3}\n{_mafter}')
+knot.write_text(_blk0, encoding='utf-8')
+
+# a JSON boolean or null in an entry's fields is written as YAML's own word, not Python's
+_b0 = knot.read_text(encoding='utf-8')
+r.add_entry(project, 'Knot#properties', 'flagged', {'states': [{'id': 'on', 'property_changes': {'visible': False, 'label': None}}], 'mandatory': True})
+_bafter = knot.read_text(encoding='utf-8')
+check('add_entry/booleans', 'visible: false\n' in _bafter and 'label: null\n' in _bafter
+      and 'mandatory: true\n' in _bafter and 'False' not in _bafter and 'None' not in _bafter, _bafter)
+knot.write_text(_b0, encoding='utf-8')
+
+# expanding a slot itself says its entries open one level down, not under the slot name twice
+_slot_view = r.expand(project, 'Knot#properties')
+check('expand/slot-opens', _slot_view and _slot_view['slots'][0]['opens'] == 'Knot#properties'
+      and r.expand(project, 'Knot')['slots'][0]['opens'].startswith('Knot#'), str(_slot_view and _slot_view['slots']))
+
+# a block scalar is edited in place and stays one: the piece is found in its text as YAML reads it,
+# a folded block keeps its paragraphs, a literal one its lines, and the header stays as it was
+_blk = knot.read_text(encoding='utf-8')
+knot.write_text(_blk + 'notes: >-\n  The first paragraph\n  runs over two lines.\n\n  The second one.\n'
+                'steps: |\n  one\n  two\n', encoding='utf-8')
+_r1 = r.edit_field(project, 'Knot', 'notes', 'paragraph runs', 'paragraph still runs')
+_r2 = r.edit_field(project, 'Knot', 'steps', 'two', 'three')
+_r3 = r.edit_field(project, 'Knot', 'notes', 'lines.\nThe second', 'lines. The second')
+_after = knot.read_text(encoding='utf-8')
+check('edit_field/block-scalar',
+      'notes: >-\n  The first paragraph still runs over two lines. The second one.\n' in _after
+      and 'steps: |\n  one\n  three\n' in _after and 'refused' not in _r1 + _r2 + _r3, _after)
+knot.write_text(_blk + 'notes: >2\n  set by hand\n', encoding='utf-8')
+check('edit_field/block-scalar-explicit-indent', 'refused' in r.edit_field(project, 'Knot', 'notes', 'hand', 'x'))
+knot.write_text(_blk, encoding='utf-8')
+
 # the list the operation edits is the key, not the property entry of the same name
 r.add_item(project, 'Knot#guidelines', 'Tie it twice.')
 check('add_item/prefers-key', '  - Pull it tight.\n  - Tie it twice.\n' in knot.read_text(encoding='utf-8'),
@@ -826,8 +868,36 @@ check('mcp/add_entry after', _ids()[:3] == ['girth', _head, 'depth'], widget.rea
 for _id in ('girth', 'depth'):
     r.remove_element(project, f'Widget#properties#{_id}')
 
+def _cli_status(argv: list[str]) -> int:
+    old = sys.argv
+    sys.argv = ['ducktools'] + argv
+    try:
+        with contextlib.redirect_stdout(io.StringIO()):
+            try:
+                cli.main()
+            except SystemExit as e:
+                return e.code or 0
+        return 0
+    finally:
+        sys.argv = old
+
+
+# the exit status says whether the command did what was asked: a refusal exits 1, an empty answer 0,
+# so a script or an agent checking it never reads "not found" as success
+check('cli/exit-status', [_cli_status(a) for a in (
+    ['resolve-path', project, 'Widget#nope'], ['resolve-path', project, 'Widget#properties'],
+    ['grep', project, 'zzqqxx'], ['use-workspace', 'no-such-workspace'], ['help', 'nope'])]
+      == [1, 0, 0, 1, 1])
+
 check('cli/help', 'load-workflow' in _run_cli(['help']) and 'usage: ducktools add-item'
       in _run_cli(['help', 'add-item']))
+# help names the operation each command runs, so a recipe naming an operation finds its command;
+# it is the MCP tool's name too, so the column is checked against the tools the server lists
+_help = _run_cli(['help'])
+_ops = [cli._operation(c[0]) for _, cs in cli._COMMAND_GROUPS for c in cs]
+check('cli/help operations', '| grep_terms |' in _help and 'operation: slot_entries' in _run_cli(['help', 'entries'])
+      and set(_ops) - {''} == {t['name'] for t in mcp_server._TOOLS},
+      sorted((set(_ops) - {''}) ^ {t['name'] for t in mcp_server._TOOLS}))
 
 # serve: the stdio loop itself, fed an initialize and a tools/list as a client would send them
 _stdin = io.StringIO('{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n'

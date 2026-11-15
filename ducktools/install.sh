@@ -143,9 +143,11 @@ else:
     print(f"duckspec {'registered' if added else 'already registered'} at {path}")
 PYEOF
 
+# The verify command names the wrapper by its absolute path when the bare name would not be found
 case ":$PATH:" in
-  *":$BIN_DIR:"*) ;;
-  *) echo "warning: $BIN_DIR is not on PATH — add it to your shell profile to use 'ducktools' directly" >&2 ;;
+  *":$BIN_DIR:"*) VERIFY="ducktools" ;;
+  *) echo "warning: $BIN_DIR is not on PATH — add it to your shell profile to use 'ducktools' directly" >&2
+     VERIFY="$WRAPPER" ;;
 esac
 
-echo "done — run 'ducktools list-projects' to verify"
+echo "done — run '$VERIFY list-projects' to verify"

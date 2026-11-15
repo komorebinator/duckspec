@@ -183,7 +183,7 @@ _TOOLS = [
     },
     {
         'name': 'edit_field',
-        'description': 'Replace one piece of a field\'s text with another, leaving the rest as it was — for a sentence added to or changed in a long description without retyping all of it. Refuses unless the piece occurs exactly once, and refuses a field spanning paragraphs (a block scalar), which set_field rewrites whole',
+        'description': 'Replace one piece of a field\'s text with another, leaving the rest as it was — for a sentence added to or changed in a long description without retyping all of it. Refuses unless the piece occurs exactly once. A block scalar (`>`, `|`) is edited in place and keeps its paragraphs; a bare or quoted value with a blank line in it is refused, and set_field rewrites it whole',
         'inputSchema': {'type': 'object', 'properties': {**_PROJECT_PATH_PROP,
             'ref': {'type': 'string', 'description': 'TermName, or a full path naming every level: TermName#<slot>#<id>...'},
             'field': {'type': 'string', 'description': 'field to edit'},

@@ -1,4 +1,6 @@
 import argparse
+import contextlib
+import io
 import json
 import sys
 
@@ -191,6 +193,20 @@ _COMMAND_GROUPS = [
 ]
 
 
+# The commands named differently from the resolver operation they run; every other command
+# runs the operation of its own name with dashes as underscores, and serve and help run none.
+_RENAMED = {'grep': 'grep_terms', 'schema': 'term_schema', 'uses': 'term_uses',
+            'query': 'query_terms', 'entries': 'slot_entries', 'set': 'set_field',
+            'edit': 'edit_field', 'add': 'add_entry', 'remove': 'remove_element'}
+
+
+def _operation(name: str) -> str:
+    """The resolver operation a command runs — also the MCP tool's name — or '' for none."""
+    if name in ('serve', 'help'):
+        return ''
+    return _RENAMED.get(name, name.replace('-', '_'))
+
+
 def _find_command(name: str) -> tuple | None:
     for _, commands in _COMMAND_GROUPS:
         for command in commands:
@@ -203,8 +219,10 @@ def cmd_help(command: str | None = None) -> None:
     if command:
         found = _find_command(command)
         if found is not None:
-            _, usage, purpose, arguments = found
+            name, usage, purpose, arguments = found
             print(f'usage: ducktools {usage}\n')
+            if _operation(name):
+                print(f'operation: {_operation(name)}\n')
             print(f'{purpose}\n')
             if arguments:
                 print('| Argument | Description |')
@@ -217,12 +235,13 @@ def cmd_help(command: str | None = None) -> None:
     print('usage: ducktools <command> [arguments]\n')
     print(f'<project> is {_PROJECT_ARG}.')
     print('Run `ducktools help <command>` for one command\'s arguments.')
+    print('Operation is the resolver operation each command runs, which is also its MCP tool\'s name.')
     for group, commands in _COMMAND_GROUPS:
         print(f'\n## {group}\n')
-        print('| Command | Purpose |')
-        print('|---------|---------|')
-        for _, usage, purpose, _args in commands:
-            print(f'| {usage} | {purpose} |')
+        print('| Command | Operation | Purpose |')
+        print('|---------|-----------|---------|')
+        for name, usage, purpose, _args in commands:
+            print(f'| {usage} | {_operation(name)} | {purpose} |')
 
 
 def cmd_load_project(project_path: str) -> None:
@@ -327,7 +346,7 @@ def cmd_add_entry(project_path: str, ref: str, entry_id: str, fields: list[str],
     parsed = {}
     for pair in fields:
         if '=' not in pair:
-            print(f"expected field=value, got: {pair}")
+            print(f"refused: expected field=value, got: {pair}")
             return
         field, value = pair.split('=', 1)
         if value[:1] in '[{':
@@ -335,7 +354,7 @@ def cmd_add_entry(project_path: str, ref: str, entry_id: str, fields: list[str],
             try:
                 value = json.loads(value)
             except ValueError as e:
-                print(f"{field}: not valid JSON ({e})")
+                print(f"refused: {field} is not valid JSON ({e})")
                 return
         parsed[field] = value
     print(resolver.add_entry(project_path, ref, entry_id, parsed, after, before))
@@ -551,7 +570,27 @@ def main() -> None:
     p.add_argument('--workspace', dest='workspace_name')
 
     args = parser.parse_args()
+    if args.command == 'serve':
+        # its standard output is the MCP channel itself, so it is never captured
+        from .mcp_server import run_server
+        run_server()
+        return
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        status = _dispatch(args)
+    text = out.getvalue()
+    sys.stdout.write(text)
+    if status is None:
+        status = 1 if text.lstrip().startswith(_REFUSED) else 0
+    raise SystemExit(status)
 
+
+# What a refusal starts with: the prefixes batch rolls back on, and the workspace commands' own
+_REFUSED = type(resolver)._REFUSALS + ('no such', 'could not')
+
+
+def _dispatch(args) -> int | None:
+    """Run one command; returns its exit status where the command sets one, else None."""
     if args.command == 'help':
         cmd_help(args.topic)
     elif args.command == 'load-project':
@@ -569,10 +608,10 @@ def main() -> None:
     elif args.command == 'resolve-path':
         cmd_resolve_path(args.project_path, args.ref)
     elif args.command == 'verify-project':
-        raise SystemExit(cmd_verify_project(args.project_path, unreachable=args.unreachable,
-                                            untyped=args.untyped))
+        return cmd_verify_project(args.project_path, unreachable=args.unreachable,
+                                  untyped=args.untyped)
     elif args.command == 'verify-source':
-        raise SystemExit(cmd_verify_source(args.project_path))
+        return cmd_verify_source(args.project_path)
     elif args.command == 'uses':
         cmd_uses(args.project_path, args.term_name)
     elif args.command == 'schema':
@@ -609,10 +648,7 @@ def main() -> None:
     elif args.command == 'normalize':
         cmd_normalize(args.project_path)
     elif args.command == 'batch':
-        sys.exit(cmd_batch(args.project_path, args.file))
-    elif args.command == 'serve':
-        from .mcp_server import run_server
-        run_server()
+        return cmd_batch(args.project_path, args.file)
     elif args.command == 'create-workspace':
         cmd_create_workspace(args.name)
     elif args.command == 'use-workspace':
@@ -623,3 +659,4 @@ def main() -> None:
         cmd_add_project(args.project_path, args.workspace_name)
     elif args.command == 'remove-project':
         cmd_remove_project(args.repository, args.workspace_name)
+    return None

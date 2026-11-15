@@ -645,6 +645,9 @@ def _quoted(value: str) -> str:
     `@Recipe` is quoted like anything else: YAML reserves a leading `@`, so leaving references
     bare is what made every term file unreadable to a YAML parser. The readers of `type:` and
     `extends:` accept both forms."""
+    if value is None or isinstance(value, bool):
+        # a JSON boolean or null: str() made Python's `False` and `None` of them
+        return {None: 'null', True: 'true', False: 'false'}[value]
     text = str(value)
     if not text:
         return "''"
@@ -1426,7 +1429,11 @@ class Resolver:
                         'counts': {k: len(v) for k, _kind, v in entry if _kind in ('entries', 'strings')},
                         'refers_to': refs[:16],
                     })
-                out['slots'].append({'slot': key, 'entries': entries})
+                # a ref that names the slot itself opens its entries one level down, not two
+                names_slot = ('#' in ref and ref.rsplit('#', 1)[-1] == key
+                              and found['content'].lstrip().startswith(f'{key}:'))
+                out['slots'].append({'slot': key, 'opens': ref if names_slot else f'{ref}#{key}',
+                                     'entries': entries})
         return out
 
     @staticmethod
@@ -2170,7 +2177,12 @@ class Resolver:
     def set_field(self, project_path: str, ref: str, field: str, value: str) -> str:
         located = self._locate(project_path, ref)
         if isinstance(located, str):
-            return located
+            refused = self._make_mapping(project_path, ref, located)
+            if refused:
+                return refused
+            located = self._locate(project_path, ref)
+            if isinstance(located, str):
+                return located
         path, lines, start, end = located
         value = _quoted(value)
         span = self._field_span(lines, start, end, field)
@@ -2186,6 +2198,41 @@ class Resolver:
         path.write_text(''.join(lines), encoding='utf-8', newline='')
         return f'{path}: replaced {field}'
 
+    def _make_mapping(self, project_path: str, ref: str, located: str) -> str | None:
+        """Creates the missing mappings a path's last levels name, or returns why not — see
+        @DuckToolsApp#components#resolver#functions#_make_mapping."""
+        head, _, key = ref.rpartition('#')
+        if (not head or not located.startswith('not found') or 'full paths that fit' in located
+                or key.isdigit() or not re.fullmatch(r'[A-Za-z_][\w-]*', key)):
+            return located
+        parent = self._locate(project_path, head)
+        if isinstance(parent, str):
+            refused = self._make_mapping(project_path, head, parent)
+            if refused:
+                return refused
+            parent = self._locate(project_path, head)
+            if isinstance(parent, str):
+                return parent
+        refused = self._entry_not_slot(project_path, ref, head, key)
+        if refused:
+            return refused
+        path, lines, p_start, p_end = parent
+        if self._field_span(lines, p_start, p_end, key) is not None:
+            return f'refused: {key} in {head} holds a value, not fields'
+        # p_start == 0 means the parent is the whole file, so the key sits at column 0
+        indent = 0 if p_start == 0 else self._field_column(lines[p_start])
+        anchor = p_end
+        while anchor > p_start + 1 and not lines[anchor - 1].strip():
+            anchor -= 1
+        if p_start == 0:
+            anchor = next((i for i, l in enumerate(lines)
+                           if l.startswith(('properties:', 'recipes:'))), anchor)
+        if anchor > 0 and not lines[anchor - 1].endswith('\n'):
+            lines[anchor - 1] += '\n'
+        lines[anchor:anchor] = [f"{' ' * indent}{key}:\n"]
+        path.write_text(''.join(lines), encoding='utf-8', newline='')
+        return None
+
     def edit_field(self, project_path: str, ref: str, field: str, old: str, new: str) -> str:
         """Replaces one piece of a field's text with another, leaving the rest as it was. A long
         description gaining a sentence otherwise had to be rewritten whole through set_field, every
@@ -2200,8 +2247,10 @@ class Resolver:
             return f'not found: {ref} has no field {field}'
         i, j, _ = span
         first = re.sub(rf'^\s*(?:-\s+)?{re.escape(field)}:', '', lines[i].rstrip('\n')).strip()
+        if _BLOCK_SCALAR.fullmatch(first):
+            return self._edit_block(path, lines, i, j, field, first, old, new)
         rest = [l.strip() for l in lines[i + 1:j]]
-        if _BLOCK_SCALAR.fullmatch(first) or '' in rest:
+        if '' in rest:
             return f'refused: {field} spans paragraphs; rewrite it with set_field'
         text = ' '.join([first] + rest)
         if _DOUBLE_QUOTED.fullmatch(text):
@@ -2215,6 +2264,54 @@ class Resolver:
         if count != 1:
             return f'refused: the text to replace occurs {count} times in {field}, not once'
         return self.set_field(project_path, ref, field, text.replace(old, new))
+
+    @staticmethod
+    def _edit_block(path: Path, lines: list[str], i: int, j: int, field: str, header: str,
+                    old: str, new: str) -> str:
+        """edit_field on a block scalar: the piece is matched against the text as YAML reads it
+        and the block is written back under the same header — see
+        @DuckToolsApp#components#resolver#functions#edit_field."""
+        if re.search(r'\d', header):
+            return f'refused: {field} sets its indentation explicitly; rewrite it with set_field'
+        body = [l.rstrip('\n') for l in lines[i + 1:j]]
+        filled = [l for l in body if l.strip()]
+        if not filled:
+            return f'refused: {field} is empty; set it with set_field'
+        indent = min(len(l) - len(l.lstrip(' ')) for l in filled)
+        folded = header.startswith('>')
+        if folded and any(len(l) - len(l.lstrip(' ')) > indent for l in filled):
+            return f'refused: {field} has a more-indented line, which a rewrite could change; rewrite it with set_field'
+        rows = [l[indent:] if l.strip() else '' for l in body]
+        if folded:
+            # each blank line is one line break; the lines between them fold into one paragraph
+            parts, para = [], []
+            for row in rows:
+                if row:
+                    para.append(row)
+                else:
+                    parts.append(' '.join(para))
+                    para = []
+            parts.append(' '.join(para))
+            text = '\n'.join(parts)
+        else:
+            text = '\n'.join(rows)
+        count = text.count(old) if old else 0
+        if count != 1:
+            return f'refused: the text to replace occurs {count} times in {field}, not once'
+        text = text.replace(old, new)
+        if folded:
+            out = []
+            for n, part in enumerate(text.split('\n')):
+                if n:
+                    out.append('')
+                if part:
+                    out.append(part)
+        else:
+            out = text.split('\n')
+        newline = '\r\n' if lines[i].endswith('\r\n') else '\n'
+        lines[i + 1:j] = [(' ' * indent + row if row else '') + newline for row in out]
+        path.write_text(''.join(lines), encoding='utf-8', newline='')
+        return f'{path}: replaced in {field}'
 
     def _entry_not_slot(self, project_path: str, ref: str, parent_ref: str,
                         slot_name: str) -> str | None:

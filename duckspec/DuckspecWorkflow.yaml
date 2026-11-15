@@ -33,12 +33,16 @@ steps:
     description: The change is recorded locally. Before it goes anywhere, every consumer is checked against it, because pushing is delivering.
     when: local commits carry the change, are not on the remote, and the consumers have not been verified against them
     operation: "@Duckspec#verify_consumers"
+  - id: installation_unchecked
+    description: Every consumer verifies clean, but the change touches what installing duckspec depends on (@Duckspec#lists#install-surface) and nobody has installed from it yet. A new user's assistant clones `main`, so a push here would hand a broken installation to the next person who installs, with nothing on any consumer's side to show it.
+    when: local commits carry the change, are not on the remote, every registered consumer verifies clean against them, the change touches an item of @Duckspec#lists#install-surface, and @Duckspec#recipes#check_install has not passed against it
+    operation: "@Duckspec#check_install"
   - id: consumers_verified
     description: "Every consuming project verifies clean against the change, or has been fixed in the same work. The maintainer sends it with a push to `main`. Anyone without push access to the official repository — every contributor but the maintainer — sends it instead with @GitHub#open_pull_request from a branch of their fork, which moves it to `in_review`; the consumers verified here are only the ones the contributor has, and the maintainer verifies their own before merging."
-    when: local commits carry the change, are not on the remote, and every registered consumer verifies clean against them
+    when: local commits carry the change, are not on the remote, every registered consumer verifies clean against them, and either the change touches nothing in @Duckspec#lists#install-surface or @Duckspec#recipes#check_install has passed against it
     operation: "@Git#push(branch=main)"
   - id: in_review
-    description: "A contribution waits in a pull request. The maintainer reads it with @GitHub#review_pull_request, then checks it out and runs @Duckspec#verify_consumers against it, since merging it delivers it to every consumer just as a push would; the contributor revises it with @Git#commit and @Git#push to the same branch of their fork. The maintainer's own changes never pass through here, and the reading of the steps reports this step as skipped for them."
+    description: A contribution waits in a pull request. The maintainer reads it with @GitHub#review_pull_request, then checks it out and runs @Duckspec#verify_consumers against it — and @Duckspec#recipes#check_install when it touches @Duckspec#lists#install-surface — since merging it delivers it to every consumer just as a push would; the contributor revises it with @Git#commit and @Git#push to the same branch of their fork. The maintainer's own changes never pass through here, and the reading of the steps reports this step as skipped for them.
     when: an open pull request against the official repository carries the change
     operation: "@GitHub#merge_pull_request"
   - id: on_main
