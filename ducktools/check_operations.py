@@ -239,14 +239,23 @@ _root.write_text(_saved, encoding='utf-8')
 # looks implemented while nothing could perform it
 _flow = Path(project).parent / 'Fixture' / 'Flow.yaml'
 _flow.write_text('description: A workflow for the operation checks.\nextends: "@DuckWorkflow"\nsteps:\n'
-                 '  - id: good\n    when: always\n    operation: "@Git#push(branch=main)"\n'
-                 '  - id: not_a_recipe\n    when: always\n    operation: "@Widget#spin"\n'
-                 '  - id: bad_argument\n    when: always\n    operation: "@Git#push(bogus=1)"\n'
+                 '  - id: good\n    when: always\n    operation: "@Git#recipes#push(branch=main)"\n'
+                 '  - id: not_a_recipe\n    when: always\n    operation: "@Widget#recipes#spin"\n'
+                 '  - id: bad_argument\n    when: always\n    operation: "@Git#recipes#push(bogus=1)"\n'
                  '  - id: bad_form\n    when: always\n    operation: "@Git#push#deeper"\n', encoding='utf-8')
 _ops = [f for f in r.verify_project(project) if f['check'] == 'broken-operation']
 _hit = sorted(f["message"].split("'")[1] for f in _ops)
 check('verify_project/broken-operation',
       _hit == ['bad_argument', 'bad_form', 'not_a_recipe'], f'got {_hit}')
+_flow.unlink()
+
+# a reference naming its term is written with every level: resolve_path refuses one that skips
+# some, and the install recipe held dozens that a new user's assistant could not open
+_flow.write_text('description: "Uses @Git#push, @Git#recipes#push and @Git#recipes#commit."\n', encoding='utf-8')
+_short = [f['message'] for f in r.verify_project(project) if f['check'] == 'short-path-ref']
+check('verify_project/short-path-ref',
+      len(_short) == 1 and _short[0].startswith('@Git#push skips levels')
+      and _short[0].endswith('@Git#recipes#push'), f'got {_short}')
 _flow.unlink()
 
 # a term reference is written quoted, since YAML reserves a leading @ and no standard parser reads

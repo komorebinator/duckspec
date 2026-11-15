@@ -30,7 +30,7 @@ recipes:
       - id: base
         description: the branch to merge into; the workflow's `main_branch` when omitted
     instructions:
-      - Invoke @Git#push(branch=<head>)
+      - Invoke @Git#recipes#push(branch=<head>)
       - "Run `gh pr create --repo <repo> --head <head> --base <base>` with a title and body that say what changed and why, per @DuckWorkflow's guidelines. When `git remote get-url origin` is a fork rather than `<repo>` itself, pass `--head <fork-owner>:<head>` instead, since the branch lives in the fork and not in the repository the pull request is opened against"
       - Report the pull request's URL
   - id: review_pull_request
@@ -52,7 +52,7 @@ recipes:
       - "Run `gh pr merge <number> --repo <repo> --<strategy>`"
       - Report the commit the change landed as on the base branch
   - id: create_release
-    description: Tags a version that has landed, writes its release notes and publishes both as a GitHub Release. The notes live in the release and nowhere else; @GitHub#read_release is how they are read back.
+    description: Tags a version that has landed, writes its release notes and publishes both as a GitHub Release. The notes live in the release and nowhere else; @GitHub#recipes#read_release is how they are read back.
     arguments:
       - id: version
         description: the version to release; the project's current `version` when omitted
@@ -63,7 +63,7 @@ recipes:
       - "Create and push the tag — `git tag <version> && git push origin <version>`"
       - "Run `gh release create <version> --repo <repo> --target <main_branch> --title <version> --notes-file <file holding the confirmed notes>`"
   - id: read_release
-    description: Returns the release notes published for one version — the counterpart of @GitHub#create_release, named by a workflow's `release_notes` so that whoever moves onto a version can read what it asks of them
+    description: Returns the release notes published for one version — the counterpart of @GitHub#recipes#create_release, named by a workflow's `release_notes` so that whoever moves onto a version can read what it asks of them
     arguments:
       - id: version
         description: the version whose notes to read

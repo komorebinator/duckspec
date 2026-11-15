@@ -10,11 +10,11 @@ recipes:
       - id: project_path
         description: path to the @DuckspecProject file to register
     instructions:
-      - Invoke @DuckToolsApp#resolver#add_project(project_path=<project_path>); it reads `repository` from the file itself
+      - Invoke @DuckToolsApp#components#resolver#functions#add_project(project_path=<project_path>); it reads `repository` from the file itself
   - id: remove_project
     description: Removes a project from this workspace
     arguments:
       - id: repository
         description: repository URL of the project to remove
     instructions:
-      - Invoke @DuckToolsApp#resolver#remove_project(repository=<repository>)
+      - Invoke @DuckToolsApp#components#resolver#functions#remove_project(repository=<repository>)

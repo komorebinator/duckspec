@@ -1,9 +1,9 @@
-description: "How work is done on @Duckspec itself. The maintainer works straight on `main`; anyone else contributes by pull request from a fork, which the maintainer reviews and merges. The fact that shapes everything else is that `main` is also what every consuming project receives: @Duckspec#update is a `git pull` in the shared clone, so a push reaches every project on the machine the next time it updates, whether or not a release was ever cut. Consumers are therefore verified before anything reaches `main` — before the maintainer's push, and before a contributor's pull request is merged — not before the release. Releases name a version and carry its release notes; they record what changed and what consumers must do, but nothing waits for them."
+description: "How work is done on @Duckspec itself. The maintainer works straight on `main`; anyone else contributes by pull request from a fork, which the maintainer reviews and merges. The fact that shapes everything else is that `main` is also what every consuming project receives: @Duckspec#recipes#update is a `git pull` in the shared clone, so a push reaches every project on the machine the next time it updates, whether or not a release was ever cut. Consumers are therefore verified before anything reaches `main` — before the maintainer's push, and before a contributor's pull request is merged — not before the release. Releases name a version and carry its release notes; they record what changed and what consumers must do, but nothing waits for them."
 extends: "@DuckWorkflow"
 main_branch: main
 versioning:
   type: "@SemVer"
-release_notes: "@GitHub#read_release"
+release_notes: "@GitHub#recipes#read_release"
 guidelines:
   - "Releases are cut only from the official repository. Before a release, compare `git remote get-url origin` with this project's `repository`; on a fork, stop — a release published there names a version nobody else will ever see and diverges the numbering."
   - A change that breaks a consumer is not finished until the consumer is fixed, in the same piece of work. The framework and the projects built on it move together here, and a breaking change pushed alone reaches every consumer on its next update with nothing telling them what to do. A contributor cannot see the maintainer's consumers, so for a contribution this falls to the maintainer, before the merge.
@@ -13,50 +13,50 @@ branches:
 channels:
   - id: shared-clone
     from: main
-    description: "What consuming projects actually run: the shared clone @Duckspec#update pulls, which is `main` at whatever commit it was last pulled at — released or not. This is the channel a push delivers to."
+    description: "What consuming projects actually run: the shared clone @Duckspec#recipes#update pulls, which is `main` at whatever commit it was last pulled at — released or not. This is the channel a push delivers to."
   - id: releases
     from: main
     description: "GitHub Releases, one per version, each carrying that version's release notes. Nobody follows them to get the framework; they are the record of what changed and what a consumer must do to move onto it."
 steps:
   - id: requested
-    description: "A change is wanted — raised in conversation, or as a GitHub issue read with @GitHub#read_issue. It is clarified, then written into the terms."
+    description: "A change is wanted — raised in conversation, or as a GitHub issue read with @GitHub#recipes#read_issue. It is clarified, then written into the terms."
     when: a request exists that the framework's terms do not yet reflect
   - id: specified
     description: The change is in the spec, which is consistent, but the sources do not implement it yet.
     when: the change is present in the terms, verify_project is clean, and the sources do not yet implement it
-    operation: "@Software#build"
+    operation: "@Software#recipes#build"
   - id: implemented
     description: "The sources carry the change and the framework validates — including the operation and wiring checks of @DuckToolsApp — but nothing is recorded."
-    when: the working tree carries the change, @DuckspecProject#validate passes, and it is not committed
-    operation: "@Git#commit"
+    when: the working tree carries the change, @DuckspecProject#recipes#validate passes, and it is not committed
+    operation: "@Git#recipes#commit"
   - id: committed
     description: The change is recorded locally. Before it goes anywhere, every consumer is checked against it, because pushing is delivering.
     when: local commits carry the change, are not on the remote, and the consumers have not been verified against them
-    operation: "@Duckspec#verify_consumers"
+    operation: "@Duckspec#recipes#verify_consumers"
   - id: installation_unchecked
     description: Every consumer verifies clean, but the change touches what installing duckspec depends on (@Duckspec#lists#install-surface) and nobody has installed from it yet. A new user's assistant clones `main`, so a push here would hand a broken installation to the next person who installs, with nothing on any consumer's side to show it.
     when: local commits carry the change, are not on the remote, every registered consumer verifies clean against them, the change touches an item of @Duckspec#lists#install-surface, and @Duckspec#recipes#check_install has not passed against it
-    operation: "@Duckspec#check_install"
+    operation: "@Duckspec#recipes#check_install"
   - id: consumers_verified
-    description: "Every consuming project verifies clean against the change, or has been fixed in the same work. The maintainer sends it with a push to `main`. Anyone without push access to the official repository — every contributor but the maintainer — sends it instead with @GitHub#open_pull_request from a branch of their fork, which moves it to `in_review`; the consumers verified here are only the ones the contributor has, and the maintainer verifies their own before merging."
+    description: "Every consuming project verifies clean against the change, or has been fixed in the same work. The maintainer sends it with a push to `main`. Anyone without push access to the official repository — every contributor but the maintainer — sends it instead with @GitHub#recipes#open_pull_request from a branch of their fork, which moves it to `in_review`; the consumers verified here are only the ones the contributor has, and the maintainer verifies their own before merging."
     when: local commits carry the change, are not on the remote, every registered consumer verifies clean against them, and either the change touches nothing in @Duckspec#lists#install-surface or @Duckspec#recipes#check_install has passed against it
-    operation: "@Git#push(branch=main)"
+    operation: "@Git#recipes#push(branch=main)"
   - id: in_review
-    description: A contribution waits in a pull request. The maintainer reads it with @GitHub#review_pull_request, then checks it out and runs @Duckspec#verify_consumers against it — and @Duckspec#recipes#check_install when it touches @Duckspec#lists#install-surface — since merging it delivers it to every consumer just as a push would; the contributor revises it with @Git#commit and @Git#push to the same branch of their fork. The maintainer's own changes never pass through here, and the reading of the steps reports this step as skipped for them.
+    description: A contribution waits in a pull request. The maintainer reads it with @GitHub#recipes#review_pull_request, then checks it out and runs @Duckspec#recipes#verify_consumers against it — and @Duckspec#recipes#check_install when it touches @Duckspec#lists#install-surface — since merging it delivers it to every consumer just as a push would; the contributor revises it with @Git#recipes#commit and @Git#recipes#push to the same branch of their fork. The maintainer's own changes never pass through here, and the reading of the steps reports this step as skipped for them.
     when: an open pull request against the official repository carries the change
-    operation: "@GitHub#merge_pull_request"
+    operation: "@GitHub#recipes#merge_pull_request"
   - id: on_main
     description: "The change is on main and has already reached consumers on their next update, but no version names it yet. Changes accumulate here until a release. When one is wanted, the README is read first against everything that accumulated: a release is the moment people come to look at the repository, and the version it names should not be described by a README written for the one before."
     when: main carries the change and its `version` is still the one the latest release tag names
-    operation: "@DuckspecProject#update_readme"
+    operation: "@DuckspecProject#recipes#update_readme"
   - id: readme_current
     description: "The README has been read against what landed since the latest release and either needed nothing — the ordinary case — or was edited, the edit being a change like any other: committed, verified against consumers and pushed before the version is prepared, so the release tag contains it."
     when: main carries the change, its `version` is still the one the latest release tag names, and the README has been checked against everything on main since that tag, with any edit it needed already on main
-    operation: "@DuckspecProject#prepare_release"
+    operation: "@DuckspecProject#recipes#prepare_release"
   - id: versioned
     description: A version covering the change is prepared and its bump has itself been committed, verified against consumers and pushed like any change.
     when: main carries a `version` that no tag names yet
-    operation: "@GitHub#create_release"
+    operation: "@GitHub#recipes#create_release"
   - id: released
     description: The change is named by a published version, whose release notes say what changed and what consumers must do.
     when: a GitHub Release exists for a version whose tag contains the change

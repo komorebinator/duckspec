@@ -20,7 +20,7 @@ A spec-driven development framework for building complex projects with AI.
 | `@Software` | A part of the project that is built and shipped: its components, functions, behaviour and tests |
 | `@Behaviour` | A rule your software keeps toward its users, with `@Scenario` cases (given / when / then) showing where it applies; a `@Test` names the ones it checks in `verifies` |
 | `@Decision` | A choice made about an element, with why and the options turned down, so a later change does not bring a rejected one back |
-| `@Recipe` | Named instructions the AI executes, such as `@DuckspecProject#validate` or `@Software#build` |
+| `@Recipe` | Named instructions the AI executes, such as `@DuckspecProject#recipes#validate` or `@Software#recipes#build` |
 | `@DuckWorkflow` | How work moves through a project, from request to release — the AI reads it to know what the change in hand needs next |
 | `ducktools` | The CLI and MCP server the AI reads and edits the spec through |
 

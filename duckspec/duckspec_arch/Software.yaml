@@ -1,7 +1,7 @@
 description: "A body of code that is built, versioned and shipped as a unit — an application, a service, a library, a command-line tool, a container image. What distinguishes it from the @DesignPattern it extends is ownership of a lifecycle: it has a repository it lives in, a platform it is built for, tests that say whether it works, and recipes to build, run and install it. A component inside one is a @SoftwareComponent, not a @Software of its own."
 extends: "@DesignPattern"
 guidelines:
-  - When a component's `type:` names a @Term, resolve that term to see what fields and rules it gives the component; a plain-text type says what the component is and gives it nothing more (see @SoftwareComponent#type)
+  - When a component's `type:` names a @Term, resolve that term to see what fields and rules it gives the component; a plain-text type says what the component is and gives it nothing more (see @SoftwareComponent#properties#type)
   - Component names within a @Software are local path identifiers; use the `#`-separated path syntax (see @Term) to reference any named element within a component, e.g. `component#function` or `component#signal`
 properties:
   - id: repository
@@ -10,29 +10,29 @@ properties:
     description: language or platform the software is built for (e.g. Python, iOS, web)
   - id: behaviour
     type: "@Behaviour"
-    description: "list of @Behaviour — the rules this software keeps toward its users, each with the scenarios that illustrate it. Requirements, as `functions` are: @Software#build writes code that keeps them, and @Software#test reports which of their scenarios no test verifies."
+    description: "list of @Behaviour — the rules this software keeps toward its users, each with the scenarios that illustrate it. Requirements, as `functions` are: @Software#recipes#build writes code that keeps them, and @Software#recipes#test reports which of their scenarios no test verifies."
   - id: tests
     type: "@Test"
     description: list of @Test cases for this @Software
   - id: codestyle
-    description: list of rules for how this software's code is written beyond the project's own codestyle — usually what is particular to its language or platform, since one project can hold software in several. Brought with every component of this software by @DuckToolsApp#resolver#resolve_path, and checked by @Software#build.
+    description: list of rules for how this software's code is written beyond the project's own codestyle — usually what is particular to its language or platform, since one project can hold software in several. Brought with every component of this software by @DuckToolsApp#components#resolver#functions#resolve_path, and checked by @Software#recipes#build.
 recipes:
   - id: build
     description: "Implements the change in hand: brings the source files in line with what changed in the spec, under every rule, decision and codestyle that applies to the parts it touches, toward the goals of the part"
     instructions:
       - "Find what changed in the spec: compare the term files with the last commit, and add what this session changed and has not committed yet. List the elements that changed — components, functions, fields, behaviours and their scenarios, decisions — each by its full `#`-path, every level named, which is how each is opened below; that list is the unit of work for every step below. When the recipe is invoked for a @Software that does not exist yet, the list is every element of it"
-      - Open each element on the list with @DuckToolsApp#resolver#resolve_path, which brings the guidelines and the codestyle of the element and of everything above it, and the goals of the part it belongs to; read its `decisions` and those of the elements above it that concern it, and the `behaviour` it takes part in. Keep what this collects in view for every step that follows — it is what the code must keep, and where the spec leaves a choice open, the part's goals are what decide it
+      - Open each element on the list with @DuckToolsApp#components#resolver#functions#resolve_path, which brings the guidelines and the codestyle of the element and of everything above it, and the goals of the part it belongs to; read its `decisions` and those of the elements above it that concern it, and the `behaviour` it takes part in. Keep what this collects in view for every step that follows — it is what the code must keep, and where the spec leaves a choice open, the part's goals are what decide it
       - "Read `behaviour` as requirements alongside the components, not as documentation: the code must keep every @Behaviour, and the `then` of every @Scenario must follow from its `given` and `when`. Where a component's description and a behaviour seem to disagree, the behaviour is what the software promises its users — stop and ask rather than pick one. A decision whose `by` is the author is not changed or worked around without asking them"
       - "For each element: if its source file exists, read it and apply only the changes needed to bring it in line with the spec, keeping the realization it already has wherever the spec leaves realization free — rewriting what no decision asked to change only produces noise in the diff; if it does not exist, create it (and the folder at `src` if needed), choosing the realization. Follow the conventions of `platform` and every codestyle rule collected above"
       - Check what was written against each guideline, codestyle rule and decision collected above, one by one rather than as an impression of the whole, and report each as kept or not; fix what is not before going on
-      - Invoke @DuckToolsApp#resolver#verify_source() and resolve what it reports for the components touched
+      - Invoke @DuckToolsApp#components#resolver#functions#verify_source() and resolve what it reports for the components touched
   - id: test
     description: Runs all @Test cases listed in `tests` and reports results
     instructions:
       - Read the @Software term to get `platform` and `tests`
       - "For each @Test: run `command` following `platform` conventions; check output against `expect`; record 🟢 when it ran and matched, 🔴 when it ran and did not, 🟡 when it could not be run at all — and the observed output either way"
       - Then list every @Scenario under `behaviour` that no @Test names in `verifies`, either itself or through the @Behaviour it sits under, and give each a row marked 🟡 manual with its `given`, `when` and `then`, so it can be checked by hand. A manual scenario is not a failure; it is listed so that the suite's result is not taken for a verdict on it
-      - "Output a markdown table with columns: Test | Status | Detail, using the same markers @DuckspecProject#validate reports with, since that recipe is where these results end up"
+      - "Output a markdown table with columns: Test | Status | Detail, using the same markers @DuckspecProject#recipes#validate reports with, since that recipe is where these results end up"
   - id: run
     description: Runs the @Software using the conventions of `platform`
     arguments:

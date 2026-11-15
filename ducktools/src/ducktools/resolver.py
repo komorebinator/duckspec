@@ -1141,7 +1141,7 @@ class Resolver:
             yield name, p, content
 
     def load_project(self, project_path: str) -> dict:
-        """The top level of a project and nothing below it — see @DuckToolsApp#resolver#load_project.
+        """The top level of a project and nothing below it — see @DuckToolsApp#components#resolver#functions#load_project.
         Own terms are split into `parts` (named by the root's `software:`) and `terms`, each with
         its description and its edges; other projects appear once each in `projects`; the
         framework's terms are the `vocabulary`; recipes are this project's own and those of the
@@ -1383,7 +1383,7 @@ class Resolver:
 
     def expand(self, project_path: str, ref: str) -> dict | None:
         """The children of one element with their descriptions and what they refer to, and the
-        rules that apply to it — see @DuckToolsApp#resolver#expand."""
+        rules that apply to it — see @DuckToolsApp#components#resolver#functions#expand."""
         found = self.resolve_path(project_path, ref)
         if found is None or found.get('error'):
             return found
@@ -1470,7 +1470,7 @@ class Resolver:
 
     def _rules_for(self, project_path: str, ref: str) -> dict:
         """Guidelines, codestyle and the part's goals that apply to the element `ref` addresses —
-        see @DuckToolsApp#resolver#_rules_for."""
+        see @DuckToolsApp#components#resolver#functions#_rules_for."""
         project_path = _resolve_project(project_path)
         root = Path(project_path).resolve()
         term_name, *segments = ref.split('#')
@@ -1558,7 +1558,7 @@ class Resolver:
         """Mechanical consistency pass — everything provable about a spec without reading source
         or judging meaning. Returns findings sorted errors-first; an empty list means the spec is
         internally consistent. The semantic half (do descriptions match the implementation?) is
-        @DuckspecProject#verify_source's job and cannot be settled by regex."""
+        @DuckspecProject#recipes#verify_source's job and cannot be settled by regex."""
         project_path = _resolve_project(project_path)
         root = Path(project_path).resolve()
         term_map = self._build_term_map(root)
@@ -1737,6 +1737,21 @@ class Resolver:
                             _line_of(content, m.start()))
                         break
                     narrowed = block
+                else:
+                    # it resolves; written with every level, or only by skipping some
+                    written = f"@{referenced}#{'#'.join(segments)}"
+                    text = read(referenced)
+                    fits = _fit_paths(text, text, segments, referenced, root=True)
+                    if written[1:] not in fits and len(fits) == 1:
+                        add('error', 'short-path-ref', name, path,
+                            f'{written} skips levels, and resolve_path refuses it — '
+                            f'write the full path @{fits[0]}',
+                            _line_of(content, m.start()))
+                    elif written[1:] not in fits and fits:
+                        add('error', 'short-path-ref', name, path,
+                            f'{written} skips levels and fits several elements — write the '
+                            f"full path of the one meant: {', '.join('@' + f for f in fits[:6])}",
+                            _line_of(content, m.start()))
 
         for name, path in sorted(term_map.items()):
             content = cache.get(name)
@@ -1810,7 +1825,7 @@ class Resolver:
         # A step's operation has to be something that can be run. broken-path-ref only proves the
         # reference lands somewhere, and a component describing a pipeline file is somewhere — a
         # step pointing at one looks implemented while nothing could ever perform it.
-        call = re.compile(r'^"?@([A-Z]\w*)#([A-Za-z_][\w-]*)(?:\((.*)\))?"?$')
+        call = re.compile(r'^"?@([A-Z]\w*)#recipes#([A-Za-z_][\w-]*)(?:\((.*)\))?"?$')
         for name, path in sorted(term_map.items()):
             content = cache.get(name)
             if content is None:
@@ -1823,7 +1838,7 @@ class Resolver:
                 if not m:
                     add('error', 'broken-operation', name, path,
                         f"step '{step_id}' has operation {op.group(1)}, which is not a call of the "
-                        f"form @<TermName>#<recipe>(<argument>=<value>, ...)")
+                        f"form @<TermName>#recipes#<recipe>(<argument>=<value>, ...)")
                     continue
                 target, recipe, args = m.group(1), m.group(2), m.group(3)
                 if target not in term_map:
@@ -1838,7 +1853,7 @@ class Resolver:
                         break
                 if block is None:
                     add('error', 'broken-operation', name, path,
-                        f"step '{step_id}' calls @{target}#{recipe}, which is not a recipe of "
+                        f"step '{step_id}' calls @{target}#recipes#{recipe}, which is not a recipe of "
                         f"@{target} or anything it extends — something that describes a file is "
                         f"not something that can be run")
                     continue
@@ -1848,7 +1863,7 @@ class Resolver:
                     for given in re.findall(r'(?:^|,)\s*([A-Za-z_]\w*)\s*=', args):
                         if given not in declared:
                             add('error', 'broken-operation', name, path,
-                                f"step '{step_id}' passes '{given}' to @{target}#{recipe}, which "
+                                f"step '{step_id}' passes '{given}' to @{target}#recipes#{recipe}, which "
                                 f"declares no such argument")
 
         if unreachable:
@@ -1915,7 +1930,7 @@ class Resolver:
         return cached
 
     def verify_source(self, project_path: str) -> list[dict]:
-        """Mechanical half of @DuckspecProject#verify_source: declared paths exist, and named
+        """Mechanical half of @DuckspecProject#recipes#verify_source: declared paths exist, and named
         functions are present in the file their component points at. Whether a description tells
         the truth about the code is the other half, and stays a reading task."""
         project_path = _resolve_project(project_path)

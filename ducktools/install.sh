@@ -43,7 +43,7 @@ usable() {
   esac
 }
 
-# The same candidates @Duckspec#install offers the user: Linux's ~/.local/bin, Git Bash's ~/bin,
+# The same candidates @Duckspec#recipes#install offers the user: Linux's ~/.local/bin, Git Bash's ~/bin,
 # Homebrew's /opt/homebrew/bin or /usr/local/bin on macOS — no OS detection needed, just ask PATH
 # what it actually uses.
 BIN_DIR="${2:-}"
