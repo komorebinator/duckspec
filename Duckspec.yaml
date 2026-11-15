@@ -8,7 +8,7 @@ goals:
   - Simplify repetitive development tasks
   - Describe a system's parts, how they connect and the behaviour it promises in terms that survive a change of language, framework or platform
   - Describe how a change reaches users — review, merge, release, delivery — independently of the version control, review system or tracker in use
-version: 1.0.0
+version: 1.1.0
 repository: https://github.com/komorebinator/duckspec
 settings:
   src: .
