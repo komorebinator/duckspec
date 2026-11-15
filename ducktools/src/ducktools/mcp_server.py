@@ -178,7 +178,8 @@ _TOOLS = [
         'inputSchema': {'type': 'object', 'properties': {**_PROJECT_PATH_PROP,
             'ref': {'type': 'string', 'description': 'TermName, or a full path naming every level: TermName#<slot>#<id>...'},
             'field': {'type': 'string', 'description': 'field to set'},
-            'value': {'type': 'string', 'description': 'value to set it to'}},
+            'value': {'anyOf': [{'type': 'string'}, {'type': 'array', 'items': {'type': ['string', 'number', 'boolean']}}],
+                      'description': 'value to set it to: text, written as a block when it has line breaks, or a list of plain values, written as a YAML list'}},
             'required': ['project_path', 'ref', 'field', 'value']},
     },
     {

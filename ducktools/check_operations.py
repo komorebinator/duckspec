@@ -659,7 +659,7 @@ check('set_field/same-name-elsewhere', 'replaced' in r.set_field(project, 'Holde
       and 'description: lists them' in _holder.read_text(encoding='utf-8'), _holder.read_text(encoding='utf-8'))
 _holder.unlink()
 
-# a quoted value with paragraphs — the way _quoted writes any description that has them — is
+# a quoted value with paragraphs — as files written by hand or by an earlier ducktools hold them — is
 # replaced whole: ending its span at the first blank line left the later paragraphs stranded after
 # the new value, where no parser could read the file, and nothing reported it
 _para = Path(project).parent / 'Fixture' / 'Para.yaml'
@@ -669,6 +669,39 @@ r.set_field(project, 'Para', 'description', 'One paragraph now.')
 check('set_field/quoted-paragraphs',
       _para.read_text(encoding='utf-8') == 'description: One paragraph now.\nextends: "@Term"\n',
       _para.read_text(encoding='utf-8'))
+
+# a value with paragraphs is written as a literal block, which reads back as given: written bare
+# it broke the file, and inside quotes YAML folded its single breaks into spaces
+r.set_field(project, 'Para', 'description', 'First paragraph.\n\nSecond: with a colon.\nSame paragraph.')
+check('set_field/paragraphs',
+      _para.read_text(encoding='utf-8') == 'description: |-\n  First paragraph.\n\n  Second: with a colon.\n'
+                                           '  Same paragraph.\nextends: "@Term"\n', _para.read_text(encoding='utf-8'))
+# one a literal block cannot hold exactly is escaped, as JSON writes it
+r.set_field(project, 'Para', 'description', '  indented first\nsecond')
+check('set_field/paragraphs-escaped',
+      _para.read_text(encoding='utf-8') == 'description: "  indented first\\nsecond"\nextends: "@Term"\n',
+      _para.read_text(encoding='utf-8'))
+
+# a list replaces the field's whole old value: only its first line was replaced before, the old
+# items left under a quoted string and the file unreadable, reported as `replaced`
+_para.write_text('description: Lists.\nextends: "@Term"\nproperties:\n  - id: shape\n    src:\n'
+                 '      - a.patch\n      - b.patch\n    description: kept\n  - id: size\n    src:\n'
+                 '    - c.patch\n    description: indentless\n', encoding='utf-8')
+r.set_field(project, 'Para#properties#shape', 'src', '["x.patch", "y.patch"]')
+r.set_field(project, 'Para#properties#size', 'src', ['z.patch'])
+check('set_field/list',
+      _para.read_text(encoding='utf-8') == 'description: Lists.\nextends: "@Term"\nproperties:\n  - id: shape\n'
+      '    src:\n      - x.patch\n      - y.patch\n    description: kept\n  - id: size\n    src:\n'
+      '      - z.patch\n    description: indentless\n', _para.read_text(encoding='utf-8'))
+r.set_field(project, 'Para#properties#shape', 'src', 'one.patch')
+check('set_field/list-to-text', '    src: one.patch\n    description: kept\n' in _para.read_text(encoding='utf-8'),
+      _para.read_text(encoding='utf-8'))
+r.set_field(project, 'Para#properties#shape', 'note', '[1080p] text, not a list')
+check('set_field/bracket-text', '    note: "[1080p] text, not a list"\n' in _para.read_text(encoding='utf-8'),
+      _para.read_text(encoding='utf-8'))
+_before = _para.read_text(encoding='utf-8')
+_msg = r.set_field(project, 'Para#properties#shape', 'src', '[{"id": "x"}]')
+check('set_field/list-of-entries', _msg.startswith('refused') and _para.read_text(encoding='utf-8') == _before, _msg)
 
 # text left under a quoted value after it closes belongs to no field: every YAML parser stops
 # there, while the resolver's regexes read past it and verify_project stayed silent about it

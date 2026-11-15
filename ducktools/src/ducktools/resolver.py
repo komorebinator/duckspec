@@ -637,6 +637,8 @@ def _needs_quotes(text: str) -> bool:
         return True
     if text[:2] in ('- ', '? ', ': ') or text in ('-', '?', ':'):
         return True
+    if '\n' in text or '\r' in text:
+        return True
     return ': ' in text or ' #' in text or text.endswith(':')
 
 
@@ -653,6 +655,10 @@ def _quoted(value: str) -> str:
         return "''"
     if not _needs_quotes(text):
         return text
+    if '\n' in text or '\r' in text:
+        # breaks escaped as JSON writes them, which YAML reads back exactly; raw breaks inside
+        # quotes fold into spaces, and bare ones break the file
+        return json.dumps(text, ensure_ascii=False)
     return '"' + text.replace('\\', '\\\\').replace('"', '\\"') + '"'
 
 
@@ -787,6 +793,8 @@ def _field_lines(field: str, value, column: int) -> list[str]:
             lines += _field_lines(key, inner, column + 2)
         return lines
     if isinstance(value, list):
+        if not value:
+            return [f'{pad}{field}: []\n']
         lines = [f'{pad}{field}:\n']
         for item in value:
             if isinstance(item, dict) and item:
@@ -799,7 +807,22 @@ def _field_lines(field: str, value, column: int) -> list[str]:
             else:
                 lines.append(f'{pad}  - {_quoted(item)}\n')
         return lines
+    block = _literal_block(value, column + 2)
+    if block is not None:
+        return [f'{pad}{field}: {block[0]}\n'] + block[1:]
     return [f'{pad}{field}: {_quoted(value)}\n']
+
+
+def _literal_block(value, column: int) -> list[str] | None:
+    """A text with line breaks as a literal block scalar — its header, then its lines at `column` —
+    or None for anything a literal block cannot hold exactly; see _field_lines."""
+    if not isinstance(value, str) or '\n' not in value or '\r' in value:
+        return None
+    body, header = (value[:-1], '|') if value.endswith('\n') else (value, '|-')
+    rows = body.split('\n')
+    if body.endswith('\n') or rows[0][:1] in (' ', '\t') or any(r and not r.strip() for r in rows):
+        return None
+    return [header] + [(' ' * column + r if r else '') + '\n' for r in rows]
 
 
 def _slot_names(content: str) -> Iterator[str]:
@@ -2176,6 +2199,18 @@ class Resolver:
                     close = _quote_close(lines, i, old)
                     if close is not None and close < end:
                         return i, close + 1, column
+                if not old:
+                    # nothing after the colon: the value is the list or mapping nested under it,
+                    # and a list may sit at the field's own column
+                    j = i + 1
+                    while j < end and (not lines[j].strip() or
+                                       len(lines[j]) - len(lines[j].lstrip()) > column or
+                                       len(lines[j]) - len(lines[j].lstrip()) == column
+                                       and lines[j].lstrip().startswith('- ')):
+                        j += 1
+                    while j > i + 1 and not lines[j - 1].strip():
+                        j -= 1
+                    return i, j, column
                 block_scalar = bool(_BLOCK_SCALAR.fullmatch(old))
                 j = i + 1
                 while j < end and (block_scalar and not lines[j].strip()
@@ -2199,17 +2234,29 @@ class Resolver:
             if isinstance(located, str):
                 return located
         path, lines, start, end = located
-        value = _quoted(value)
+        if isinstance(value, str) and value.lstrip().startswith('['):
+            try:
+                parsed = json.loads(value)
+            except ValueError:
+                parsed = None   # text that merely starts with a bracket, such as `[1080p] …`
+            if isinstance(parsed, list):
+                value = parsed
+        if isinstance(value, list) and any(isinstance(v, (dict, list)) for v in value):
+            return (f'refused: {field} would hold entries, not plain values — '
+                    f'add_entry writes entries')
         span = self._field_span(lines, start, end, field)
         if span is None:
-            lines.insert(start + 1, f'{" " * self._field_column(lines[start])}{field}: {value}\n')
+            lines[start + 1:start + 1] = _field_lines(field, value, self._field_column(lines[start]))
             path.write_text(''.join(lines), encoding='utf-8', newline='')
             return f'{path}: added {field}'
         i, j, column = span
         on_head = re.match(rf'^(\s*-\s+){re.escape(field)}:', lines[i])
         # A value continued on the lines below belongs to this field too, and replacing only the
         # first line of it would leave the rest stranded under the new value.
-        lines[i:j] = [f'{on_head.group(1) if on_head else " " * column}{field}: {value}\n']
+        new = _field_lines(field, value, column)
+        if on_head:
+            new[0] = on_head.group(1) + new[0].lstrip()
+        lines[i:j] = new
         path.write_text(''.join(lines), encoding='utf-8', newline='')
         return f'{path}: replaced {field}'
 
