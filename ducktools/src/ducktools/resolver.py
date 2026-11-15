@@ -194,8 +194,51 @@ def _git_root(path: Path) -> Path | None:
 
 def _term_files(folder: Path) -> list[Path]:
     """Every `.yaml` in a terms folder and its subfolders, at any depth: a project groups its
-    terms in subfolders of one `terms_folder` rather than splitting into sub-projects."""
-    return sorted(folder.rglob('*.yaml'))
+    terms in subfolders of one `terms_folder` rather than splitting into sub-projects. The folders
+    a @DuckTasks tracker keeps its tasks in are left out — see _tasks_folder."""
+    files = sorted(folder.rglob('*.yaml'))
+    skip = _task_folders(files + sorted(folder.parent.glob('*.yaml')))
+    return [f for f in files if not any(f.resolve().is_relative_to(s) for s in skip)]
+
+
+TASKS_TRACKER = 'DuckTasks'
+TRACKER_RECIPES = ('list_issues', 'read_issue', 'create_issue', 'comment_issue', 'close_issue')
+TASK_FIELDS = ('title', 'kind', 'status', 'labels', 'elements', 'blocked_by', 'description', 'details')
+TASK_KINDS = ('plan', 'defect')
+TASK_STATUSES = ('open', 'in_progress')
+_TASK_ID = re.compile(r'[a-z0-9][a-z0-9-]*')
+
+
+def _tracker_config(content: str) -> dict | None:
+    """The `tracker:` block of a workflow or of a project's `workflow:`, as {type, folder, ...},
+    or None when there is none."""
+    block = _extract_key_block(content, 'tracker')
+    if block is None:
+        return None
+    lines = block.splitlines()
+    head = lines[0].split(':', 1)[1].strip()
+    if head:   # `tracker: "@GitHub"` written inline
+        return {'type': _unquote(head).lstrip('@')}
+    config = {k: v for k, _kind, v in _element_fields('\n'.join(lines[1:])) if isinstance(v, str)}
+    if 'type' in config:
+        config['type'] = config['type'].lstrip('@')
+    return config
+
+
+def _task_folders(files: list[Path]) -> list[Path]:
+    """The folders the @DuckTasks trackers set in these files keep their tasks in."""
+    found = []
+    for f in files:
+        try:
+            text = f.read_text(encoding='utf-8')
+        except OSError:
+            continue
+        if 'tracker:' not in text:
+            continue
+        config = _tracker_config(text)
+        if config and config.get('type') == TASKS_TRACKER:
+            found.append((f.parent / (config.get('folder') or 'tasks')).resolve())
+    return found
 
 
 def _parse_dict_list_block(content: str, pattern: re.Pattern, key_field: str,
@@ -1256,6 +1299,7 @@ class Resolver:
         return {
             'root_content': root_content,
             'workflow': self._workflow_hint(root_content),
+            'tasks': self._tasks_hint(project_path),
             'parts': parts,
             'terms': terms,
             'projects': projects,
@@ -1283,6 +1327,21 @@ class Resolver:
                 'note': f'how work is done here is described by @{m.group(1)}; call '
                         f'load_workflow to read its steps — not loaded with the project, since '
                         f'at open time there is no work to place among them'}
+
+    def _tasks_hint(self, project_path: str) -> dict:
+        """Where the project's planned work is kept, and for @DuckTasks how much of it is open —
+        the tasks themselves are listed by list_tasks, not loaded with the project."""
+        folder, why = self._tasks_folder(project_path)
+        if folder is None:
+            m = re.search(r'kept in @(\w+)', why)
+            return {'tracker': m.group(1) if m else None, 'open': None, 'in_progress': None,
+                    'note': f"planned work and known defects are kept in @{m.group(1)}, not in "
+                            f"the spec; its `list_issues` recipe lists them" if m else why}
+        tasks = self.list_tasks(project_path)
+        busy = sum(1 for t in tasks if t['status'] == 'in_progress')
+        return {'tracker': TASKS_TRACKER, 'open': len(tasks), 'in_progress': busy,
+                'note': f"{len(tasks)} open task(s), {busy} in progress, kept in @{TASKS_TRACKER} "
+                        f"rather than in the spec — call list_tasks to see them"}
 
     def load_workflow(self, project_path: str) -> dict:
         """The project's configured workflow in full, with the root's overrides beside it."""
@@ -1889,6 +1948,50 @@ class Resolver:
                                 f"step '{step_id}' passes '{given}' to @{target}#recipes#{recipe}, which "
                                 f"declares no such argument")
 
+        # A tracker is called through the recipes every tracker offers; a type lacking one leaves
+        # the workflow calling something that does not exist.
+        root_file = Path(project_path).resolve()
+        for name, path in [(root_file.stem, root_file)] + sorted(term_map.items()):
+            content = cache.get(name) if path != root_file else root_file.read_text(encoding='utf-8')
+            config = _tracker_config(content) if content and 'tracker:' in content else None
+            if not config:
+                continue
+            kind = config.get('type')
+            if not kind or kind not in term_map:
+                add('error', 'broken-tracker', name, path,
+                    f"`tracker:` names {'@' + kind if kind else 'no type'}, which is not a term")
+                continue
+            declared = set()
+            for _, anc in self._extends_chain_from(kind, read(kind), term_map):
+                rb = _RECIPES_BLOCK.search(anc)
+                if rb:
+                    declared |= set(re.findall(r'^\s*-\s+id:\s*(\S+)', rb.group(0), re.MULTILINE))
+            missing = [r for r in TRACKER_RECIPES if r not in declared]
+            if missing:
+                add('error', 'broken-tracker', name, path,
+                    f"`tracker:` names @{kind}, which has no {', '.join(missing)} — a tracker offers "
+                    f"{', '.join(TRACKER_RECIPES)}")
+
+        # Tasks are not terms, so nothing above reads them; their references are checked here.
+        folder, _why = self._tasks_folder(project_path)
+        if folder is not None and folder.is_dir():
+            ids = {p.stem for p in folder.glob('*.yaml')}
+            for path in sorted(folder.glob('*.yaml')):
+                fields = _element_fields(path.read_text(encoding='utf-8'))
+                problems = self._task_problems(fields)
+                have = {k: v for k, _kind, v in fields}
+                listed = lambda key: have[key] if isinstance(have.get(key), list) else \
+                    ([have[key]] if have.get(key) else [])
+                for ref in listed('elements'):
+                    located = self._locate(project_path, ref.lstrip('@'))
+                    if isinstance(located, str):
+                        problems.append(f'element {ref}: {located}')
+                for other in listed('blocked_by'):
+                    if other not in ids:
+                        problems.append(f'blocked_by names {other}, which is not a task')
+                for problem in problems:
+                    add('error', 'broken-task', path.stem, path, problem)
+
         if unreachable:
             for name, path in sorted(term_map.items()):
                 if name not in reachable and path.resolve() != root:
@@ -2244,11 +2347,18 @@ class Resolver:
         if isinstance(value, list) and any(isinstance(v, (dict, list)) for v in value):
             return (f'refused: {field} would hold entries, not plain values — '
                     f'add_entry writes entries')
+        return f'{path}: ' + self._write_field(path, lines, start, end, field, value)
+
+    def _write_field(self, path: Path, lines: list[str], start: int, end: int, field: str,
+                     value) -> str:
+        """Writes `field` into the element spanning lines[start:end] of `path` — the writing half
+        of set_field, shared with the task operations — and says whether it was added or
+        replaced."""
         span = self._field_span(lines, start, end, field)
         if span is None:
             lines[start + 1:start + 1] = _field_lines(field, value, self._field_column(lines[start]))
             path.write_text(''.join(lines), encoding='utf-8', newline='')
-            return f'{path}: added {field}'
+            return f'added {field}'
         i, j, column = span
         on_head = re.match(rf'^(\s*-\s+){re.escape(field)}:', lines[i])
         # A value continued on the lines below belongs to this field too, and replacing only the
@@ -2258,7 +2368,175 @@ class Resolver:
             new[0] = on_head.group(1) + new[0].lstrip()
         lines[i:j] = new
         path.write_text(''.join(lines), encoding='utf-8', newline='')
-        return f'{path}: replaced {field}'
+        return f'replaced {field}'
+
+    # ----- tasks of @DuckTasks ---------------------------------------------------------------
+
+    def _tasks_folder(self, project_path: str) -> tuple[Path | None, str]:
+        """(folder, '') for a project whose tracker is @DuckTasks, else (None, why) — see
+        @DuckToolsApp#components#resolver#functions#_tasks_folder."""
+        root = Path(_resolve_project(project_path)).resolve()
+        root_content = root.read_text(encoding='utf-8')
+        own = _extract_key_block(root_content, 'workflow')
+        config, base = (_tracker_config(own), root.parent) if own else (None, root.parent)
+        if config is None:
+            name = self._workflow_hint(root_content)['name']
+            term = self._build_term_map(root).get(name) if name else None
+            if term is not None:
+                config, base = _tracker_config(term.read_text(encoding='utf-8')), term.parent
+        if config is None or not config.get('type'):
+            return None, ("this project's workflow names no tracker, so it keeps no tasks — "
+                          "set `tracker:` in the workflow to @DuckTasks to keep them in the repository")
+        if config['type'] != TASKS_TRACKER:
+            return None, (f"this project's tasks are kept in @{config['type']} — its `list_issues` "
+                          f"and `read_issue` recipes read them")
+        return (base / (config.get('folder') or 'tasks')).resolve(), ''
+
+    def _task_path(self, project_path: str, task_id: str) -> tuple[Path | None, str]:
+        folder, why = self._tasks_folder(project_path)
+        if folder is None:
+            return None, f'refused: {why}'
+        path = folder / f'{task_id}.yaml'
+        if not path.is_file():
+            ids = sorted(p.stem for p in folder.glob('*.yaml')) if folder.is_dir() else []
+            return None, (f'not found: no task {task_id}' +
+                          (f" — the tasks are: {', '.join(ids)}" if ids else ' — there are no tasks'))
+        return path, ''
+
+    @staticmethod
+    def _task_problems(fields: list[tuple[str, str, object]]) -> list[str]:
+        """What keeps a task file from reading as a @DuckTask, from its own fields alone."""
+        problems = []
+        have = {k: v for k, _kind, v in fields}
+        for key in have:
+            if key not in TASK_FIELDS:
+                problems.append(f'`{key}` is not a field of @DuckTask')
+        for key in ('title', 'kind', 'description'):
+            if not have.get(key):
+                problems.append(f'no `{key}`')
+        if have.get('kind') and have['kind'] not in TASK_KINDS:
+            problems.append(f"kind `{have['kind']}` is neither `plan` nor `defect`")
+        if have.get('status') and have['status'] not in TASK_STATUSES:
+            problems.append(f"status `{have['status']}` is neither `open` nor `in_progress`")
+        return problems
+
+    def list_tasks(self, project_path: str, kind: str | None = None, label: str | None = None,
+                   status: str | None = None) -> list[dict] | str:
+        folder, why = self._tasks_folder(project_path)
+        if folder is None:
+            return f'refused: {why}'
+        tasks = []
+        for path in sorted(folder.glob('*.yaml')) if folder.is_dir() else []:
+            fields = _element_fields(path.read_text(encoding='utf-8'))
+            have = {k: v for k, _kind, v in fields}
+            listed = lambda key: have[key] if isinstance(have.get(key), list) else \
+                ([have[key]] if have.get(key) else [])
+            task = {'id': path.stem, 'title': have.get('title', ''), 'kind': have.get('kind', ''),
+                    'status': have.get('status') or 'open', 'labels': listed('labels'),
+                    'blocked_by': listed('blocked_by'), 'details': len(listed('details')),
+                    'problems': self._task_problems(fields)}
+            if kind and task['kind'] != kind or status and task['status'] != status \
+                    or label and label not in task['labels']:
+                continue
+            tasks.append(task)
+        tasks.sort(key=lambda t: (t['status'] != 'in_progress', t['id']))
+        return tasks
+
+    def read_task(self, project_path: str, task_id: str) -> dict | str:
+        path, why = self._task_path(project_path, task_id)
+        if path is None:
+            return why
+        return {'id': task_id, 'path': str(path), 'content': path.read_text(encoding='utf-8')}
+
+    def _task_value_refused(self, field: str, value) -> str:
+        if field not in TASK_FIELDS or field == 'details':
+            return (f'refused: `{field}` is not a field a task is written with — '
+                    + ('details are added by comment_task' if field == 'details'
+                       else f"the fields are {', '.join(f for f in TASK_FIELDS if f != 'details')}"))
+        if field == 'kind' and value not in TASK_KINDS:
+            return f'refused: kind is `plan` or `defect`, not `{value}`'
+        if field == 'status' and value not in TASK_STATUSES:
+            return f'refused: status is `open` or `in_progress`, not `{value}` — a done task is closed'
+        if isinstance(value, list) and any(isinstance(v, (dict, list)) for v in value):
+            return f'refused: {field} holds plain values'
+        return ''
+
+    def create_task(self, project_path: str, task_id: str, fields: dict) -> str:
+        folder, why = self._tasks_folder(project_path)
+        if folder is None:
+            return f'refused: {why}'
+        if not _TASK_ID.fullmatch(task_id):
+            return f'refused: a task id is a lowercase slug of letters, digits and dashes, not `{task_id}`'
+        path = folder / f'{task_id}.yaml'
+        if path.exists():
+            return f'refused: task {task_id} exists already — comment_task adds to it'
+        fields = dict(fields)
+        fields.setdefault('status', 'open')
+        for key in ('title', 'kind', 'description'):
+            if not fields.get(key):
+                return f'refused: a task needs a {key}'
+        for key, value in fields.items():
+            refused = self._task_value_refused(key, value)
+            if refused:
+                return refused
+        lines = []
+        for key in TASK_FIELDS:
+            if key in fields:
+                lines += _field_lines(key, fields[key], 0)
+        folder.mkdir(parents=True, exist_ok=True)
+        path.write_text(''.join(lines), encoding='utf-8', newline='')
+        return f'{path}: created task {task_id}'
+
+    def comment_task(self, project_path: str, task_id: str, text: str) -> str:
+        import datetime
+        path, why = self._task_path(project_path, task_id)
+        if path is None:
+            return why
+        if not text.strip():
+            return 'refused: a detail needs text'
+        lines = path.read_text(encoding='utf-8').splitlines(keepends=True)
+        if lines and not lines[-1].endswith('\n'):
+            lines[-1] += '\n'
+        entry = _field_lines('details', [{'date': datetime.date.today().isoformat(), 'text': text}], 0)
+        span = self._field_span(lines, 0, len(lines), 'details') if lines else None
+        if span is None:
+            lines += entry
+        else:
+            lines[span[1]:span[1]] = entry[1:]
+        path.write_text(''.join(lines), encoding='utf-8', newline='')
+        return f'{path}: added a detail to task {task_id}'
+
+    def update_task(self, project_path: str, task_id: str, field: str, value) -> str:
+        path, why = self._task_path(project_path, task_id)
+        if path is None:
+            return why
+        if isinstance(value, str) and value.lstrip().startswith('['):
+            try:
+                parsed = json.loads(value)
+            except ValueError:
+                parsed = None
+            if isinstance(parsed, list):
+                value = parsed
+        refused = self._task_value_refused(field, value)
+        if refused:
+            return refused
+        lines = path.read_text(encoding='utf-8').splitlines(keepends=True)
+        return f'{path}: ' + self._write_field(path, lines, 0, len(lines), field, value)
+
+    def close_task(self, project_path: str, task_id: str) -> str:
+        path, why = self._task_path(project_path, task_id)
+        if path is None:
+            return why
+        path.unlink()
+        waiting = []
+        for other in sorted(path.parent.glob('*.yaml')):
+            have = {k: v for k, _kind, v in _element_fields(other.read_text(encoding='utf-8'))}
+            blocked = have.get('blocked_by')
+            if task_id in (blocked if isinstance(blocked, list) else [blocked]):
+                waiting.append(other.stem)
+        note = (f" — still listed in `blocked_by` of {', '.join(waiting)}, left for you to update"
+                if waiting else '')
+        return f'{path}: closed task {task_id}{note}'
 
     def _make_mapping(self, project_path: str, ref: str, located: str) -> str | None:
         """Creates the missing mappings a path's last levels name, or returns why not — see

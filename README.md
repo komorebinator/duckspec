@@ -22,6 +22,7 @@ A spec-driven development framework for building complex projects with AI.
 | `@Decision` | A choice made about an element, with why and the options turned down, so a later change does not bring a rejected one back |
 | `@Recipe` | Named instructions the AI executes, such as `@DuckspecProject#recipes#validate` or `@Software#recipes#build` |
 | `@DuckWorkflow` | How work moves through a project, from request to release — the AI reads it to know what the change in hand needs next |
+| `tracker` | Where a project's planned work and known defects are kept — its GitHub or Jira, or `@DuckTasks`, a folder of task files in the repository for a project with no tracker — so plans stay out of the spec |
 | `ducktools` | The CLI and MCP server the AI reads and edits the spec through |
 
 ## Example
@@ -165,6 +166,15 @@ ducktools batch MiruTube edits.json           # several edits, all or nothing
 
 Every edit addresses one element by its full path, so it cannot land on whichever element happened
 to come first. Any command that refuses — a path not found, an edit that cannot apply — exits 1.
+
+**Tasks** — for a project whose workflow names `@DuckTasks` as its tracker
+
+```sh
+ducktools list-tasks MyProject               # open tasks, in progress first
+ducktools create-task MyProject drop-zones title="Drop zones" kind=plan description="..."
+ducktools comment-task MyProject drop-zones "Found: ..."   # a dated detail, as a comment
+ducktools close-task MyProject drop-zones    # deletes the file; git keeps what was done
+```
 
 **Workspace**
 

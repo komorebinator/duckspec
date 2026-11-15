@@ -166,6 +166,25 @@ _COMMAND_GROUPS = [
          'Quote every value YAML would misread, so each term file is valid YAML',
          [('project', _PROJECT_ARG)]),
     ]),
+    ('tasks', [
+        ('list-tasks', 'list-tasks <project> [--kind K] [--label L] [--status S]',
+         "The open tasks of a project whose tracker is @DuckTasks — in progress first",
+         [('project', _PROJECT_ARG), ('--kind', '`plan` or `defect`'), ('--label', 'only tasks with this label'),
+          ('--status', '`open` or `in_progress`')]),
+        ('read-task', 'read-task <project> <id>', 'One task in full, details included',
+         [('project', _PROJECT_ARG), ('id', 'the task id')]),
+        ('create-task', 'create-task <project> <id> field=value ...',
+         'Write a new task: title, kind and description at least; a JSON array for a list',
+         [('project', _PROJECT_ARG), ('id', 'a lowercase slug naming the task'),
+          ('fields', 'title=…, kind=plan|defect, description=…, and optionally status, labels, elements, blocked_by')]),
+        ('comment-task', 'comment-task <project> <id> <text>', "Add a dated detail to a task — what an issue's comment is",
+         [('project', _PROJECT_ARG), ('id', 'the task id'), ('text', 'what to add')]),
+        ('update-task', 'update-task <project> <id> <field> <value>', 'Set one field of a task',
+         [('project', _PROJECT_ARG), ('id', 'the task id'), ('field', 'the field to set'),
+          ('value', 'its value; a JSON array for a list')]),
+        ('close-task', 'close-task <project> <id>', 'Close a task by deleting its file; git keeps what was done',
+         [('project', _PROJECT_ARG), ('id', 'the task id')]),
+    ]),
     ('workspace', [
         ('list-projects', 'list-projects',
          'Every registered project across all workspaces, marking the active one', []),
@@ -344,21 +363,31 @@ def cmd_edit_field(project_path: str, ref: str, field: str, old: str, new: str) 
 
 def cmd_add_entry(project_path: str, ref: str, entry_id: str, fields: list[str],
                   after: str | None = None, before: str | None = None) -> None:
+    # a list or mapping, written as JSON, becomes a nested block under the field
+    parsed = _parsed_fields(fields)
+    print(parsed if isinstance(parsed, str) else
+          resolver.add_entry(project_path, ref, entry_id, parsed, after, before))
+
+
+def _parsed_fields(fields: list[str]) -> dict | str:
+    """`field=value` arguments as a dict, a JSON list or mapping parsed; or why not."""
     parsed = {}
     for pair in fields:
         if '=' not in pair:
-            print(f"refused: expected field=value, got: {pair}")
-            return
+            return f"refused: expected field=value, got: {pair}"
         field, value = pair.split('=', 1)
         if value[:1] in '[{':
-            # a list or mapping, written as JSON, becomes a nested block under the field
             try:
                 value = json.loads(value)
             except ValueError as e:
-                print(f"refused: {field} is not valid JSON ({e})")
-                return
+                return f"refused: {field} is not valid JSON ({e})"
         parsed[field] = value
-    print(resolver.add_entry(project_path, ref, entry_id, parsed, after, before))
+    return parsed
+
+
+def cmd_create_task(project_path: str, task_id: str, fields: list[str]) -> None:
+    parsed = _parsed_fields(fields)
+    print(parsed if isinstance(parsed, str) else resolver.create_task(project_path, task_id, parsed))
 
 
 def cmd_remove_element(project_path: str, ref: str) -> None:
@@ -540,6 +569,15 @@ def main() -> None:
     p.add_argument('fields', nargs='*')
     p.add_argument('--after'); p.add_argument('--before')
 
+    p = sub.add_parser('list-tasks'); p.add_argument('project_path')
+    p.add_argument('--kind'); p.add_argument('--label'); p.add_argument('--status')
+    p = sub.add_parser('read-task'); p.add_argument('project_path'); p.add_argument('task_id')
+    p = sub.add_parser('create-task'); p.add_argument('project_path'); p.add_argument('task_id')
+    p.add_argument('fields', nargs='*')
+    p = sub.add_parser('comment-task'); [p.add_argument(a) for a in ('project_path', 'task_id', 'text')]
+    p = sub.add_parser('update-task'); [p.add_argument(a) for a in ('project_path', 'task_id', 'field', 'value')]
+    p = sub.add_parser('close-task'); [p.add_argument(a) for a in ('project_path', 'task_id')]
+
     p = sub.add_parser('remove')
     p.add_argument('project_path'); p.add_argument('ref')
 
@@ -642,6 +680,18 @@ def _dispatch(args) -> int | None:
         cmd_create_term(args.project_path, args.term_name, args.description, args.extends)
     elif args.command == 'rename-term':
         cmd_rename_term(args.project_path, args.old_name, args.new_name)
+    elif args.command == 'list-tasks':
+        print(render.tasks(resolver.list_tasks(args.project_path, args.kind, args.label, args.status)))
+    elif args.command == 'read-task':
+        print(render.task(resolver.read_task(args.project_path, args.task_id)))
+    elif args.command == 'create-task':
+        cmd_create_task(args.project_path, args.task_id, args.fields)
+    elif args.command == 'comment-task':
+        print(resolver.comment_task(args.project_path, args.task_id, args.text))
+    elif args.command == 'update-task':
+        print(resolver.update_task(args.project_path, args.task_id, args.field, args.value))
+    elif args.command == 'close-task':
+        print(resolver.close_task(args.project_path, args.task_id))
     elif args.command == 'remove-term':
         cmd_remove_term(args.project_path, args.term_name)
     elif args.command == 'replace-term':

@@ -20,6 +20,8 @@ def _terms_table(rows: list[dict]) -> str:
 
 def load_project(result: dict) -> str:
     parts = [result['root_content'].rstrip(), '## Workflow', result['workflow']['note']]
+    if result.get('tasks'):
+        parts += ['## Tasks', result['tasks']['note']]
     parts += ['## Parts',
               "The project's @Software, each with its description in full. Go further with "
               "`expand <TermName>`, or `expand <TermName>#<path>` for an element inside it; "
@@ -117,7 +119,31 @@ def findings(found: list[dict]) -> str:
             '|----------|-------|---------|----------|---------|']
     for f in found:
         location = f"{f['path']}:{f['line']}" if 'line' in f else f['path']
-        rows.append(f"| {f['severity']} | {f['check']} | @{f.get('ref', f['term'])} | {location} | {f['message']} |")
+        # a task is not a term, so it is not named as one
+        element = f"task {f['term']}" if f['check'] == 'broken-task' else f"@{f.get('ref', f['term'])}"
+        rows.append(f"| {f['severity']} | {f['check']} | {element} | {location} | {f['message']} |")
     errors = sum(1 for f in found if f['severity'] == 'error')
     rows.append(f"\n{errors} error(s), {len(found) - errors} warning(s)")
     return '\n'.join(rows)
+
+
+def tasks(result) -> str:
+    """list_tasks as a table, or the refusal it returned."""
+    if isinstance(result, str):
+        return result
+    if not result:
+        return 'no open tasks'
+    out = ['| Task | Kind | Status | Title | Labels | Blocked by | Details |',
+           '|------|------|--------|-------|--------|------------|---------|']
+    for t in result:
+        title = _cell(t['title']) + (' — **broken:** ' + _cell('; '.join(t['problems'])) if t['problems'] else '')
+        out.append(f"| {t['id']} | {t['kind']} | {t['status']} | {title} | {', '.join(t['labels'])} | "
+                   f"{', '.join(t['blocked_by'])} | {t['details'] or ''} |")
+    return '\n'.join(out)
+
+
+def task(result) -> str:
+    """read_task: the task file under its path, or the refusal."""
+    if isinstance(result, str):
+        return result
+    return f"--- task {result['id']} [{result['path']}] ---\n{result['content'].rstrip()}"

@@ -1,0 +1,17 @@
+description: "One task of @DuckTasks: a file named by the task's id in the tracker's folder, holding the fields below — the counterpart of an issue on @GitHub or @Jira. Not a term: it describes work to do, not what the project is, and is read only through the task operations of @DuckToolsApp."
+extends: "@Term"
+properties:
+  - id: title
+    description: what the task is about, in a line — what a list of tasks shows
+  - id: kind
+    description: "`plan` for work wanted, `defect` for something that behaves wrongly — the split an issue tracker makes with labels, made a field because the spec rule on plans turns on it"
+  - id: status
+    description: "`open`, or `in_progress` while someone works on it; there is no `closed`, since a resolved task is deleted with the change that resolves it"
+  - id: labels
+    description: free words for grouping and filtering, as a list
+  - id: elements
+    description: full paths of the spec elements the task concerns, `@<TermName>#…`; verify_project checks them as it checks any reference, so a task does not go on pointing at an element that was renamed or removed
+  - id: blocked_by
+    description: ids of the tasks that have to be done first; verify_project reports one that names no task
+  - id: details
+    description: "what was learned after the task was written — a finding, a narrowed cause, a condition, a decision taken along the way — as entries with a `date` and a `text`, oldest first. The counterpart of an issue's comments: added by @DuckToolsApp#components#resolver#functions#comment_task without rewriting the description, so what was first asked stays readable beside what came later"

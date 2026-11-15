@@ -247,6 +247,49 @@ _TOOLS = [
             'required': ['project_path', 'old_name', 'new_name']},
     },
     {
+        'name': 'list_tasks',
+        'description': "The open tasks of a project whose tracker is @DuckTasks — planned work and known defects kept in the repository, not in the spec — in progress first; refuses naming the tracker when it is another",
+        'inputSchema': {'type': 'object', 'properties': {**_PROJECT_PATH_PROP,
+            'kind': {'type': 'string', 'description': '`plan` or `defect`; both when omitted'},
+            'label': {'type': 'string', 'description': 'only tasks with this label'},
+            'status': {'type': 'string', 'description': '`open` or `in_progress`; both when omitted'}},
+            'required': ['project_path']},
+    },
+    {
+        'name': 'read_task',
+        'description': 'One task in full, details included',
+        'inputSchema': {'type': 'object', 'properties': {**_PROJECT_PATH_PROP, 'task_id': {'type': 'string'}},
+            'required': ['project_path', 'task_id']},
+    },
+    {
+        'name': 'create_task',
+        'description': 'Write a new task of @DuckTasks — title, kind (`plan` or `defect`) and description at least; status, labels, elements (full spec paths) and blocked_by optional',
+        'inputSchema': {'type': 'object', 'properties': {**_PROJECT_PATH_PROP,
+            'task_id': {'type': 'string', 'description': 'a lowercase slug naming the task'},
+            'fields': {'type': 'object', 'description': 'the task\'s fields'}},
+            'required': ['project_path', 'task_id', 'fields']},
+    },
+    {
+        'name': 'comment_task',
+        'description': "Add a dated detail to a task — a finding, a narrowed cause, a condition — what an issue's comment is",
+        'inputSchema': {'type': 'object', 'properties': {**_PROJECT_PATH_PROP, 'task_id': {'type': 'string'},
+            'text': {'type': 'string'}}, 'required': ['project_path', 'task_id', 'text']},
+    },
+    {
+        'name': 'update_task',
+        'description': 'Set one field of a task — title, kind, status, labels, elements, blocked_by or description',
+        'inputSchema': {'type': 'object', 'properties': {**_PROJECT_PATH_PROP, 'task_id': {'type': 'string'},
+            'field': {'type': 'string'},
+            'value': {'anyOf': [{'type': 'string'}, {'type': 'array', 'items': {'type': 'string'}}]}},
+            'required': ['project_path', 'task_id', 'field', 'value']},
+    },
+    {
+        'name': 'close_task',
+        'description': 'Close a task by deleting its file — git keeps what was done',
+        'inputSchema': {'type': 'object', 'properties': {**_PROJECT_PATH_PROP, 'task_id': {'type': 'string'}},
+            'required': ['project_path', 'task_id']},
+    },
+    {
         'name': "remove_term",
         'description': "Delete a term file, refusing while anything still references it",
         'inputSchema': {'type': 'object', 'properties': {**_PROJECT_PATH_PROP, 'term_name': {'type': 'string'}},
@@ -492,6 +535,19 @@ def _call(name: str, arguments: dict) -> str:
     if name == "rename_term":
         return resolver.rename_term(path, arguments["old_name"], arguments["new_name"])
 
+    if name == 'list_tasks':
+        return render.tasks(resolver.list_tasks(path, arguments.get('kind'), arguments.get('label'),
+                                                arguments.get('status')))
+    if name == 'read_task':
+        return render.task(resolver.read_task(path, arguments['task_id']))
+    if name == 'create_task':
+        return resolver.create_task(path, arguments['task_id'], arguments.get('fields') or {})
+    if name == 'comment_task':
+        return resolver.comment_task(path, arguments['task_id'], arguments['text'])
+    if name == 'update_task':
+        return resolver.update_task(path, arguments['task_id'], arguments['field'], arguments['value'])
+    if name == 'close_task':
+        return resolver.close_task(path, arguments['task_id'])
     if name == "remove_term":
         return resolver.remove_term(path, arguments["term_name"])
 

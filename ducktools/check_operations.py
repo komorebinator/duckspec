@@ -805,6 +805,59 @@ check('normalize', [Path(c['path']).name for c in _fixed] == ['Knot.yaml']
 r.remove_term(project, 'Knot')
 
 # --- front ends --------------------------------------------------------------
+# A project whose tracker is @DuckTasks keeps its tasks beside its workflow, one file each, and
+# they are not terms: inside the terms folder they would fill the term map with undefined names
+_flow_t = Path(project).parent / 'Fixture' / 'Flow.yaml'
+_flow_t.write_text('description: A workflow keeping its tasks here.\nextends: "@DuckWorkflow"\n'
+                   'tracker:\n  type: "@DuckTasks"\n', encoding='utf-8')
+_root_t = Path(project)
+_root_before_t = _root_t.read_text(encoding='utf-8')
+_root_t.write_text(_root_before_t + 'workflow:\n  type: "@Flow"\n', encoding='utf-8')
+_tasks_dir = _flow_t.parent / 'tasks'
+_made = r.create_task(project, 'drop-zones', {
+    'title': 'Drop zones', 'kind': 'plan', 'labels': ['overview'], 'elements': ['@Widget#functions#spin'],
+    'description': 'Zones to drop a window on.\n\nA second paragraph.'})
+check('create_task', _made.endswith('created task drop-zones') and (_tasks_dir / 'drop-zones.yaml').is_file(), _made)
+check('create_task/refuses', all(r.create_task(project, i, f).startswith('refused') for i, f in (
+    ('Bad Id', {'title': 't', 'kind': 'plan', 'description': 'd'}),
+    ('drop-zones', {'title': 't', 'kind': 'plan', 'description': 'd'}),
+    ('idea', {'title': 't', 'kind': 'idea', 'description': 'd'}),
+    ('bare', {'title': 't', 'kind': 'plan'}),
+    ('noted', {'title': 't', 'kind': 'plan', 'description': 'd', 'details': []}))))
+r.create_task(project, 'crash', {'title': 'Crash on spin', 'kind': 'defect', 'description': 'It crashes.',
+                                 'blocked_by': ['drop-zones']})
+check('list_tasks', [t['id'] for t in r.list_tasks(project)] == ['crash', 'drop-zones']
+      and [t['id'] for t in r.list_tasks(project, kind='plan')] == ['drop-zones'], str(r.list_tasks(project)))
+check('tasks/not-terms', not {'drop-zones', 'crash'} & {t['name'] for t in r.list_terms(project, include_all=True)})
+check('update_task', r.update_task(project, 'drop-zones', 'status', 'in_progress').endswith('replaced status')
+      and r.list_tasks(project)[0]['id'] == 'drop-zones')
+check('update_task/refuses', r.update_task(project, 'drop-zones', 'status', 'closed').startswith('refused')
+      and r.update_task(project, 'drop-zones', 'details', 'x').startswith('refused'))
+r.comment_task(project, 'drop-zones', 'Found: the overview needs a drop target.')
+r.comment_task(project, 'drop-zones', 'A second finding,\nover two lines.')
+_read = r.read_task(project, 'drop-zones')
+check('comment_task', r.list_tasks(project, status='in_progress')[0]['details'] == 2
+      and 'over two lines.' in _read['content'] and 'A second paragraph.' in _read['content'], _read['content'])
+check('read_task', r.read_task(project, 'nope').startswith('not found') and 'crash' in r.read_task(project, 'nope'))
+check('verify_project/tasks', not [f for f in r.verify_project(project) if f['check'] == 'broken-task'])
+r.update_task(project, 'crash', 'elements', '["@Widget#spin"]')
+_bt = [f['message'] for f in r.verify_project(project) if f['check'] == 'broken-task']
+check('verify_project/broken-task', len(_bt) == 1 and 'Widget#spin' in _bt[0], f'got {_bt}')
+check('close_task', 'still listed in `blocked_by` of crash' in r.close_task(project, 'drop-zones')
+      and not (_tasks_dir / 'drop-zones.yaml').exists())
+_bt = [f['message'] for f in r.verify_project(project) if f['check'] == 'broken-task']
+check('verify_project/blocked-by', any('blocked_by names drop-zones' in m for m in _bt), f'got {_bt}')
+check('load_project/tasks', r.load_project(project)['tasks']['note'].startswith('1 open task'))
+r.close_task(project, 'crash')
+shutil.rmtree(_tasks_dir)
+# a tracker is called through the recipes every tracker offers; a type without them is reported
+_flow_t.write_text('description: A workflow.\nextends: "@DuckWorkflow"\ntracker:\n  type: "@Widget"\n', encoding='utf-8')
+_btr = [f['message'] for f in r.verify_project(project) if f['check'] == 'broken-tracker']
+check('verify_project/broken-tracker', len(_btr) == 1 and 'list_issues' in _btr[0], f'got {_btr}')
+check('list_tasks/other-tracker', isinstance(r.list_tasks(project), str) and '@Widget' in r.list_tasks(project))
+_flow_t.unlink()
+_root_t.write_text(_root_before_t, encoding='utf-8')
+
 # The methods above can all be right while what a reader sees is wrong: load_project returned a
 # pointer to the workflow that neither front end printed, and nothing here ran either of them.
 # Every CLI command and every MCP tool runs once, in an order that leaves the fixture as it was,
@@ -814,7 +867,8 @@ from ducktools import cli, mcp_server  # noqa: E402
 
 _root_file = Path(project)
 _before = _root_file.read_text(encoding='utf-8')
-_root_file.write_text(_before + 'workflow:\n  type: "@GitHubWorkflow"\n', encoding='utf-8')
+_root_file.write_text(_before + 'workflow:\n  type: "@GitHubWorkflow"\n  tracker:\n    type: "@DuckTasks"\n',
+                      encoding='utf-8')
 
 # (command, argv after the command, tool, arguments, text the output must contain — or a tuple
 # of alternatives, for the checks whose verdict depends on what earlier sections left behind)
@@ -863,6 +917,16 @@ FRONT = [
     ('rename-term', [project, 'Gear', 'Cog'], 'rename_term',
      {**_P, 'old_name': 'Cam', 'new_name': 'Eccentric'}, '->'),
     ('remove-term', [project, 'Cog'], 'remove_term', {**_P, 'term_name': 'Eccentric'}, 'removed'),
+    ('create-task', [project, 'one', 'title=First', 'kind=plan', 'description=The first.'], 'create_task',
+     {**_P, 'task_id': 'two', 'fields': {'title': 'Second', 'kind': 'defect', 'description': 'The second.'}},
+     'created task'),
+    ('list-tasks', [project], 'list_tasks', _P, '| one |'),
+    ('read-task', [project, 'one'], 'read_task', {**_P, 'task_id': 'two'}, '--- task'),
+    ('comment-task', [project, 'one', 'A finding.'], 'comment_task', {**_P, 'task_id': 'two', 'text': 'Another.'},
+     'added a detail'),
+    ('update-task', [project, 'one', 'status', 'in_progress'], 'update_task',
+     {**_P, 'task_id': 'two', 'field': 'labels', 'value': ['x']}, ('replaced', 'added')),
+    ('close-task', [project, 'one'], 'close_task', {**_P, 'task_id': 'two'}, 'closed task'),
     ('create-workspace', ['front-ws'], 'create_workspace', {'name': 'front-ws-mcp'}, 'created workspace'),
     ('use-workspace', ['front-ws'], 'use_workspace', {'name': 'front-ws'}, 'active workspace'),
     ('add-project', [project], 'add_project', _P, 'example.invalid/fixture'),
